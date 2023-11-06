@@ -1,1 +1,1 @@
-random-events >= 1.1.2
+random-events>=1.1.3
