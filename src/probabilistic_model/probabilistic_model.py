@@ -3,6 +3,7 @@ from typing import Tuple, Iterable, List
 
 from random_events.events import Event, EncodedEvent
 from random_events.variables import Variable
+from typing_extensions import Self
 
 
 class ProbabilisticModel(abc.ABC):
@@ -113,7 +114,7 @@ class ProbabilisticModel(abc.ABC):
         mode, likelihood = self._mode()
         return list(event.decode() for event in mode), likelihood
 
-    def marginal(self, variables: Iterable[Variable]) -> 'ProbabilisticModel':
+    def marginal(self, variables: Iterable[Variable]) -> Self:
         """
         Calculate the marginal distribution of a set of variables.
 
@@ -122,16 +123,16 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def _conditional(self, event: EncodedEvent) -> 'ProbabilisticModel':
+    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
         """
         Calculate the conditional distribution of the model given a preprocessed event.
 
         :param event: The event to condition on.
-        :return: The conditional distribution of the model.
+        :return: The conditional distribution of the model and the probability of the event.
         """
         raise NotImplementedError
 
-    def conditional(self, event: Event) -> 'ProbabilisticModel':
+    def conditional(self, event: Event) -> Tuple[Self, float]:
         """
         Calculate the conditional distribution of the model given an event.
 

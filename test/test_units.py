@@ -8,6 +8,8 @@ from random_events.variables import Symbolic, Integer, Continuous, Variable
 
 from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit
 
+from typing_extensions import Self
+
 
 class DummyDistribution(Unit):
 
@@ -26,9 +28,15 @@ class DummySymbolicDistribution(Unit):
     def _likelihood(self, event: Iterable) -> float:
         return 0.5
 
+    def _probability(self, event: EncodedEvent) -> float:
+        return 0.5
+
     def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
         mode = EncodedEvent({self.variables[0]: 0})
         return [mode], 0.5
+
+    def _conditional(self, event: EncodedEvent) -> Tuple['DummySymbolicDistribution', float]:
+        return DummySymbolicDistribution(), 0.5
 
 
 class DummyRealDistribution(Unit):
@@ -39,9 +47,15 @@ class DummyRealDistribution(Unit):
     def _likelihood(self, event: Iterable) -> float:
         return 2.
 
+    def _probability(self, event: EncodedEvent) -> float:
+        return 2.
+
     def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
         mode = EncodedEvent({self.variables[0]: portion.open(1., 2.)})
         return [mode], 2.
+
+    def _conditional(self, event: EncodedEvent) -> Tuple['DummyRealDistribution', float]:
+        return DummyRealDistribution(), 2.
 
 
 class DummyIntegerDistribution(Unit):
@@ -55,6 +69,9 @@ class DummyIntegerDistribution(Unit):
     def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
         mode = EncodedEvent({self.variables[0]: 2})
         return [mode], 3
+
+    def _conditional(self, event: EncodedEvent) -> Tuple['DummyIntegerDistribution', float]:
+        return DummyIntegerDistribution(), 3.
 
 
 class UnitCreationTestCase(unittest.TestCase):
@@ -173,6 +190,21 @@ class UnitInferenceTestCase(unittest.TestCase):
         self.assertEqual(mode[0], Event({distribution.variables[0]: 4,
                                          distribution.variables[1]: portion.open(1., 2.),
                                          distribution.variables[2]: "a"}))
+
+    def test_conditional_of_real_mixture_distribution_unit(self):
+        distribution = DummyRealDistribution() + DummyRealDistribution()
+        event = Event({distribution.variables[0]: portion.open(1., 2.)})
+        conditional, probability = distribution.conditional(event)
+        self.assertEqual(probability, 2.)
+        self.assertEqual(len(conditional.variables), 1)
+        self.assertEqual(conditional.weights, [.5, .5])
+
+    def test_conditional_of_real_product_distribution_unit(self):
+        distribution = DummyRealDistribution() * DummySymbolicDistribution()
+        event = Event({distribution.variables[0]: portion.open(1., 2.)})
+        conditional, probability = distribution.conditional(event)
+        self.assertEqual(probability, 1)
+        self.assertEqual(distribution, conditional)
 
 
 if __name__ == '__main__':

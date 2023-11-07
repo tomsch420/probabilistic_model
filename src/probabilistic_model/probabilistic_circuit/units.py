@@ -1,12 +1,13 @@
 import itertools
 import random
-from typing import Iterable, Tuple, List
+from typing import Iterable, Tuple, List, Union
 
 from anytree import NodeMixin
 from random_events.events import EncodedEvent
 from random_events.variables import Variable
 
 from probabilistic_model.probabilistic_model import ProbabilisticModel
+from typing_extensions import Self
 
 
 class Unit(ProbabilisticModel, NodeMixin):
@@ -28,16 +29,24 @@ class Unit(ProbabilisticModel, NodeMixin):
         """
         return list(index for index, variable in enumerate(self.variables) if variable in child.variables)
 
-    def __add__(self, other) -> 'SumUnit':
+    def __add__(self, other) -> Union['SumUnit', 'SmoothSumUnit']:
         if not isinstance(other, Unit):
             raise ValueError(f"Cannot add a Probabilistic Circuit with {type(other)}.")
 
         joined_variables = set(self.variables).union(other.variables)
-        result = SumUnit(variables=sorted(joined_variables), weights=[.5, .5])
+
+        # if the sum is smooth
+        if set(self.variables) == set(other.variables):
+            # create a smooth sum unit
+            result = SmoothSumUnit(variables=sorted(joined_variables), weights=[.5, .5])
+        else:
+            # create an ordinary sum unit
+            result = SumUnit(variables=sorted(joined_variables), weights=[.5, .5])
+
         result.children = [self, other]
         return result
 
-    def __mul__(self, other) -> 'ProductUnit':
+    def __mul__(self, other) -> Union['ProductUnit', 'DecomposableProductUnit']:
         if not isinstance(other, Unit):
             raise ValueError(f"Cannot add a Probabilistic Circuit with {type(other)}.")
 
@@ -54,7 +63,7 @@ class Unit(ProbabilisticModel, NodeMixin):
 
 class SumUnit(Unit):
     """
-    Sum node used in a probabilistic circuit
+    Abstract class for sum units.
     """
 
     weights: Iterable
@@ -63,6 +72,27 @@ class SumUnit(Unit):
     def __init__(self, variables: Iterable[Variable], weights: Iterable, parent: 'Unit' = None):
         super().__init__(variables, parent)
         self.weights = weights
+
+    def normalize(self) -> Self:
+        """
+        Normalize the weights of this sum unit to a convex sum.
+
+        :return: The normalized sum unit.
+        """
+        sum_of_weights = sum(self.weights)
+        normalized_weights = [weight/sum_of_weights for weight in self.weights]
+        result = SumUnit(self.variables, normalized_weights)
+        result.children = self.children
+        return result
+
+
+class SmoothSumUnit(SumUnit):
+    """
+    Smooth sum unit used in a probabilistic circuit
+    """
+
+    def __init__(self, variables: Iterable[Variable], weights: Iterable, parent: 'Unit' = None):
+        super().__init__(variables, weights, parent)
 
     def _likelihood(self, event: Iterable) -> float:
         return sum([weight * child._likelihood(event) for weight, child in zip(self.weights, self.children)])
@@ -84,8 +114,42 @@ class SumUnit(Unit):
             result.extend(child.sample(states.count(index)))
         return result
 
+    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
+        """
+        Calculate the condition probability distribution using the latent variable interpretation and bayes theorem.
 
-class DeterministicSumUnit(SumUnit):
+        :param event: The event to condition on
+        :return:
+        """
+
+        # conditional weights of new sum unit
+        conditional_weights = []
+
+        # conditional children of new sum unit
+        conditional_children = []
+
+        # initialize probability
+        probability = 0.
+
+        for weight, child in zip(self.weights, self.children):
+            conditional_child, conditional_probability = child._conditional(event)
+            conditional_probability = conditional_probability * weight
+            probability += conditional_probability
+
+            if conditional_probability == 0:
+                continue
+
+            conditional_weights.append(conditional_probability)
+            conditional_children.append(conditional_child)
+
+        result = SmoothSumUnit(self.variables, conditional_weights)
+        result.children = conditional_children
+        return result.normalize(), probability
+
+    conditional: Tuple['SmoothSumUnit', float]
+
+
+class DeterministicSumUnit(SmoothSumUnit):
     """
     Deterministic sum node used in a probabilistic circuit
     """
@@ -137,7 +201,7 @@ class DeterministicSumUnit(SumUnit):
         return self.merge_modes_if_one_dimensional(result), maximum_likelihood
 
     @staticmethod
-    def from_sum_unit(unit: SumUnit) -> 'DeterministicSumUnit':
+    def from_sum_unit(unit: SmoothSumUnit) -> 'DeterministicSumUnit':
         """
         Downcast a sum unit to a deterministic sum unit.
 
@@ -152,6 +216,10 @@ class ProductUnit(Unit):
     """
     Product node used in a probabilistic circuit
     """
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
+        probability = self._probability(event)
+        return self, probability
 
 
 class DecomposableProductUnit(ProductUnit):
