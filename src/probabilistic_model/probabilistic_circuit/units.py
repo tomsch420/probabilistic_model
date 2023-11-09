@@ -1,10 +1,11 @@
 import itertools
 import random
-from typing import Iterable, Tuple, List, Union
+import copy
+from typing import Iterable, Tuple, List, Union, Optional, Any
 
 from anytree import NodeMixin
-from random_events.events import EncodedEvent
-from random_events.variables import Variable
+from random_events.events import EncodedEvent, VariableMap
+from random_events.variables import Variable, Integer, Continuous
 
 from probabilistic_model.probabilistic_model import ProbabilisticModel
 from typing_extensions import Self
@@ -60,6 +61,69 @@ class Unit(ProbabilisticModel, NodeMixin):
         result.children = [self, other]
         return result
 
+    def _copy_children(self) -> Iterable['Unit']:
+        """
+        Copy the children of this unit.
+
+        :return: The copied children.
+        """
+        return [copy.copy(child) for child in self.children]
+
+    def __copy__(self):
+        result = self.__class__(self.variables)
+        result.children = self._copy_children()
+        return result
+
+    def _parameter_copy(self):
+        """
+        :return: a new instance of this class taking over only the parameters but not the children.
+        """
+        return self.__class__(self.variables)
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+
+        # calculate intersection of variables
+        variable_intersection = set(self.variables).intersection(set(variables))
+
+        # if the intersection is empty, return None
+        if len(variable_intersection) == 0:
+            return None
+
+        # create parameter copy
+        result = self._parameter_copy()
+
+        # update variables
+        result.variables = variable_intersection
+
+        # list for marginalized children
+        marginal_children = []
+
+        # recurse into children
+        for child in self.children:
+
+            # marginalize current child
+            marginal_child = child.marginal(variable_intersection)
+
+            # if the result is None, skip it
+            if marginal_child is None:
+                continue
+
+            # append marginal distribution
+            marginal_children.append(marginal_child)
+
+        # update children
+        result.children = marginal_children
+        return result
+
+    def filter_variable_map_by_self(self, variable_map: VariableMap):
+        """
+        Filter a variable map by the variables of this unit.
+        :param variable_map: The map to filter
+        :return: The map filtered by the variables of this unit.
+        """
+        return variable_map.__class__({variable: value for variable, value in variable_map.items()
+                                       if variable in self.variables})
+
 
 class SumUnit(Unit):
     """
@@ -80,10 +144,28 @@ class SumUnit(Unit):
         :return: The normalized sum unit.
         """
         sum_of_weights = sum(self.weights)
-        normalized_weights = [weight/sum_of_weights for weight in self.weights]
-        result = SumUnit(self.variables, normalized_weights)
+        normalized_weights = [weight / sum_of_weights for weight in self.weights]
+        result = self.__class__(self.variables, normalized_weights)
         result.children = self.children
         return result
+
+    def __copy__(self):
+        result = self.__class__(self.variables, copy.copy(self.weights))
+        result.children = self._copy_children()
+        return result
+
+    def _parameter_copy(self):
+        """
+        :return: a new instance of this class taking over only the parameters but not the children.
+        """
+        return self.__class__(self.variables, self.weights)
+
+    def __str__(self):
+        return ("(" + " + ".join([f"{weight} * {str(child)}" for weight, child in zip(self.weights, self.children)]) +
+                ")")
+
+    def __repr__(self):
+        return "+"
 
 
 class SmoothSumUnit(SumUnit):
@@ -110,11 +192,11 @@ class SmoothSumUnit(SumUnit):
 
         # sample from the children
         result = []
-        for index, child in self.children:
+        for index, child in enumerate(self.children):
             result.extend(child.sample(states.count(index)))
         return result
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
         """
         Calculate the condition probability distribution using the latent variable interpretation and bayes theorem.
 
@@ -133,20 +215,45 @@ class SmoothSumUnit(SumUnit):
 
         for weight, child in zip(self.weights, self.children):
             conditional_child, conditional_probability = child._conditional(event)
-            conditional_probability = conditional_probability * weight
-            probability += conditional_probability
 
             if conditional_probability == 0:
                 continue
 
+            conditional_probability = conditional_probability * weight
+            probability += conditional_probability
+
             conditional_weights.append(conditional_probability)
             conditional_children.append(conditional_child)
 
-        result = SmoothSumUnit(self.variables, conditional_weights)
+        if probability == 0:
+            return None, 0
+
+        result = self.__class__(self.variables, conditional_weights)
         result.children = conditional_children
         return result.normalize(), probability
 
-    conditional: Tuple['SmoothSumUnit', float]
+    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
+               center: VariableMap[Union[Integer, Continuous], float]) \
+            -> VariableMap[Union[Integer, Continuous], float]:
+
+        # create map for orders and centers
+        order_of_self = self.filter_variable_map_by_self(order)
+        center_of_self = self.filter_variable_map_by_self(center)
+
+        # initialize result
+        result = VariableMap({variable: 0 for variable in order_of_self})
+
+        # for every weighted child
+        for weight, child in zip(self.weights, self.children):
+
+            # calculate the moment of the child
+            child_moment = child.moment(order_of_self, center_of_self)
+
+            # add up the linear combination of the child moments
+            for variable, moment in child_moment.items():
+                result[variable] += weight * moment
+
+        return result
 
 
 class DeterministicSumUnit(SmoothSumUnit):
@@ -217,9 +324,11 @@ class ProductUnit(Unit):
     Product node used in a probabilistic circuit
     """
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
-        probability = self._probability(event)
-        return self, probability
+    def __str__(self):
+        return "(" + " * ".join([f"{str(child)}" for child in self.children]) + ")"
+
+    def __repr__(self):
+        return "*"
 
 
 class DecomposableProductUnit(ProductUnit):
@@ -278,3 +387,60 @@ class DecomposableProductUnit(ProductUnit):
             result.append(mode)
 
         return result, resulting_likelihood
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
+
+        # initialize probability and new children
+        probability = 1.
+        conditional_children = []
+
+        for child in self.children:
+
+            # get conditional child and probability in pre-order
+            conditional_child, conditional_probability = child._conditional(event)
+
+            # if any is 0, the whole probability is 0
+            if conditional_probability == 0:
+                return None, 0
+
+            # update probability and children
+            probability *= conditional_probability
+            conditional_children.append(conditional_child)
+
+        # construct conditional product node
+        conditional_self = self.__class__(self.variables)
+        conditional_self.children = conditional_children
+
+        return conditional_self, probability
+
+    def sample(self, amount: int) -> List[List[Any]]:
+
+        # list for the samples content in the same order as self.variables
+        rearranged_sample = [[None] * len(self.variables)] * amount
+
+        for child in self.children:
+            sample_subset = child.sample(amount)
+
+            for sample_index in range(amount):
+                for child_variable_index, variable in enumerate(child.variables):
+
+                    rearranged_sample[sample_index][self.variables.index(variable)] \
+                        = sample_subset[sample_index][child_variable_index]
+
+        return rearranged_sample
+
+    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
+               center: VariableMap[Union[Integer, Continuous], float])\
+            -> VariableMap[Union[Integer, Continuous], float]:
+
+        # initialize result
+        result = VariableMap()
+
+        for child in self.children:
+
+            # calculate the moment of the child
+            child_moment = child.moment(order, center)
+
+            result = VariableMap({**result, **child_moment})
+
+        return result

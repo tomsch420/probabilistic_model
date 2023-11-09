@@ -1,8 +1,8 @@
 import abc
-from typing import Tuple, Iterable, List
+from typing import Tuple, Iterable, List, Optional, Union
 
-from random_events.events import Event, EncodedEvent
-from random_events.variables import Variable
+from random_events.events import Event, EncodedEvent, VariableMap
+from random_events.variables import Variable, Integer, Continuous
 from typing_extensions import Self
 
 
@@ -18,16 +18,24 @@ class ProbabilisticModel(abc.ABC):
     This is useful to separating the process of parsing user inputs and the actual calculations.
     """
 
-    variables: Tuple[Variable]
+    _variables: Tuple[Variable]
     """The variables involved in the model."""
 
-    def __init__(self, variable: Iterable[Variable]):
+    def __init__(self, variables: Iterable[Variable]):
         """
         Initialize the model.
 
         :param variable: The variables in the model.
         """
-        self.variables = tuple(sorted(variable))
+        self._variables = tuple(sorted(variables))
+
+    @property
+    def variables(self) -> Tuple[Variable]:
+        return self._variables
+
+    @variables.setter
+    def variables(self, variables: Iterable[Variable]):
+        self._variables = tuple(sorted(variables))
 
     def preprocess_event(self, event: Event) -> EncodedEvent:
         """
@@ -44,6 +52,7 @@ class ProbabilisticModel(abc.ABC):
         """
         Calculate the likelihood of a preprocessed event.
         The likelihood as a full evidence query, i.e., an assignment to all variables in the model
+
         :param event: The event is some iterable that represents a value for each variable in the model.
         :return: The likelihood of the event.
         """
@@ -57,8 +66,8 @@ class ProbabilisticModel(abc.ABC):
         The event belongs to the class of full evidence queries.
 
         .. Note:: You can read more about queries of this class in Definition 1 of this
-            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the `video tutorial
-            <https://youtu.be/2RAG5-L9R70?si=TAfIX2LmOWM-Fd2B&t=785>`_.
+            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the
+            `video tutorial <https://youtu.be/2RAG5-L9R70?si=TAfIX2LmOWM-Fd2B&t=785>`_.
 
 
         :param event: The event is some iterable that represents a value for each variable in the model.
@@ -82,8 +91,8 @@ class ProbabilisticModel(abc.ABC):
         The event belongs to the class of marginal queries.
 
         .. Note:: You can read more about queries of this class in Definition 11 of this
-            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the `video tutorial
-            <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>_`.
+            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the
+            `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
 
         :param event: The event to calculate the probability of.
         :return: The probability of the model.
@@ -106,15 +115,15 @@ class ProbabilisticModel(abc.ABC):
         The event belongs to the map query class.
 
         .. Note:: You can read more about queries of this class in Definition 26 of this
-            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the `video tutorial
-            <https://youtu.be/2RAG5-L9R70?si=FjREKNtAV0owm27A&t=1962>_`.
+            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the
+            `video tutorial <https://youtu.be/2RAG5-L9R70?si=FjREKNtAV0owm27A&t=1962>`_.
 
         :return: The mode of the model and the likelihood.
         """
         mode, likelihood = self._mode()
         return list(event.decode() for event in mode), likelihood
 
-    def marginal(self, variables: Iterable[Variable]) -> Self:
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         """
         Calculate the marginal distribution of a set of variables.
 
@@ -123,27 +132,31 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
         """
         Calculate the conditional distribution of the model given a preprocessed event.
+
+        If the event is impossible, the conditional distribution is None and the probability is 0.
 
         :param event: The event to condition on.
         :return: The conditional distribution of the model and the probability of the event.
         """
         raise NotImplementedError
 
-    def conditional(self, event: Event) -> Tuple[Self, float]:
+    def conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         """
         Calculate the conditional distribution of the model given an event.
 
         The event belongs to the class of marginal queries.
 
+        If the event is impossible, the conditional distribution is None and the probability is 0.
+
         .. Note:: You can read more about queries of this class in Definition 11 of this
-            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the `video tutorial
-            <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>_`.
+            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the
+            `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
 
         :param event: The event to condition on.
-        :return: The conditional distribution of the model.
+        :return: The conditional distribution of the model and the probability of the event.
         """
         return self._conditional(self.preprocess_event(event))
 
@@ -155,3 +168,44 @@ class ProbabilisticModel(abc.ABC):
         :return: The samples
         """
         raise NotImplementedError
+
+    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
+               center: VariableMap[Union[Integer, Continuous], float]) \
+            -> VariableMap[Union[Integer, Continuous], float]:
+        """
+        Calculate the (centralised) moment of the distribution.
+
+        .. math::
+
+            \int_{-\infty}^{\infty} (x - center)^{order} pdf(x) dx
+
+
+        :param order: The orders of the moment as a variable map for every continuous and integer variable.
+        :param center: The center of the moment as a variable map for every continuous and integer variable.
+        :return: The moments of the variables in `order`.
+        """
+        raise NotImplementedError
+
+    def expectation(self, variables: Iterable[Union[Integer, Continuous]]) \
+            -> VariableMap[Union[Integer, Continuous], float]:
+        """
+        Calculate the expectation of the numeric variables in `variables`.
+
+        :param variables: The variable to calculate the expectation of.
+        :return: The expectation of the variable.
+        """
+        order = VariableMap({variable: 1 for variable in variables})
+        center = VariableMap({variable: 0 for variable in variables})
+        return self.moment(order, center)
+
+    def variance(self, variables: Iterable[Union[Integer, Continuous]]) \
+            -> VariableMap[Union[Integer, Continuous], float]:
+        """
+        Calculate the variance of the numeric variables in `variables`.
+
+        :param variables: The variable to calculate the variance of.
+        :return: The variance of the variable.
+        """
+        order = VariableMap({variable: 2 for variable in variables})
+        center = self.expectation(variables)
+        return self.moment(order, center)
