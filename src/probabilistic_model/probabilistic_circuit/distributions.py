@@ -4,7 +4,7 @@ from typing import Iterable, Tuple, Union, List, Optional, Any
 from typing_extensions import Self
 
 from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit
-from random_events.events import EncodedEvent, VariableMap
+from random_events.events import EncodedEvent, VariableMap, Event
 from random_events.variables import Variable, Continuous, Symbolic, Integer, Discrete
 import portion
 
@@ -41,6 +41,18 @@ class UnivariateDistribution(Unit):
         return self.pdf(list(event)[0])
 
     def _parameter_copy(self):
+        return copy.copy(self)
+
+    def is_decomposable(self) -> bool:
+        return True
+
+    def is_smooth(self) -> bool:
+        return True
+
+    def is_deterministic(self) -> bool:
+        return True
+
+    def maximize_expressiveness(self) -> Self:
         return copy.copy(self)
 
 
@@ -92,6 +104,11 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
 
     def __repr__(self):
         return f"Categorical()"
+
+    @property
+    def domain(self) -> Event:
+        return Event({self.variable: [value for value, weight in zip(self.variable.domain, self.weights)
+                                      if weight > 0]})
 
     @property
     def variable(self) -> Discrete:
@@ -206,8 +223,8 @@ class UniformDistribution(ContinuousDistribution):
         self.upper = upper
 
     @property
-    def domain(self) -> portion.Interval:
-        return portion.closedopen(self.lower, self.upper)
+    def domain(self) -> Event:
+        return Event({self.variable: portion.closedopen(self.lower, self.upper)})
 
     def pdf_value(self) -> float:
         """
@@ -216,7 +233,7 @@ class UniformDistribution(ContinuousDistribution):
         return 1 / (self.upper - self.lower)
 
     def _pdf(self, value: float) -> float:
-        if value in self.domain:
+        if value in self.domain[self.variable]:
             return self.pdf_value()
         else:
             return 0
@@ -239,7 +256,7 @@ class UniformDistribution(ContinuousDistribution):
         return probability
 
     def _mode(self):
-        return [EncodedEvent({self.variable: self.domain})], self.pdf_value()
+        return [self.domain.encode()], self.pdf_value()
 
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.uniform(self.lower, self.upper)] for _ in range(amount)]
@@ -259,7 +276,7 @@ class UniformDistribution(ContinuousDistribution):
                 continue
 
             resulting_probabilities.append(probability)
-            intersection = self.domain & interval_
+            intersection = self.domain[self.variable] & interval_
             resulting_distributions.append(UniformDistribution(self.variable, intersection.lower, intersection.upper))
 
         # if there is only one interval, don't create a deterministic sum
@@ -283,12 +300,12 @@ class UniformDistribution(ContinuousDistribution):
         center = center[self.variable]
 
         def evaluate_integral_at(x) -> float:
-            """
+            r"""
             Helper method to calculate
 
             .. math::
 
-                    \int_{-\infty}^{\infty} (x - center)^{order} pdf(x) dx = \fract{p(x-center)^(1+order)}{1+order}
+                    \int_{-\infty}^{\infty} (x - center)^{order} pdf(x) dx = \frac{p(x-center)^(1+order)}{1+order}
 
             """
             return (self.pdf_value() * (x - center) ** (order + 1)) / (order + 1)

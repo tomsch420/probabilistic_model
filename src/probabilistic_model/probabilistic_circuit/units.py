@@ -4,7 +4,7 @@ import copy
 from typing import Iterable, Tuple, List, Union, Optional, Any
 
 from anytree import NodeMixin
-from random_events.events import EncodedEvent, VariableMap
+from random_events.events import EncodedEvent, VariableMap, Event
 from random_events.variables import Variable, Integer, Continuous
 
 from probabilistic_model.probabilistic_model import ProbabilisticModel
@@ -118,11 +118,79 @@ class Unit(ProbabilisticModel, NodeMixin):
     def filter_variable_map_by_self(self, variable_map: VariableMap):
         """
         Filter a variable map by the variables of this unit.
+
         :param variable_map: The map to filter
         :return: The map filtered by the variables of this unit.
         """
         return variable_map.__class__({variable: value for variable, value in variable_map.items()
                                        if variable in self.variables})
+
+    def maximize_expressiveness(self) -> Self:
+        """
+        Maximize the expressiveness of this circuit by replacing every unit by maximal expressive version if applicable.
+
+        :return: The most expressive circuit.
+        """
+        raise NotImplementedError
+
+    @property
+    def domain(self) -> Event:
+        """
+        The domain of the model. The domain describes all events that have :math:`P(event) > 0`.
+
+        :return: An event describing the domain of the model.
+        """
+        domain = Event()
+        for child in self.children:
+            domain = domain | child.domain
+        return domain
+
+    def is_smooth(self) -> bool:
+        """
+        Check if the entire circuit is smooth.
+
+        .. note::
+            Smoothness refers to Definition 16 in :cite:p:`choi2020probabilistic`.
+
+        :return: Rather every sum node in this circuit is smooth.
+        """
+        raise NotImplementedError
+
+    def is_deterministic(self) -> bool:
+        """
+        Check if the entire circuit is deterministic.
+
+        .. note::
+            Determinism refers to Definition 30 in :cite:p:`choi2020probabilistic`.
+
+        :return: Rather every sum node in this circuit is deterministic.
+        """
+        raise NotImplementedError
+
+    def is_decomposable(self) -> bool:
+        """
+        Check if the entire circuit is decomposable.
+
+        .. note::
+            Decomposability refers to Definition 29 in :cite:p:`choi2020probabilistic`.
+
+        :return: Rather every product node in this circuit is decomposable.
+        """
+        raise NotImplementedError
+
+    def simplify(self) -> Self:
+        """
+        Simplify the circuit by removing unnecessary nesting.
+
+        This method is a syntactic transformation similar to what was described in chapter 5.5 in
+        :cite:p:`choi2020probabilistic`. However, this will not always result in a circuit that has alternating sum
+        and product units. Whenever there is a sum of a (partially) deterministic sum unit, the sum will only collapse
+        the non-deterministic sums. Similar, products of (partially) decomposable product units will only collapse the
+        non-decomposable products and decomposable product into two different groups.
+
+        :return: The simplified circuit.
+        """
+        raise NotImplementedError
 
 
 class SumUnit(Unit):
@@ -149,7 +217,7 @@ class SumUnit(Unit):
         result.children = self.children
         return result
 
-    def __copy__(self):
+    def __copy__(self) -> Self:
         result = self.__class__(self.variables, copy.copy(self.weights))
         result.children = self._copy_children()
         return result
@@ -166,6 +234,66 @@ class SumUnit(Unit):
 
     def __repr__(self):
         return "+"
+
+    def _is_smooth(self) -> bool:
+        """
+        Check if only this sum unit is smooth.
+
+        A sum mode is smooth iff all children have the same variables (scopes).
+
+        :return: if this sum unit is smooth
+        """
+        scope = set(self.variables)
+        for child in self.children:
+            if scope != set(child.variables):
+                return False
+        return True
+
+    def is_smooth(self) -> bool:
+        return self._is_smooth() and all([child.is_smooth() for child in self.children])
+
+    def _is_deterministic(self) -> bool:
+        """
+        Check if only this sum unit is deterministic.
+
+        A sum mode is deterministic iff all children have disjoint domains.
+
+        :return: if this sum unit is deterministic
+        """
+
+        # for every child pair
+        for child_a, child_b in itertools.combinations(self.children, 2):
+
+            # form the intersection of the domains where P(E) > 0
+            domain_intersection = child_a.domain & child_b.domain
+
+            # if this not empty, the sum unit is not deterministic
+            if not domain_intersection.is_empty():
+                return False
+
+        # if every pairwise intersection is empty, the sum unit is deterministic
+        return True
+
+    def is_deterministic(self) -> bool:
+        return self._is_deterministic() and all([child.is_deterministic() for child in self.children])
+
+    def is_decomposable(self) -> bool:
+        return all([child.is_decomposable() for child in self.children])
+
+    def maximize_expressiveness(self) -> Self:
+        maximum_expressive_children = [child.maximize_expressiveness() for child in self.children]
+
+        resulting_class = self.__class__
+
+        if self._is_smooth():
+            if self._is_deterministic():
+                resulting_class = DeterministicSumUnit
+            else:
+                resulting_class = SmoothSumUnit
+
+        result = resulting_class(self.variables, self.weights)
+        result.children = maximum_expressive_children
+        return result
 
 
 class SmoothSumUnit(SumUnit):
@@ -329,6 +457,48 @@ class ProductUnit(Unit):
 
     def __repr__(self):
         return "*"
+
+    def _is_decomposable(self):
+        """
+        Check if only this product unit is decomposable.
+
+        A product mode is decomposable iff all children have disjoint scopes.
+
+        :return: if this product unit is decomposable
+        """
+        # for every child pair
+        for child_a, child_b in itertools.combinations(self.children, 2):
+
+            # form the intersection of the scopes
+            scope_intersection = set(child_a.variables) & set(child_b.variables)
+
+            # if this not empty, the product unit is not decomposable
+            if len(scope_intersection) > 0:
+                return False
+
+        # if every pairwise intersection is empty, the product unit is decomposable
+        return True
+
+    def is_smooth(self) -> bool:
+        return all([child.is_smooth() for child in self.children])
+
+    def is_deterministic(self) -> bool:
+        return all([child.is_deterministic() for child in self.children])
+
+    def is_decomposable(self) -> bool:
+        return self._is_decomposable() and all([child.is_decomposable() for child in self.children])
+
+    def maximize_expressiveness(self) -> Self:
+        maximum_expressive_children = [child.maximize_expressiveness() for child in self.children]
+
+        resulting_class = self.__class__
+
+        if self._is_decomposable():
+            resulting_class = DecomposableProductUnit
+
+        result = resulting_class(self.variables)
+        result.children = maximum_expressive_children
+        return result
 
 
 class DecomposableProductUnit(ProductUnit):

@@ -16,6 +16,9 @@ class UniformDistributionTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             UniformDistribution(Continuous("x"), 0, 0)
 
+    def test_domain(self):
+        self.assertEqual(self.distribution.domain, Event({self.distribution.variable: portion.closedopen(0, 2)}))
+
     def test_likelihood(self):
         self.assertEqual(self.distribution.likelihood([1]), 0.5)
         self.assertEqual(self.distribution.likelihood([0]), 0.5)
@@ -24,8 +27,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.likelihood([3]), 0.)
 
     def test_probability_of_domain(self):
-        self.assertEqual(self.distribution.probability(Event({self.distribution.variable: self.distribution.domain})),
-                         1)
+        self.assertEqual(self.distribution.probability(self.distribution.domain), 1)
 
     def test_cdf(self):
         self.assertEqual(self.distribution.cdf(1), 0.5)
@@ -40,7 +42,7 @@ class UniformDistributionTestCase(unittest.TestCase):
 
     def test_mode(self):
         modes, likelihood = self.distribution.mode()
-        self.assertEqual(modes, [Event({self.distribution.variable: self.distribution.domain})])
+        self.assertEqual(modes, [self.distribution.domain])
         self.assertEqual(likelihood, 0.5)
 
     def test_sample(self):
@@ -70,8 +72,8 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(probability, 0.75)
         self.assertEqual(len(conditional.children), 2)
         self.assertEqual(conditional.weights, [2 / 3, 1 / 3])
-        self.assertEqual(conditional.children[0].domain, portion.closedopen(0, 1))
-        self.assertEqual(conditional.children[1].domain, portion.closedopen(1.5, 2))
+        self.assertEqual(conditional.children[0].domain[conditional.variables[0]], portion.closedopen(0, 1))
+        self.assertEqual(conditional.children[1].domain[conditional.variables[0]], portion.closedopen(1.5, 2))
 
     def test_conditional_triple_complex_intersection(self):
         event = Event(
@@ -84,9 +86,9 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(probability, 0.5)
         self.assertEqual(len(conditional.children), 3)
         self.assertEqual(conditional.weights, [1 / 4, 1 / 4, 1 / 2])
-        self.assertEqual(conditional.children[0].domain, portion.closedopen(0, 0.25))
-        self.assertEqual(conditional.children[1].domain, portion.closedopen(0.75, 1))
-        self.assertEqual(conditional.children[2].domain, portion.closedopen(1.5, 2))
+        self.assertEqual(conditional.children[0].domain[conditional.variables[0]], portion.closedopen(0, 0.25))
+        self.assertEqual(conditional.children[1].domain[conditional.variables[0]], portion.closedopen(0.75, 1))
+        self.assertEqual(conditional.children[2].domain[conditional.variables[0]], portion.closedopen(1.5, 2))
 
     def test_conditional_mode(self):
         event = Event(
@@ -146,6 +148,16 @@ class SymbolicDistributionTestCase(unittest.TestCase):
     def test_sample(self):
         samples = self.distribution.sample(100)
         self.assertTrue(all([self.distribution.likelihood(sample) > 0 for sample in samples]))
+
+    def test_domain(self):
+        domain = self.distribution.domain
+        self.assertEqual(domain, Event({self.distribution.variable: self.distribution.variable.domain}))
+
+    def test_domain_if_weights_are_zero(self):
+        distribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}),
+                                            [0, 0, 1])
+        domain = distribution.domain
+        self.assertEqual(domain, Event({distribution.variable: "dog"}))
 
 
 class IntegerDistributionTestCase(unittest.TestCase):

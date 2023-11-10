@@ -3,7 +3,8 @@ import unittest
 import portion
 from random_events.events import Event
 
-from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit, DecomposableProductUnit
+from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit, DecomposableProductUnit, \
+    SumUnit, ProductUnit
 from probabilistic_model.probabilistic_circuit.distributions import (IntegerDistribution, UniformDistribution,
                                                                      SymbolicDistribution)
 from random_events.variables import Integer, Symbolic, Continuous
@@ -103,6 +104,64 @@ class ProbabilisticCircuitTestCase(unittest.TestCase):
         variance = self.model.variance([self.model.variables[0], self.model.variables[1]])
         self.assertAlmostEqual(variance["integer"], 1.7284, delta=0.001)
         self.assertAlmostEqual(variance["real"], 0.2808, delta=0.001)
+
+    def test_domain(self):
+        domain = self.model.domain
+        self.assertEqual(domain["integer"], (1, 2, 4))
+        self.assertEqual(domain["real"], portion.closedopen(0, 2))
+        self.assertEqual(domain["symbol"], ("a", "b", "c"))
+
+    def test_determinism(self):
+        self.assertTrue(self.model.is_deterministic())
+
+    def test_non_determinism(self):
+        variable = Continuous("real")
+        distribution = UniformDistribution(variable, 0, 1) + UniformDistribution(variable, 0.5, 2)
+        self.assertFalse(distribution.is_deterministic())
+
+    def test_smoothness(self):
+        self.assertTrue(self.model.is_smooth())
+
+    def test_non_smoothness(self):
+        variable_0 = Continuous("real0")
+        variable_1 = Continuous("real1")
+        distribution = UniformDistribution(variable_0, 0, 1) + UniformDistribution(variable_1, 0.5, 2)
+        self.assertFalse(distribution.is_smooth())
+
+    def test_decomposable(self):
+        self.assertTrue(self.model.is_decomposable())
+
+    def test_non_decomposable(self):
+        variable = Continuous("real")
+        distribution = UniformDistribution(variable, 0, 1) * UniformDistribution(variable, 0.5, 2)
+        self.assertFalse(distribution.is_decomposable())
+
+    def test_maximum_expressiveness_of_sum(self):
+        real = Continuous("real")
+        distribution_1 = UniformDistribution(real, 0, 1)
+        distribution_2 = UniformDistribution(real, 1, 3)
+        distribution = SumUnit([real], [0.7, 0.3])
+        distribution.children = [distribution_1, distribution_2]
+
+        distribution = distribution.maximize_expressiveness()
+        self.assertTrue(distribution.is_decomposable())
+        self.assertTrue(distribution.is_smooth())
+        self.assertTrue(distribution.is_deterministic())
+        self.assertIsInstance(distribution, DeterministicSumUnit)
+
+    def test_maximum_expressiveness_of_product(self):
+        real_1 = Continuous("real1")
+        real_2 = Continuous("real2")
+        distribution = ProductUnit([real_1, real_2])
+        distribution_1 = UniformDistribution(real_1, 0, 1, parent=distribution)
+        distribution_2 = UniformDistribution(real_2, 1, 3, parent=distribution)
+        self.assertEqual(distribution.children, (distribution_1, distribution_2))
+        self.assertIsInstance(distribution, ProductUnit)
+        distribution = distribution.maximize_expressiveness()
+        self.assertTrue(distribution.is_decomposable())
+        self.assertTrue(distribution.is_smooth())
+        self.assertTrue(distribution.is_deterministic())
+        self.assertIsInstance(distribution, DecomposableProductUnit)
 
 
 if __name__ == '__main__':

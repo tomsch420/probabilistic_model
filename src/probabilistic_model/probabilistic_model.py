@@ -25,7 +25,7 @@ class ProbabilisticModel(abc.ABC):
         """
         Initialize the model.
 
-        :param variable: The variables in the model.
+        :param variables: The variables in the model.
         """
         self._variables = tuple(sorted(variables))
 
@@ -65,9 +65,9 @@ class ProbabilisticModel(abc.ABC):
 
         The event belongs to the class of full evidence queries.
 
-        .. Note:: You can read more about queries of this class in Definition 1 of this
-            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the
-            `video tutorial <https://youtu.be/2RAG5-L9R70?si=TAfIX2LmOWM-Fd2B&t=785>`_.
+        .. Note:: You can read more about queries of this class in Definition 1 in :cite:p:`choi2020probabilistic`
+            or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=TAfIX2LmOWM-Fd2B&t=785>`_.
+            :cite:p:`youtube2020probabilistic`
 
 
         :param event: The event is some iterable that represents a value for each variable in the model.
@@ -90,9 +90,9 @@ class ProbabilisticModel(abc.ABC):
         Calculate the probability of an event P(E).
         The event belongs to the class of marginal queries.
 
-        .. Note:: You can read more about queries of this class in Definition 11 of this
-            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the
-            `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
+        .. Note:: You can read more about queries of this class in Definition 11 in :cite:p:`choi2020probabilistic`
+            or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
+            :cite:p:`youtube2020probabilistic`
 
         :param event: The event to calculate the probability of.
         :return: The probability of the model.
@@ -114,9 +114,9 @@ class ProbabilisticModel(abc.ABC):
         As there may exist multiple modes, this method returns an Iterable of modes and their likelihood.
         The event belongs to the map query class.
 
-        .. Note:: You can read more about queries of this class in Definition 26 of this
-            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the
-            `video tutorial <https://youtu.be/2RAG5-L9R70?si=FjREKNtAV0owm27A&t=1962>`_.
+        .. Note:: You can read more about queries of this class in Definition 26 in :cite:p:`choi2020probabilistic`
+            or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=FjREKNtAV0owm27A&t=1962>`_.
+            :cite:p:`youtube2020probabilistic`
 
         :return: The mode of the model and the likelihood.
         """
@@ -151,9 +151,9 @@ class ProbabilisticModel(abc.ABC):
 
         If the event is impossible, the conditional distribution is None and the probability is 0.
 
-        .. Note:: You can read more about queries of this class in Definition 11 of this
-            `article <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_ or watch the
-            `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
+        .. Note:: You can read more about queries of this class in Definition 11 in :cite:p:`choi2020probabilistic`_
+            or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
+            :cite:p:`youtube2020probabilistic`
 
         :param event: The event to condition on.
         :return: The conditional distribution of the model and the probability of the event.

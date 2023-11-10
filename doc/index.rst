@@ -12,14 +12,15 @@ probabilistic models. Just like sklearn does for classical machine learning mode
 
 You can read more about the theory behind probabilistic models in these resources.
 
-   * `Probabilistic Circuits <http://starai.cs.ucla.edu/papers/ProbCirc20.pdf>`_
-   * `Normalizing Flows <https://arxiv.org/pdf/1912.02762.pdf>`_
+   * Probabilistic Circuits :cite:p:`choi2020probabilistic`, :cite:p:`youtube2020probabilistic`
+   * Normalizing Flows :cite:p:`papamakarios2021normalizing`
 
 .. toctree::
    :maxdepth: 3
    :caption: Contents:
 
-
+.. bibliography::
+   :all:
 
 Indices and tables
 ==================
