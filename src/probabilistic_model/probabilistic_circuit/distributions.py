@@ -1,12 +1,14 @@
 import copy
 import random
 from typing import Iterable, Tuple, Union, List, Optional, Any
+
+import portion
+from random_events.events import EncodedEvent, VariableMap, Event
+from random_events.variables import Variable, Continuous, Symbolic, Integer, Discrete
 from typing_extensions import Self
 
 from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit
-from random_events.events import EncodedEvent, VariableMap, Event
-from random_events.variables import Variable, Continuous, Symbolic, Integer, Discrete
-import portion
+from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
 
 
 class UnivariateDistribution(Unit):
@@ -107,8 +109,8 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
 
     @property
     def domain(self) -> Event:
-        return Event({self.variable: [value for value, weight in zip(self.variable.domain, self.weights)
-                                      if weight > 0]})
+        return Event(
+            {self.variable: [value for value, weight in zip(self.variable.domain, self.weights) if weight > 0]})
 
     @property
     def variable(self) -> Discrete:
@@ -127,8 +129,8 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
 
     def _mode(self) -> Tuple[List[EncodedEvent], float]:
         maximum_weight = max(self.weights)
-        mode = EncodedEvent({self.variable: [index for index, weight in enumerate(self.weights)
-                                             if weight == maximum_weight]})
+        mode = EncodedEvent(
+            {self.variable: [index for index, weight in enumerate(self.weights) if weight == maximum_weight]})
 
         return [mode], maximum_weight
 
@@ -166,9 +168,7 @@ class SymbolicDistribution(UnivariateDiscreteDistribution):
     def variable(self) -> Symbolic:
         return self.variables[0]
 
-    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
-               center: VariableMap[Union[Integer, Continuous], float]) \
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
         return VariableMap()
 
 
@@ -191,9 +191,7 @@ class IntegerDistribution(UnivariateDiscreteDistribution, ContinuousDistribution
         """
         return sum(self._pdf(value) for value in range(value))
 
-    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
-               center: VariableMap[Union[Integer, Continuous], float]) \
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
         order = order[self.variable]
         center = center[self.variable]
         result = sum([self.pdf(value) * (value - center) ** order for value in self.variable.domain])
@@ -292,9 +290,7 @@ class UniformDistribution(ContinuousDistribution):
         else:
             return None, 0
 
-    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
-               center: VariableMap[Union[Integer, Continuous], float])\
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
 
         order = order[self.variable]
         center = center[self.variable]
@@ -309,6 +305,7 @@ class UniformDistribution(ContinuousDistribution):
 
             """
             return (self.pdf_value() * (x - center) ** (order + 1)) / (order + 1)
+
         result = evaluate_integral_at(self.upper) - evaluate_integral_at(self.lower)
 
         return VariableMap({self.variable: result})
@@ -323,3 +320,83 @@ class UniformDistribution(ContinuousDistribution):
 
     def __copy__(self):
         return self.__class__(self.variable, self.lower, self.upper)
+
+
+class DiracDeltaDistribution(ContinuousDistribution):
+    """
+    Class for Dirac delta distributions.
+    """
+
+    location: float
+    """
+    The location of the Dirac delta distribution.
+    """
+
+    density_cap: float
+    """
+    The density cap of the Dirac delta distribution.
+    This value will be used to replace infinity in likelihood.
+    """
+
+    def __init__(self, variable: Continuous, location: float, density_cap: float = float("inf"), parent=None):
+        super().__init__(variable, parent)
+        self.location = location
+        self.density_cap = density_cap
+
+    @property
+    def domain(self) -> Event:
+        return Event({self.variable: portion.singleton(self.location)})
+
+    def _pdf(self, value: float) -> float:
+        if value == self.location:
+            return self.density_cap
+        else:
+            return 0
+
+    def _cdf(self, value: float) -> float:
+        if value < self.location:
+            return 0
+        else:
+            return 1
+
+    def _probability(self, event: EncodedEvent) -> float:
+        if self.location in event[self.variable]:
+            return 1
+        else:
+            return 0
+
+    def _mode(self):
+        return [self.domain.encode()], self.density_cap
+
+    def sample(self, amount: int) -> List[List[float]]:
+        return [[self.location] for _ in range(amount)]
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
+        if self.location in event[self.variable]:
+            return self.__copy__(), 1
+        else:
+            return None, 0
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        order = order[self.variable]
+        center = center[self.variable]
+
+        if order == 1:
+            return VariableMap({self.variable: self.location - center})
+        elif order == 2:
+            return VariableMap({self.variable: (self.location - center) ** 2})
+        else:
+            return VariableMap({self.variable: 0})
+
+    def __eq__(self, other):
+        if not isinstance(other, DiracDeltaDistribution):
+            return False
+        return (self.variable == other.variable and
+                self.location == other.location and
+                self.density_cap == other.density_cap)
+
+    def __repr__(self):
+        return f"DiracDelta({self.location}, {self.density_cap})"
+
+    def __copy__(self):
+        return self.__class__(self.variable, self.location, self.density_cap)

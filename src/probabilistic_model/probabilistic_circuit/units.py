@@ -1,14 +1,14 @@
+import copy
 import itertools
 import random
-import copy
 from typing import Iterable, Tuple, List, Union, Optional, Any
 
 from anytree import NodeMixin
 from random_events.events import EncodedEvent, VariableMap, Event
-from random_events.variables import Variable, Integer, Continuous
-
-from probabilistic_model.probabilistic_model import ProbabilisticModel
+from random_events.variables import Variable
 from typing_extensions import Self
+
+from probabilistic_model.probabilistic_model import ProbabilisticModel, MomentType, OrderType, CenterType
 
 
 class Unit(ProbabilisticModel, NodeMixin):
@@ -122,8 +122,8 @@ class Unit(ProbabilisticModel, NodeMixin):
         :param variable_map: The map to filter
         :return: The map filtered by the variables of this unit.
         """
-        return variable_map.__class__({variable: value for variable, value in variable_map.items()
-                                       if variable in self.variables})
+        return variable_map.__class__(
+            {variable: value for variable, value in variable_map.items() if variable in self.variables})
 
     def maximize_expressiveness(self) -> Self:
         """
@@ -229,8 +229,8 @@ class SumUnit(Unit):
         return self.__class__(self.variables, self.weights)
 
     def __str__(self):
-        return ("(" + " + ".join([f"{weight} * {str(child)}" for weight, child in zip(self.weights, self.children)]) +
-                ")")
+        return ("(" + " + ".join(
+            [f"{weight} * {str(child)}" for weight, child in zip(self.weights, self.children)]) + ")")
 
     def __repr__(self):
         return "+"
@@ -360,11 +360,9 @@ class SmoothSumUnit(SumUnit):
         result.children = conditional_children
         return result.normalize(), probability
 
-    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
-               center: VariableMap[Union[Integer, Continuous], float]) \
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
 
-        # create map for orders and centers
+        # create a map for orders and centers
         order_of_self = self.filter_variable_map_by_self(order)
         center_of_self = self.filter_variable_map_by_self(center)
 
@@ -523,8 +521,8 @@ class DecomposableProductUnit(ProductUnit):
 
         for child in self.children:
             # construct partial event for child
-            result = result * child._probability(EncodedEvent({variable: event[variable] for variable in
-                                                               self.variables}))
+            result = result * child._probability(
+                EncodedEvent({variable: event[variable] for variable in self.variables}))
 
         return result
 
@@ -593,21 +591,17 @@ class DecomposableProductUnit(ProductUnit):
 
             for sample_index in range(amount):
                 for child_variable_index, variable in enumerate(child.variables):
-
-                    rearranged_sample[sample_index][self.variables.index(variable)] \
-                        = sample_subset[sample_index][child_variable_index]
+                    rearranged_sample[sample_index][self.variables.index(variable)] = sample_subset[sample_index][
+                        child_variable_index]
 
         return rearranged_sample
 
-    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
-               center: VariableMap[Union[Integer, Continuous], float])\
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
 
         # initialize result
         result = VariableMap()
 
         for child in self.children:
-
             # calculate the moment of the child
             child_moment = child.moment(order, center)
 
