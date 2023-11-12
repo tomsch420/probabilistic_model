@@ -109,6 +109,20 @@ class UniformDistributionTestCase(unittest.TestCase):
         variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}), expectation)
         self.assertEqual(variance[self.distribution.variable], 1 / 3)
 
+    def test_conditional_with_singleton(self):
+        conditional, likelihood = self.distribution.conditional(Event({self.distribution.variable: 1}))
+        self.assertIsInstance(conditional, DiracDeltaDistribution)
+        self.assertEqual(likelihood, 0.5)
+
+    def test_conditional_with_mixture_of_interval_and_singleton(self):
+        event = Event({self.distribution.variable: portion.closed(1, 2) |
+                                                   portion.closed(0, 0.25) |
+                                                   portion.singleton(0.75)})
+        conditional, likelihood = self.distribution.conditional(event)
+        self.assertIsInstance(conditional, DeterministicSumUnit)
+        self.assertEqual(likelihood, 1.125)
+        self.assertEqual(len(conditional.children), 3)
+
 
 class SymbolicDistributionTestCase(unittest.TestCase):
     distribution: SymbolicDistribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}),

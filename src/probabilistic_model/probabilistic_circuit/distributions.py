@@ -85,6 +85,69 @@ class ContinuousDistribution(UnivariateDistribution):
         """
         return self._cdf(self.variable.encode(value))
 
+    def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[
+        Optional['DiracDeltaDistribution'], float]:
+        """
+        Create a dirac impulse from a singleton interval.
+
+        :param singleton: The singleton interval from an encoded event.
+        :return: A dirac impulse and the likelihood.
+        """
+        if singleton.lower != singleton.upper:
+            raise ValueError("This method can only be used with singletons.")
+
+        likelihood = self.pdf(singleton.lower)
+
+        if likelihood == 0:
+            return None, 0
+
+        else:
+            return DiracDeltaDistribution(self.variable, singleton.lower), likelihood
+
+    def conditional_from_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
+        """
+        Create a conditional distribution from an interval that is not singleton.
+
+        This is the method that should be overloaded by subclasses.
+        The _conditional method will call this method if the interval is not singleton.
+
+        :param interval: The interval from an encoded event.
+        :return: A conditional distribution and the probability.
+        """
+        raise NotImplementedError
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+
+        resulting_distributions = []
+        resulting_probabilities = []
+
+        for interval in event[self.variable]:
+
+            # handle the singleton case
+            if interval.lower == interval.upper:
+                distribution, probability = self.conditional_from_singleton(interval)
+
+            # handle the non-singleton case
+            else:
+                distribution, probability = self.conditional_from_interval(interval)
+
+            if probability > 0:
+                resulting_distributions.append(distribution)
+                resulting_probabilities.append(probability)
+
+        if len(resulting_distributions) == 0:
+            return None, 0
+
+        # if there is only one interval, don't create a deterministic sum
+        if len(resulting_distributions) == 1:
+            return resulting_distributions[0], resulting_probabilities[0]
+
+        # if there are multiple intersections almost surely, create a deterministic sum
+        elif len(resulting_distributions) > 1:
+            deterministic_sum = DeterministicSumUnit(self.variables, resulting_probabilities)
+            deterministic_sum.children = resulting_distributions
+            return deterministic_sum.normalize(), sum(resulting_probabilities)
+
 
 class UnivariateDiscreteDistribution(UnivariateDistribution):
     """
@@ -259,36 +322,19 @@ class UniformDistribution(ContinuousDistribution):
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.uniform(self.lower, self.upper)] for _ in range(amount)]
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
-        interval = event[self.variable]
-        resulting_distributions = []
-        resulting_probabilities = []
+    def conditional_from_interval(self, interval: portion.Interval) -> Tuple[
+        Optional[Union[DeterministicSumUnit, Self]], float]:
+        # calculate the probability of the interval
+        probability = self._probability(EncodedEvent({self.variable: interval}))
 
-        for interval_ in interval:
-
-            # calculate the probability of the interval
-            probability = self._probability(EncodedEvent({self.variable: interval_}))
-
-            # if the probability is 0, skip this interval
-            if probability == 0:
-                continue
-
-            resulting_probabilities.append(probability)
-            intersection = self.domain[self.variable] & interval_
-            resulting_distributions.append(UniformDistribution(self.variable, intersection.lower, intersection.upper))
-
-        # if there is only one interval, don't create a deterministic sum
-        if len(resulting_distributions) == 1:
-            return resulting_distributions[0], resulting_probabilities[0]
-
-        # if there are multiple intersections almost surely, create a deterministic sum
-        elif len(resulting_distributions) > 1:
-            deterministic_sum = DeterministicSumUnit(self.variables, resulting_probabilities)
-            deterministic_sum.children = resulting_distributions
-            return deterministic_sum.normalize(), sum(resulting_probabilities)
-
-        else:
+        # if the probability is 0, return None
+        if probability == 0:
             return None, 0
+
+        # else, form the intersection of the interval and the domain
+        intersection = self.domain[self.variable] & interval
+        resulting_distribution = UniformDistribution(self.variable, intersection.lower, intersection.upper)
+        return resulting_distribution, probability
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
 
@@ -391,9 +437,8 @@ class DiracDeltaDistribution(ContinuousDistribution):
     def __eq__(self, other):
         if not isinstance(other, DiracDeltaDistribution):
             return False
-        return (self.variable == other.variable and
-                self.location == other.location and
-                self.density_cap == other.density_cap)
+        return (
+                    self.variable == other.variable and self.location == other.location and self.density_cap == other.density_cap)
 
     def __repr__(self):
         return f"DiracDelta({self.location}, {self.density_cap})"
