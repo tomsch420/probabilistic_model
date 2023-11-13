@@ -1,8 +1,10 @@
 import copy
+import json
 import random
-from typing import Iterable, Tuple, Union, List, Optional, Any
+from typing import Iterable, Tuple, Union, List, Optional, Any, Dict
 
 import portion
+import random_events.variables
 from random_events.events import EncodedEvent, VariableMap, Event
 from random_events.variables import Variable, Continuous, Symbolic, Integer, Discrete
 from typing_extensions import Self
@@ -57,6 +59,9 @@ class UnivariateDistribution(Unit):
     def maximize_expressiveness(self) -> Self:
         return copy.copy(self)
 
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "variable": json.loads(self.variable.model_dump_json())}
+
 
 class ContinuousDistribution(UnivariateDistribution):
     """
@@ -85,8 +90,8 @@ class ContinuousDistribution(UnivariateDistribution):
         """
         return self._cdf(self.variable.encode(value))
 
-    def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[
-        Optional['DiracDeltaDistribution'], float]:
+    def conditional_from_singleton(self, singleton: portion.Interval) \
+            -> Tuple[Optional['DiracDeltaDistribution'], float]:
         """
         Create a dirac impulse from a singleton interval.
 
@@ -208,16 +213,25 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         normalized_weights = [weight / probability for weight in unnormalized_weights]
         return self.__class__(self.variable, normalized_weights), probability
 
-    def __eq__(self, other):
-        if not isinstance(other, SymbolicDistribution):
-            return False
-        return self.variable == other.variable and self.weights == other.weights
-
     def sample(self, amount: int) -> Iterable:
         return [random.choices(self.variable.domain, self.weights) for _ in range(amount)]
 
     def __copy__(self):
         return self.__class__(self.variable, self.weights)
+
+    def __eq__(self, other):
+        return (isinstance(other, UnivariateDiscreteDistribution) and self.weights == other.weights and super().__eq__(
+            other))
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "weights": self.weights}
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        variable = random_events.variables.Variable.from_json(data["variable"])
+        return cls(variable, data["weights"])
 
 
 class SymbolicDistribution(UnivariateDiscreteDistribution):
@@ -263,7 +277,7 @@ class IntegerDistribution(UnivariateDiscreteDistribution, ContinuousDistribution
 
 class UniformDistribution(ContinuousDistribution):
     """
-    Class for uniform distributions over the half open interval [lower, upper).
+    Class for uniform distributions over the half-open interval [lower, upper).
     """
 
     lower: float
@@ -357,15 +371,25 @@ class UniformDistribution(ContinuousDistribution):
         return VariableMap({self.variable: result})
 
     def __eq__(self, other):
-        if not isinstance(other, UniformDistribution):
-            return False
-        return self.variable == other.variable and self.lower == other.lower and self.upper == other.upper
+        return (isinstance(other,
+                           UniformDistribution) and self.lower == other.lower and self.upper == other.upper and super().__eq__(
+            other))
 
     def __repr__(self):
         return f"U{self.lower, self.upper}"
 
     def __copy__(self):
         return self.__class__(self.variable, self.lower, self.upper)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "lower": self.lower, "upper": self.upper}
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        variable = random_events.variables.Variable.from_json(data["variable"])
+        return cls(variable, data["lower"], data["upper"])
 
 
 class DiracDeltaDistribution(ContinuousDistribution):
@@ -435,13 +459,20 @@ class DiracDeltaDistribution(ContinuousDistribution):
             return VariableMap({self.variable: 0})
 
     def __eq__(self, other):
-        if not isinstance(other, DiracDeltaDistribution):
-            return False
-        return (
-                    self.variable == other.variable and self.location == other.location and self.density_cap == other.density_cap)
+        return self.location == other.location and self.density_cap == other.density_cap and super().__eq__(other)
 
     def __repr__(self):
         return f"DiracDelta({self.location}, {self.density_cap})"
 
     def __copy__(self):
         return self.__class__(self.variable, self.location, self.density_cap)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "location": self.location, "density_cap": self.density_cap}
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        variable = random_events.variables.Variable.from_json(data["variable"])
+        return cls(variable, data["location"], data["density_cap"])

@@ -163,6 +163,26 @@ class ProbabilisticCircuitTestCase(unittest.TestCase):
         self.assertTrue(distribution.is_deterministic())
         self.assertIsInstance(distribution, DecomposableProductUnit)
 
+    def test_equality(self):
+        self.assertEqual(self.model, self.model)
+        model_2 = self.model.__copy__()
+        self.assertEqual(self.model, model_2)
+        real2 = Continuous("real2")
+        model_2 *= UniformDistribution(real2, 0, 1)
+        self.assertNotEqual(self.model, model_2)
+
+    def test_to_json(self):
+        json = self.model.to_json()
+        model = Unit.from_json(json)
+        self.assertEqual(self.model, model)
+
+        event = Event({
+            self.model.variables[0]: {1, 4},
+            self.model.variables[1]: portion.closedopen(0, 1),
+            self.model.variables[2]: ["a", "b"]})
+
+        self.assertEqual(self.model.probability(event), model.probability(event))
+
 
 if __name__ == '__main__':
     unittest.main()

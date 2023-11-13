@@ -123,6 +123,13 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(likelihood, 1.125)
         self.assertEqual(len(conditional.children), 3)
 
+    def test_serialization(self):
+        serialization = self.distribution.to_json()
+        self.assertEqual(serialization["type"],
+                         "probabilistic_model.probabilistic_circuit.distributions.UniformDistribution")
+        self.assertEqual(serialization["lower"], 0)
+        self.assertEqual(serialization["upper"], 2)
+
 
 class SymbolicDistributionTestCase(unittest.TestCase):
     distribution: SymbolicDistribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}),

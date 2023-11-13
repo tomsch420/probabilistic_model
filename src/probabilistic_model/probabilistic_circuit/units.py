@@ -1,11 +1,12 @@
 import copy
 import itertools
 import random
-from typing import Iterable, Tuple, List, Union, Optional, Any
+from typing import Iterable, Tuple, List, Union, Optional, Any, Dict
 
 from anytree import NodeMixin
 from random_events.events import EncodedEvent, VariableMap, Event
 from random_events.variables import Variable
+import random_events.utils
 from typing_extensions import Self
 
 from probabilistic_model.probabilistic_model import ProbabilisticModel, MomentType, OrderType, CenterType
@@ -174,7 +175,7 @@ class Unit(ProbabilisticModel, NodeMixin):
         .. note::
             Decomposability refers to Definition 29 in :cite:p:`choi2020probabilistic`.
 
-        :return: Rather every product node in this circuit is decomposable.
+        :return: Rather, every product node in this circuit is decomposable.
         """
         raise NotImplementedError
 
@@ -185,12 +186,51 @@ class Unit(ProbabilisticModel, NodeMixin):
         This method is a syntactic transformation similar to what was described in chapter 5.5 in
         :cite:p:`choi2020probabilistic`. However, this will not always result in a circuit that has alternating sum
         and product units. Whenever there is a sum of a (partially) deterministic sum unit, the sum will only collapse
-        the non-deterministic sums. Similar, products of (partially) decomposable product units will only collapse the
-        non-decomposable products and decomposable product into two different groups.
+        the non-deterministic sums. Similarly, products of (partially) decomposable product units will only collapse the
+        non-decomposable products and decomposable products into two different groups.
 
         :return: The simplified circuit.
         """
         raise NotImplementedError
+
+    def __eq__(self, other):
+        return self.variables == other.variables and self.children == other.children
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "type": random_events.utils.get_full_class_name(self.__class__),
+            "children": [child.to_json() for child in self.children]
+        }
+
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> Self:
+        """
+        Create the correct subclass of a unit from a json dict.
+
+        :param data: The json dict.
+        :return: The unit.
+        """
+        children = [Unit.from_json(child) for child in data["children"]]
+        variables = set(itertools.chain.from_iterable([child.variables for child in children]))
+        for subclass in random_events.utils.recursive_subclasses(Unit):
+            if random_events.utils.get_full_class_name(subclass) == data["type"]:
+                return subclass.from_json_with_variables_and_children(data, variables, children)
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        """
+        Create the correct subclass of a unit from a json dict, the variables and the children.
+
+        :param data: The json dict.
+        :param variables: The variables.
+        :param children: The children.
+        :return: The unit.
+        """
+        result = cls(variables)
+        result.children = children
+        return result
 
 
 class SumUnit(Unit):
@@ -293,6 +333,23 @@ class SumUnit(Unit):
 
         result = resulting_class(self.variables, self.weights)
         result.children = maximum_expressive_children
+        return result
+
+    def __eq__(self, other):
+        return isinstance(other, SumUnit) and self.weights == other.weights and super().__eq__(other)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            **super().to_json(),
+            "weights": self.weights
+        }
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        result = cls(variables, data["weights"])
+        result.children = children
         return result
 
 
@@ -497,6 +554,9 @@ class ProductUnit(Unit):
         result = resulting_class(self.variables)
         result.children = maximum_expressive_children
         return result
+
+    def __eq__(self, other):
+        return isinstance(other, ProductUnit) and super().__eq__(other)
 
 
 class DecomposableProductUnit(ProductUnit):
