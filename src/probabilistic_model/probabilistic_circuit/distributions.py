@@ -60,7 +60,7 @@ class UnivariateDistribution(Unit):
         return copy.copy(self)
 
     def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "variable": json.loads(self.variable.model_dump_json())}
+        return {**super().to_json(), "variable": self.variable.to_json()}
 
 
 class ContinuousDistribution(UnivariateDistribution):
