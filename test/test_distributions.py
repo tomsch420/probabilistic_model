@@ -8,13 +8,7 @@ import portion
 
 
 class UniformDistributionTestCase(unittest.TestCase):
-    distribution: UniformDistribution = UniformDistribution(Continuous("x"), 0, 2)
-
-    def test_creation_with_raises(self):
-        with self.assertRaises(ValueError):
-            UniformDistribution(Continuous("x"), 1, 0)
-        with self.assertRaises(ValueError):
-            UniformDistribution(Continuous("x"), 0, 0)
+    distribution: UniformDistribution = UniformDistribution(Continuous("x"), portion.closedopen(0, 2))
 
     def test_domain(self):
         self.assertEqual(self.distribution.domain, Event({self.distribution.variable: portion.closedopen(0, 2)}))
@@ -77,9 +71,7 @@ class UniformDistributionTestCase(unittest.TestCase):
 
     def test_conditional_triple_complex_intersection(self):
         event = Event(
-            {self.distribution.variable: portion.closed(1.5, 2) |
-                                         portion.closed(0, 0.25) |
-                                         portion.closed(0.75, 1)})
+            {self.distribution.variable: portion.closed(1.5, 2) | portion.closed(0, 0.25) | portion.closed(0.75, 1)})
 
         conditional, probability = self.distribution.conditional(event)
         self.assertIsInstance(conditional, DeterministicSumUnit)
@@ -91,10 +83,9 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(conditional.children[2].domain[conditional.variables[0]], portion.closedopen(1.5, 2))
 
     def test_conditional_mode(self):
-        event = Event(
-            {self.distribution.variable: portion.closedopen(1.5, 2) |
-                                         portion.closedopen(0, 0.25) |
-                                         portion.closedopen(0.75, 1)})
+        event = Event({
+            self.distribution.variable: portion.closedopen(1.5, 2) | portion.closedopen(0, 0.25) | portion.closedopen(
+                0.75, 1)})
 
         conditional, probability = self.distribution.conditional(event)
         modes, likelihood = conditional.mode()
@@ -108,6 +99,16 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(expectation[self.distribution.variable], 1)
         variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}), expectation)
         self.assertEqual(variance[self.distribution.variable], 1 / 3)
+
+    def test_inclusion_likelihood(self):
+        distribution = UniformDistribution(Continuous("x"), portion.closed(0, 1))
+        self.assertEqual(distribution.likelihood([1]), 1)
+        self.assertEqual(distribution.likelihood([0]), 1)
+
+    def test_exclusion_likelihood(self):
+        distribution = UniformDistribution(Continuous("x"), portion.open(0, 1))
+        self.assertEqual(distribution.likelihood([1]), 0)
+        self.assertEqual(distribution.likelihood([0]), 0)
 
 
 class SymbolicDistributionTestCase(unittest.TestCase):
@@ -154,15 +155,13 @@ class SymbolicDistributionTestCase(unittest.TestCase):
         self.assertEqual(domain, Event({self.distribution.variable: self.distribution.variable.domain}))
 
     def test_domain_if_weights_are_zero(self):
-        distribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}),
-                                            [0, 0, 1])
+        distribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}), [0, 0, 1])
         domain = distribution.domain
         self.assertEqual(domain, Event({distribution.variable: "dog"}))
 
 
 class IntegerDistributionTestCase(unittest.TestCase):
-    distribution: IntegerDistribution = IntegerDistribution(Integer("number", {1, 2, 4}),
-                                                            [0.3, 0.3, 0.4])
+    distribution: IntegerDistribution = IntegerDistribution(Integer("number", {1, 2, 4}), [0.3, 0.3, 0.4])
 
     def test_pdf(self):
         self.assertEqual(self.distribution.pdf(1), 0.3)

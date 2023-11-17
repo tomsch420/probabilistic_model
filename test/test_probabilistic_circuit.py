@@ -26,8 +26,8 @@ class ProbabilisticCircuitTestCase(unittest.TestCase):
         symbolic_distribution_1 = SymbolicDistribution(symbol, [0.5, 0, 0.5])
 
         real = Continuous("real")
-        real_distribution_0 = UniformDistribution(real, 0, 1)
-        real_distribution_1 = UniformDistribution(real, 0.5, 2)
+        real_distribution_0 = UniformDistribution(real, portion.closedopen(0, 1))
+        real_distribution_1 = UniformDistribution(real, portion.closedopen(0.5, 2))
 
         product_0 = integer_distribution_0 * symbolic_distribution_0 * real_distribution_0
         product_1 = integer_distribution_1 * symbolic_distribution_1 * real_distribution_1
@@ -116,7 +116,8 @@ class ProbabilisticCircuitTestCase(unittest.TestCase):
 
     def test_non_determinism(self):
         variable = Continuous("real")
-        distribution = UniformDistribution(variable, 0, 1) + UniformDistribution(variable, 0.5, 2)
+        distribution = UniformDistribution(variable, portion.closedopen(0, 1)) + UniformDistribution(variable,
+                                                                                                     portion.closedopen(0.5, 2))
         self.assertFalse(distribution.is_deterministic())
 
     def test_smoothness(self):
@@ -125,7 +126,7 @@ class ProbabilisticCircuitTestCase(unittest.TestCase):
     def test_non_smoothness(self):
         variable_0 = Continuous("real0")
         variable_1 = Continuous("real1")
-        distribution = UniformDistribution(variable_0, 0, 1) + UniformDistribution(variable_1, 0.5, 2)
+        distribution = UniformDistribution(variable_0, portion.closedopen(0, 1)) + UniformDistribution(variable_1, portion.closedopen(0.5, 2))
         self.assertFalse(distribution.is_smooth())
 
     def test_decomposable(self):
@@ -133,13 +134,13 @@ class ProbabilisticCircuitTestCase(unittest.TestCase):
 
     def test_non_decomposable(self):
         variable = Continuous("real")
-        distribution = UniformDistribution(variable, 0, 1) * UniformDistribution(variable, 0.5, 2)
+        distribution = UniformDistribution(variable,  portion.closedopen(0, 1)) * UniformDistribution(variable, portion.closedopen(0.5, 2))
         self.assertFalse(distribution.is_decomposable())
 
     def test_maximum_expressiveness_of_sum(self):
         real = Continuous("real")
-        distribution_1 = UniformDistribution(real, 0, 1)
-        distribution_2 = UniformDistribution(real, 1, 3)
+        distribution_1 = UniformDistribution(real, portion.closedopen(0, 1))
+        distribution_2 = UniformDistribution(real, portion.closedopen(1, 3))
         distribution = SumUnit([real], [0.7, 0.3])
         distribution.children = [distribution_1, distribution_2]
 
@@ -153,8 +154,8 @@ class ProbabilisticCircuitTestCase(unittest.TestCase):
         real_1 = Continuous("real1")
         real_2 = Continuous("real2")
         distribution = ProductUnit([real_1, real_2])
-        distribution_1 = UniformDistribution(real_1, 0, 1, parent=distribution)
-        distribution_2 = UniformDistribution(real_2, 1, 3, parent=distribution)
+        distribution_1 = UniformDistribution(real_1, portion.closedopen(0, 1), parent=distribution)
+        distribution_2 = UniformDistribution(real_2, portion.closedopen(1, 3), parent=distribution)
         self.assertEqual(distribution.children, (distribution_1, distribution_2))
         self.assertIsInstance(distribution, ProductUnit)
         distribution = distribution.maximize_expressiveness()

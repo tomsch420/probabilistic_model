@@ -205,26 +205,26 @@ class UniformDistribution(ContinuousDistribution):
     Class for uniform distributions over the half open interval [lower, upper).
     """
 
-    lower: float
+    interval: portion.Interval
     """
-    The included lower bound of the interval.
-    """
-
-    upper: float
-    """
-    The excluded upper bound of the interval.
+    The interval of the uniform distribution.
     """
 
-    def __init__(self, variable: Continuous, lower: float, upper: float, parent=None):
+    def __init__(self, variable: Continuous, interval: portion.Interval, parent=None):
         super().__init__(variable, parent)
-        if lower >= upper:
-            raise ValueError("upper has to be greater than lower. lower: {}; upper: {}")
-        self.lower = lower
-        self.upper = upper
+        self.interval = interval
 
     @property
     def domain(self) -> Event:
         return Event({self.variable: portion.closedopen(self.lower, self.upper)})
+
+    @property
+    def lower(self) -> float:
+        return self.interval.lower
+
+    @property
+    def upper(self) -> float:
+        return self.interval.upper
 
     def pdf_value(self) -> float:
         """
@@ -233,15 +233,25 @@ class UniformDistribution(ContinuousDistribution):
         return 1 / (self.upper - self.lower)
 
     def _pdf(self, value: float) -> float:
-        if value in self.domain[self.variable]:
+        if value in self.interval:
             return self.pdf_value()
         else:
             return 0
 
     def _cdf(self, value: float) -> float:
-        if value < self.lower:
+
+        # check edge cases
+        if value == -portion.inf:
+            return 0.
+        if value == portion.inf:
+            return 1.
+
+        # convert to singleton
+        singleton = portion.singleton(value)
+
+        if singleton < self.interval:
             return 0
-        elif value > self.upper:
+        elif singleton > self.interval:
             return 1
         else:
             return (value - self.lower) / (self.upper - self.lower)
@@ -251,6 +261,7 @@ class UniformDistribution(ContinuousDistribution):
         probability = 0.
 
         for interval_ in interval:
+            print(interval_)
             probability += self.cdf(interval_.upper) - self.cdf(interval_.lower)
 
         return probability
@@ -277,7 +288,7 @@ class UniformDistribution(ContinuousDistribution):
 
             resulting_probabilities.append(probability)
             intersection = self.domain[self.variable] & interval_
-            resulting_distributions.append(UniformDistribution(self.variable, intersection.lower, intersection.upper))
+            resulting_distributions.append(UniformDistribution(self.variable, intersection))
 
         # if there is only one interval, don't create a deterministic sum
         if len(resulting_distributions) == 1:
@@ -319,7 +330,7 @@ class UniformDistribution(ContinuousDistribution):
         return self.variable == other.variable and self.lower == other.lower and self.upper == other.upper
 
     def __repr__(self):
-        return f"U{self.lower, self.upper}"
+        return f"U{self.interval}"
 
     def __copy__(self):
-        return self.__class__(self.variable, self.lower, self.upper)
+        return self.__class__(self.variable, self.interval)
