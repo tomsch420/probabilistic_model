@@ -1,9 +1,19 @@
 import abc
-from typing import Tuple, Iterable, List, Optional, Union
+from typing import Tuple, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from random_events.events import Event, EncodedEvent, VariableMap
 from random_events.variables import Variable, Integer, Continuous
 from typing_extensions import Self
+
+# # Type hinting for Python 3.7 to 3.9
+if TYPE_CHECKING:
+    OrderType = VariableMap[Union[Integer, Continuous], int]
+    CenterType = VariableMap[Union[Integer, Continuous], float]
+    MomentType = VariableMap[Union[Integer, Continuous], float]
+else:
+    OrderType = VariableMap
+    CenterType = VariableMap
+    MomentType = VariableMap
 
 
 class ProbabilisticModel(abc.ABC):
@@ -169,9 +179,7 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
-               center: VariableMap[Union[Integer, Continuous], float]) \
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
         """
         Calculate the (centralised) moment of the distribution.
 
@@ -186,8 +194,7 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def expectation(self, variables: Iterable[Union[Integer, Continuous]]) \
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def expectation(self, variables: Iterable[Union[Integer, Continuous]]) -> MomentType:
         """
         Calculate the expectation of the numeric variables in `variables`.
 
@@ -198,8 +205,7 @@ class ProbabilisticModel(abc.ABC):
         center = VariableMap({variable: 0 for variable in variables})
         return self.moment(order, center)
 
-    def variance(self, variables: Iterable[Union[Integer, Continuous]]) \
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def variance(self, variables: Iterable[Union[Integer, Continuous]]) -> MomentType:
         """
         Calculate the variance of the numeric variables in `variables`.
 

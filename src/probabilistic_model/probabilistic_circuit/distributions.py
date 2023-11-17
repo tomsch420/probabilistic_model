@@ -1,12 +1,16 @@
 import copy
+import json
 import random
-from typing import Iterable, Tuple, Union, List, Optional, Any
+from typing import Iterable, Tuple, Union, List, Optional, Any, Dict
+
+import portion
+import random_events.variables
+from random_events.events import EncodedEvent, VariableMap, Event
+from random_events.variables import Variable, Continuous, Symbolic, Integer, Discrete
 from typing_extensions import Self
 
 from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit
-from random_events.events import EncodedEvent, VariableMap, Event
-from random_events.variables import Variable, Continuous, Symbolic, Integer, Discrete
-import portion
+from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
 
 
 class UnivariateDistribution(Unit):
@@ -55,6 +59,9 @@ class UnivariateDistribution(Unit):
     def maximize_expressiveness(self) -> Self:
         return copy.copy(self)
 
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "variable": self.variable.to_json()}
+
 
 class ContinuousDistribution(UnivariateDistribution):
     """
@@ -83,6 +90,69 @@ class ContinuousDistribution(UnivariateDistribution):
         """
         return self._cdf(self.variable.encode(value))
 
+    def conditional_from_singleton(self, singleton: portion.Interval) \
+            -> Tuple[Optional['DiracDeltaDistribution'], float]:
+        """
+        Create a dirac impulse from a singleton interval.
+
+        :param singleton: The singleton interval from an encoded event.
+        :return: A dirac impulse and the likelihood.
+        """
+        if singleton.lower != singleton.upper:
+            raise ValueError("This method can only be used with singletons.")
+
+        likelihood = self.pdf(singleton.lower)
+
+        if likelihood == 0:
+            return None, 0
+
+        else:
+            return DiracDeltaDistribution(self.variable, singleton.lower), likelihood
+
+    def conditional_from_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
+        """
+        Create a conditional distribution from an interval that is not singleton.
+
+        This is the method that should be overloaded by subclasses.
+        The _conditional method will call this method if the interval is not singleton.
+
+        :param interval: The interval from an encoded event.
+        :return: A conditional distribution and the probability.
+        """
+        raise NotImplementedError
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+
+        resulting_distributions = []
+        resulting_probabilities = []
+
+        for interval in event[self.variable]:
+
+            # handle the singleton case
+            if interval.lower == interval.upper:
+                distribution, probability = self.conditional_from_singleton(interval)
+
+            # handle the non-singleton case
+            else:
+                distribution, probability = self.conditional_from_interval(interval)
+
+            if probability > 0:
+                resulting_distributions.append(distribution)
+                resulting_probabilities.append(probability)
+
+        if len(resulting_distributions) == 0:
+            return None, 0
+
+        # if there is only one interval, don't create a deterministic sum
+        if len(resulting_distributions) == 1:
+            return resulting_distributions[0], resulting_probabilities[0]
+
+        # if there are multiple intersections almost surely, create a deterministic sum
+        elif len(resulting_distributions) > 1:
+            deterministic_sum = DeterministicSumUnit(self.variables, resulting_probabilities)
+            deterministic_sum.children = resulting_distributions
+            return deterministic_sum.normalize(), sum(resulting_probabilities)
+
 
 class UnivariateDiscreteDistribution(UnivariateDistribution):
     """
@@ -107,8 +177,8 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
 
     @property
     def domain(self) -> Event:
-        return Event({self.variable: [value for value, weight in zip(self.variable.domain, self.weights)
-                                      if weight > 0]})
+        return Event(
+            {self.variable: [value for value, weight in zip(self.variable.domain, self.weights) if weight > 0]})
 
     @property
     def variable(self) -> Discrete:
@@ -127,8 +197,8 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
 
     def _mode(self) -> Tuple[List[EncodedEvent], float]:
         maximum_weight = max(self.weights)
-        mode = EncodedEvent({self.variable: [index for index, weight in enumerate(self.weights)
-                                             if weight == maximum_weight]})
+        mode = EncodedEvent(
+            {self.variable: [index for index, weight in enumerate(self.weights) if weight == maximum_weight]})
 
         return [mode], maximum_weight
 
@@ -154,6 +224,20 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
     def __copy__(self):
         return self.__class__(self.variable, self.weights)
 
+    def __eq__(self, other):
+        return (isinstance(other, UnivariateDiscreteDistribution) and self.weights == other.weights and super().__eq__(
+            other))
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "weights": self.weights}
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        variable = random_events.variables.Variable.from_json(data["variable"])
+        return cls(variable, data["weights"])
+
 
 class SymbolicDistribution(UnivariateDiscreteDistribution):
     """
@@ -166,9 +250,7 @@ class SymbolicDistribution(UnivariateDiscreteDistribution):
     def variable(self) -> Symbolic:
         return self.variables[0]
 
-    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
-               center: VariableMap[Union[Integer, Continuous], float]) \
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
         return VariableMap()
 
 
@@ -191,9 +273,7 @@ class IntegerDistribution(UnivariateDiscreteDistribution, ContinuousDistribution
         """
         return sum(self._pdf(value) for value in range(value))
 
-    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
-               center: VariableMap[Union[Integer, Continuous], float]) \
-            -> VariableMap[Union[Integer, Continuous], float]:
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
         order = order[self.variable]
         center = center[self.variable]
         result = sum([self.pdf(value) * (value - center) ** order for value in self.variable.domain])
@@ -202,29 +282,29 @@ class IntegerDistribution(UnivariateDiscreteDistribution, ContinuousDistribution
 
 class UniformDistribution(ContinuousDistribution):
     """
-    Class for uniform distributions over the half open interval [lower, upper).
+    Class for uniform distributions over the half-open interval [lower, upper).
     """
 
-    interval: portion.Interval
+    lower: float
     """
-    The interval of the uniform distribution.
+    The included lower bound of the interval.
     """
 
-    def __init__(self, variable: Continuous, interval: portion.Interval, parent=None):
+    upper: float
+    """
+    The excluded upper bound of the interval.
+    """
+
+    def __init__(self, variable: Continuous, lower: float, upper: float, parent=None):
         super().__init__(variable, parent)
-        self.interval = interval
+        if lower >= upper:
+            raise ValueError("upper has to be greater than lower. lower: {}; upper: {}")
+        self.lower = lower
+        self.upper = upper
 
     @property
     def domain(self) -> Event:
         return Event({self.variable: portion.closedopen(self.lower, self.upper)})
-
-    @property
-    def lower(self) -> float:
-        return self.interval.lower
-
-    @property
-    def upper(self) -> float:
-        return self.interval.upper
 
     def pdf_value(self) -> float:
         """
@@ -261,7 +341,6 @@ class UniformDistribution(ContinuousDistribution):
         probability = 0.
 
         for interval_ in interval:
-            print(interval_)
             probability += self.cdf(interval_.upper) - self.cdf(interval_.lower)
 
         return probability
@@ -272,40 +351,21 @@ class UniformDistribution(ContinuousDistribution):
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.uniform(self.lower, self.upper)] for _ in range(amount)]
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
-        interval = event[self.variable]
-        resulting_distributions = []
-        resulting_probabilities = []
+    def conditional_from_interval(self, interval: portion.Interval) -> Tuple[
+        Optional[Union[DeterministicSumUnit, Self]], float]:
+        # calculate the probability of the interval
+        probability = self._probability(EncodedEvent({self.variable: interval}))
 
-        for interval_ in interval:
-
-            # calculate the probability of the interval
-            probability = self._probability(EncodedEvent({self.variable: interval_}))
-
-            # if the probability is 0, skip this interval
-            if probability == 0:
-                continue
-
-            resulting_probabilities.append(probability)
-            intersection = self.domain[self.variable] & interval_
-            resulting_distributions.append(UniformDistribution(self.variable, intersection))
-
-        # if there is only one interval, don't create a deterministic sum
-        if len(resulting_distributions) == 1:
-            return resulting_distributions[0], resulting_probabilities[0]
-
-        # if there are multiple intersections almost surely, create a deterministic sum
-        elif len(resulting_distributions) > 1:
-            deterministic_sum = DeterministicSumUnit(self.variables, resulting_probabilities)
-            deterministic_sum.children = resulting_distributions
-            return deterministic_sum.normalize(), sum(resulting_probabilities)
-
-        else:
+        # if the probability is 0, return None
+        if probability == 0:
             return None, 0
 
-    def moment(self, order: VariableMap[Union[Integer, Continuous], int],
-               center: VariableMap[Union[Integer, Continuous], float])\
-            -> VariableMap[Union[Integer, Continuous], float]:
+        # else, form the intersection of the interval and the domain
+        intersection = self.domain[self.variable] & interval
+        resulting_distribution = UniformDistribution(self.variable, intersection.lower, intersection.upper)
+        return resulting_distribution, probability
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
 
         order = order[self.variable]
         center = center[self.variable]
@@ -320,17 +380,114 @@ class UniformDistribution(ContinuousDistribution):
 
             """
             return (self.pdf_value() * (x - center) ** (order + 1)) / (order + 1)
+
         result = evaluate_integral_at(self.upper) - evaluate_integral_at(self.lower)
 
         return VariableMap({self.variable: result})
 
     def __eq__(self, other):
-        if not isinstance(other, UniformDistribution):
-            return False
-        return self.variable == other.variable and self.lower == other.lower and self.upper == other.upper
+        return (isinstance(other,
+                           UniformDistribution) and self.lower == other.lower and self.upper == other.upper and super().__eq__(
+            other))
 
     def __repr__(self):
         return f"U{self.interval}"
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "lower": self.lower, "upper": self.upper}
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        variable = random_events.variables.Variable.from_json(data["variable"])
+        return cls(variable, data["lower"], data["upper"])
+
+
+class DiracDeltaDistribution(ContinuousDistribution):
+    """
+    Class for Dirac delta distributions.
+    """
+
+    location: float
+    """
+    The location of the Dirac delta distribution.
+    """
+
+    density_cap: float
+    """
+    The density cap of the Dirac delta distribution.
+    This value will be used to replace infinity in likelihood.
+    """
+
+    def __init__(self, variable: Continuous, location: float, density_cap: float = float("inf"), parent=None):
+        super().__init__(variable, parent)
+        self.location = location
+        self.density_cap = density_cap
+
+    @property
+    def domain(self) -> Event:
+        return Event({self.variable: portion.singleton(self.location)})
+
+    def _pdf(self, value: float) -> float:
+        if value == self.location:
+            return self.density_cap
+        else:
+            return 0
+
+    def _cdf(self, value: float) -> float:
+        if value < self.location:
+            return 0
+        else:
+            return 1
+
+    def _probability(self, event: EncodedEvent) -> float:
+        if self.location in event[self.variable]:
+            return 1
+        else:
+            return 0
+
+    def _mode(self):
+        return [self.domain.encode()], self.density_cap
+
+    def sample(self, amount: int) -> List[List[float]]:
+        return [[self.location] for _ in range(amount)]
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
+        if self.location in event[self.variable]:
+            return self.__copy__(), 1
+        else:
+            return None, 0
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        order = order[self.variable]
+        center = center[self.variable]
+
+        if order == 1:
+            return VariableMap({self.variable: self.location - center})
+        elif order == 2:
+            return VariableMap({self.variable: (self.location - center) ** 2})
+        else:
+            return VariableMap({self.variable: 0})
+
+    def __eq__(self, other):
+        return self.location == other.location and self.density_cap == other.density_cap and super().__eq__(other)
+
+    def __repr__(self):
+        return f"DiracDelta({self.location}, {self.density_cap})"
+
+    def __copy__(self):
+        return self.__class__(self.variable, self.location, self.density_cap)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "location": self.location, "density_cap": self.density_cap}
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        variable = random_events.variables.Variable.from_json(data["variable"])
+        return cls(variable, data["location"], data["density_cap"])

@@ -1,6 +1,6 @@
 import unittest
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, SymbolicDistribution, \
-    IntegerDistribution
+    IntegerDistribution, DiracDeltaDistribution
 from probabilistic_model.probabilistic_circuit.units import DeterministicSumUnit
 from random_events.events import Event, VariableMap
 from random_events.variables import Continuous, Symbolic, Integer
@@ -110,6 +110,27 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(distribution.likelihood([1]), 0)
         self.assertEqual(distribution.likelihood([0]), 0)
 
+    def test_conditional_with_singleton(self):
+        conditional, likelihood = self.distribution.conditional(Event({self.distribution.variable: 1}))
+        self.assertIsInstance(conditional, DiracDeltaDistribution)
+        self.assertEqual(likelihood, 0.5)
+
+    def test_conditional_with_mixture_of_interval_and_singleton(self):
+        event = Event({self.distribution.variable: portion.closed(1, 2) |
+                                                   portion.closed(0, 0.25) |
+                                                   portion.singleton(0.75)})
+        conditional, likelihood = self.distribution.conditional(event)
+        self.assertIsInstance(conditional, DeterministicSumUnit)
+        self.assertEqual(likelihood, 1.125)
+        self.assertEqual(len(conditional.children), 3)
+
+    def test_serialization(self):
+        serialization = self.distribution.to_json()
+        self.assertEqual(serialization["type"],
+                         "probabilistic_model.probabilistic_circuit.distributions.UniformDistribution")
+        self.assertEqual(serialization["lower"], 0)
+        self.assertEqual(serialization["upper"], 2)
+
 
 class SymbolicDistributionTestCase(unittest.TestCase):
     distribution: SymbolicDistribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}),
@@ -177,6 +198,61 @@ class IntegerDistributionTestCase(unittest.TestCase):
         self.assertEqual(expectation[self.distribution.variable], 2.5)
         variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}), expectation)
         self.assertEqual(variance[self.distribution.variable], 1.65)
+
+
+class DiracDeltaTestCase(unittest.TestCase):
+    variable = Continuous("x")
+    distribution = DiracDeltaDistribution(variable, 0, 2)
+
+    def test_pdf(self):
+        self.assertEqual(self.distribution.pdf(1), 0)
+        self.assertEqual(self.distribution.pdf(0), 2)
+        self.assertEqual(self.distribution.pdf(2), 0)
+        self.assertEqual(self.distribution.pdf(-1), 0)
+        self.assertEqual(self.distribution.pdf(3), 0)
+
+    def test_cdf(self):
+        self.assertEqual(self.distribution.cdf(1), 1)
+        self.assertEqual(self.distribution.cdf(0), 1)
+        self.assertEqual(self.distribution.cdf(2), 1)
+        self.assertEqual(self.distribution.cdf(-1), 0)
+        self.assertEqual(self.distribution.cdf(3), 1)
+
+    def test_probability(self):
+        event = Event({self.distribution.variable: portion.closed(0, 1) | portion.closed(1.5, 2)})
+        self.assertEqual(self.distribution.probability(event), 1)
+
+    def test_conditional(self):
+        event = Event({self.distribution.variable: portion.closed(-1, 2)})
+        conditional, probability = self.distribution.conditional(event)
+        self.assertEqual(conditional, self.distribution)
+        self.assertEqual(probability, 1)
+
+    def test_conditional_impossible(self):
+        event = Event({self.distribution.variable: portion.closed(1, 2)})
+        conditional, probability = self.distribution.conditional(event)
+        self.assertIsNone(conditional)
+        self.assertEqual(0, probability)
+
+    def test_mode(self):
+        mode, likelihood = self.distribution.mode()
+        self.assertEqual(mode, [Event({self.distribution.variable: 0})])
+        self.assertEqual(likelihood, 2)
+
+    def test_sample(self):
+        samples = self.distribution.sample(100)
+        self.assertTrue(all([self.distribution.likelihood(sample) > 0 for sample in samples]))
+
+    def test_expectation(self):
+        self.assertEqual(self.distribution.expectation([self.variable])[self.variable], 0)
+
+    def test_variance(self):
+        self.assertEqual(self.distribution.variance([self.variable])[self.variable], 0)
+
+    def test_higher_order_moment(self):
+        center = self.distribution.expectation([self.variable])
+        order = VariableMap({self.variable: 3})
+        self.assertEqual(self.distribution.moment(order, center)[self.variable], 0)
 
 
 if __name__ == '__main__':
