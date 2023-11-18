@@ -1,7 +1,7 @@
 import unittest
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, SymbolicDistribution, \
     IntegerDistribution, DiracDeltaDistribution
-from probabilistic_model.probabilistic_circuit.units import DeterministicSumUnit
+from probabilistic_model.probabilistic_circuit.units import DeterministicSumUnit, Unit
 from random_events.events import Event, VariableMap
 from random_events.variables import Continuous, Symbolic, Integer
 import portion
@@ -66,8 +66,8 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(probability, 0.75)
         self.assertEqual(len(conditional.children), 2)
         self.assertEqual(conditional.weights, [2 / 3, 1 / 3])
-        self.assertEqual(conditional.children[0].domain[conditional.variables[0]], portion.closedopen(0, 1))
-        self.assertEqual(conditional.children[1].domain[conditional.variables[0]], portion.closedopen(1.5, 2))
+        self.assertEqual(conditional.children[0].interval, portion.closed(0, 1))
+        self.assertEqual(conditional.children[1].interval, portion.closedopen(1.5, 2))
 
     def test_conditional_triple_complex_intersection(self):
         event = Event(
@@ -78,9 +78,9 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(probability, 0.5)
         self.assertEqual(len(conditional.children), 3)
         self.assertEqual(conditional.weights, [1 / 4, 1 / 4, 1 / 2])
-        self.assertEqual(conditional.children[0].domain[conditional.variables[0]], portion.closedopen(0, 0.25))
-        self.assertEqual(conditional.children[1].domain[conditional.variables[0]], portion.closedopen(0.75, 1))
-        self.assertEqual(conditional.children[2].domain[conditional.variables[0]], portion.closedopen(1.5, 2))
+        self.assertEqual(conditional.children[0].interval, portion.closed(0, 0.25))
+        self.assertEqual(conditional.children[1].interval, portion.closed(0.75, 1))
+        self.assertEqual(conditional.children[2].interval, portion.closedopen(1.5, 2))
 
     def test_conditional_mode(self):
         event = Event({
@@ -128,8 +128,9 @@ class UniformDistributionTestCase(unittest.TestCase):
         serialization = self.distribution.to_json()
         self.assertEqual(serialization["type"],
                          "probabilistic_model.probabilistic_circuit.distributions.UniformDistribution")
-        self.assertEqual(serialization["lower"], 0)
-        self.assertEqual(serialization["upper"], 2)
+        self.assertEqual(serialization["interval"], [(True, 0, 2, False)])
+        deserialized = Unit.from_json(serialization)
+        self.assertIsInstance(deserialized, UniformDistribution)
 
 
 class SymbolicDistributionTestCase(unittest.TestCase):

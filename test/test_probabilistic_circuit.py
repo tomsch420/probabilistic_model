@@ -169,7 +169,7 @@ class ProbabilisticCircuitTestCase(unittest.TestCase):
         model_2 = self.model.__copy__()
         self.assertEqual(self.model, model_2)
         real2 = Continuous("real2")
-        model_2 *= UniformDistribution(real2, 0, 1)
+        model_2 *= UniformDistribution(real2, portion.closedopen(0, 1))
         self.assertNotEqual(self.model, model_2)
 
     def test_to_json(self):

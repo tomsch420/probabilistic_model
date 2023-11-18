@@ -31,15 +31,15 @@ class NygaDistributionTestCase(unittest.TestCase):
         right_dataset = [4, 7, 9]
         distribution = NygaDistribution(self.x)
         dsu = distribution._create_deterministic_uniform_mixture_from_datasets(left_dataset, right_dataset)
-        self.assertEqual(dsu.children[0], UniformDistribution(self.x, portion.closedopen(1, 4)))
-        self.assertEqual(dsu.children[1], UniformDistribution(self.x, portion.closed(4, 9)))
+        self.assertEqual(dsu.children[0], UniformDistribution(self.x, portion.closedopen(1, 3.5)))
+        self.assertEqual(dsu.children[1], UniformDistribution(self.x, portion.closed(3.5, 9)))
+        self.assertEqual(dsu.weights, [3/6, 3/6])
 
     def test_compute_best_split(self):
         dataset = [1, 2, 3, 4, 7, 9]
         distribution = NygaDistribution(self.x)
-        maximum_likelihood, best_sum_node = distribution.compute_most_likely_split(dataset)
-        print(best_sum_node)
-        print(maximum_likelihood)
+        maximum_likelihood, best_sum_node, split_index = distribution.compute_most_likely_split(dataset)
+
 
 if __name__ == '__main__':
     unittest.main()

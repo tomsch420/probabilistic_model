@@ -1,5 +1,4 @@
 import copy
-import json
 import random
 from typing import Iterable, Tuple, Union, List, Optional, Any, Dict
 
@@ -90,8 +89,8 @@ class ContinuousDistribution(UnivariateDistribution):
         """
         return self._cdf(self.variable.encode(value))
 
-    def conditional_from_singleton(self, singleton: portion.Interval) \
-            -> Tuple[Optional['DiracDeltaDistribution'], float]:
+    def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[
+        Optional['DiracDeltaDistribution'], float]:
         """
         Create a dirac impulse from a singleton interval.
 
@@ -232,8 +231,7 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         return {**super().to_json(), "weights": self.weights}
 
     @classmethod
-    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
-                                              variables: List[Variable],
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any], variables: List[Variable],
                                               children: List['Unit']) -> Self:
         variable = random_events.variables.Variable.from_json(data["variable"])
         return cls(variable, data["weights"])
@@ -285,26 +283,26 @@ class UniformDistribution(ContinuousDistribution):
     Class for uniform distributions over the half-open interval [lower, upper).
     """
 
-    lower: float
+    interval: portion.Interval
     """
-    The included lower bound of the interval.
-    """
-
-    upper: float
-    """
-    The excluded upper bound of the interval.
+    The interval that the Uniform distribution is defined over.
     """
 
-    def __init__(self, variable: Continuous, lower: float, upper: float, parent=None):
+    def __init__(self, variable: Continuous, interval: portion.Interval, parent=None):
         super().__init__(variable, parent)
-        if lower >= upper:
-            raise ValueError("upper has to be greater than lower. lower: {}; upper: {}")
-        self.lower = lower
-        self.upper = upper
+        self.interval = interval
 
     @property
     def domain(self) -> Event:
-        return Event({self.variable: portion.closedopen(self.lower, self.upper)})
+        return Event({self.variable: self.interval})
+
+    @property
+    def lower(self) -> float:
+        return self.interval.lower
+
+    @property
+    def upper(self) -> float:
+        return self.interval.upper
 
     def pdf_value(self) -> float:
         """
@@ -313,7 +311,7 @@ class UniformDistribution(ContinuousDistribution):
         return 1 / (self.upper - self.lower)
 
     def _pdf(self, value: float) -> float:
-        if value in self.interval:
+        if portion.singleton(value) in self.interval:
             return self.pdf_value()
         else:
             return 0
@@ -351,8 +349,9 @@ class UniformDistribution(ContinuousDistribution):
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.uniform(self.lower, self.upper)] for _ in range(amount)]
 
-    def conditional_from_interval(self, interval: portion.Interval) -> Tuple[
-        Optional[Union[DeterministicSumUnit, Self]], float]:
+    def conditional_from_interval(self, interval: portion.Interval) \
+            -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
+
         # calculate the probability of the interval
         probability = self._probability(EncodedEvent({self.variable: interval}))
 
@@ -361,8 +360,8 @@ class UniformDistribution(ContinuousDistribution):
             return None, 0
 
         # else, form the intersection of the interval and the domain
-        intersection = self.domain[self.variable] & interval
-        resulting_distribution = UniformDistribution(self.variable, intersection.lower, intersection.upper)
+        intersection = self.interval & interval
+        resulting_distribution = UniformDistribution(self.variable, intersection)
         return resulting_distribution, probability
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
@@ -387,8 +386,7 @@ class UniformDistribution(ContinuousDistribution):
 
     def __eq__(self, other):
         return (isinstance(other,
-                           UniformDistribution) and self.lower == other.lower and self.upper == other.upper and super().__eq__(
-            other))
+                           UniformDistribution) and self.interval == other.interval and super().__eq__(other))
 
     def __repr__(self):
         return f"U{self.interval}"
@@ -397,14 +395,13 @@ class UniformDistribution(ContinuousDistribution):
         return self.__class__(self.variable, self.interval)
 
     def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "lower": self.lower, "upper": self.upper}
+        return {**super().to_json(), "interval": portion.to_data(self.interval)}
 
     @classmethod
-    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
-                                              variables: List[Variable],
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any], variables: List[Variable],
                                               children: List['Unit']) -> Self:
         variable = random_events.variables.Variable.from_json(data["variable"])
-        return cls(variable, data["lower"], data["upper"])
+        return cls(variable, portion.from_data(data["interval"]))
 
 
 class DiracDeltaDistribution(ContinuousDistribution):
@@ -486,8 +483,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
         return {**super().to_json(), "location": self.location, "density_cap": self.density_cap}
 
     @classmethod
-    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
-                                              variables: List[Variable],
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any], variables: List[Variable],
                                               children: List['Unit']) -> Self:
         variable = random_events.variables.Variable.from_json(data["variable"])
         return cls(variable, data["location"], data["density_cap"])
