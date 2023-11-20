@@ -17,6 +17,11 @@ class Unit(ProbabilisticModel, NodeMixin):
     Abstract class for nodes used in a probabilistic circuit
     """
 
+    representation = "Unit"
+    """
+    The representation of this unit in the string representation of the circuit.
+    """
+
     def __init__(self, variables: Iterable[Variable], parent: 'Unit' = None):
         self.parent = parent
         super().__init__(variables)
@@ -232,11 +237,28 @@ class Unit(ProbabilisticModel, NodeMixin):
         result.children = children
         return result
 
+    def get_weight_if_possible(self) -> Optional[float]:
+        """
+        Get this units' weight of possible. It is possible if the parent unit is a sum unit.
+        """
+        if isinstance(self.parent, SumUnit):
+            return self.parent.weights[self.parent.children.index(self)]
+        return None
+
+    def __repr__(self):
+        weight = self.get_weight_if_possible()
+        if weight is None:
+            return self.representation
+        else:
+            return f"{weight} {self.representation}"
+
 
 class SumUnit(Unit):
     """
     Abstract class for sum units.
     """
+
+    representation = "+"
 
     weights: Iterable
     """The weights of the convex sum unit."""
@@ -271,9 +293,6 @@ class SumUnit(Unit):
     def __str__(self):
         return ("(" + " + ".join(
             [f"{weight} * {str(child)}" for weight, child in zip(self.weights, self.children)]) + ")")
-
-    def __repr__(self):
-        return "+"
 
     def _is_smooth(self) -> bool:
         """
@@ -510,8 +529,7 @@ class ProductUnit(Unit):
     def __str__(self):
         return "(" + " * ".join([f"{str(child)}" for child in self.children]) + ")"
 
-    def __repr__(self):
-        return "*"
+    representation = "*"
 
     def _is_decomposable(self):
         """

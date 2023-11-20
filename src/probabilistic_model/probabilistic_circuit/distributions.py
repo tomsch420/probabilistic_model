@@ -171,7 +171,8 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         if len(self.weights) != len(self.variable.domain):
             raise ValueError("The number of weights has to be equal to the number of values of the variable.")
 
-    def __repr__(self):
+    @property
+    def representation(self):
         return f"Categorical()"
 
     @property
@@ -388,7 +389,8 @@ class UniformDistribution(ContinuousDistribution):
         return (isinstance(other,
                            UniformDistribution) and self.interval == other.interval and super().__eq__(other))
 
-    def __repr__(self):
+    @property
+    def representation(self):
         return f"U{self.interval}"
 
     def __copy__(self):
@@ -473,7 +475,8 @@ class DiracDeltaDistribution(ContinuousDistribution):
     def __eq__(self, other):
         return self.location == other.location and self.density_cap == other.density_cap and super().__eq__(other)
 
-    def __repr__(self):
+    @property
+    def representation(self):
         return f"DiracDelta({self.location}, {self.density_cap})"
 
     def __copy__(self):
