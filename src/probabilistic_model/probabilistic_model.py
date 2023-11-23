@@ -187,6 +187,9 @@ class ProbabilisticModel(abc.ABC):
 
             \int_{-\infty}^{\infty} (x - center)^{order} pdf(x) dx
 
+        .. Note:: You can read more about queries of this class in Definition 22 in :cite:p:`choi2020probabilistic`_.
+            :cite:p:`youtube2020probabilistic`
+
 
         :param order: The orders of the moment as a variable map for every continuous and integer variable.
         :param center: The center of the moment as a variable map for every continuous and integer variable.
