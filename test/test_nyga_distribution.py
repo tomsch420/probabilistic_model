@@ -1,7 +1,9 @@
 import unittest
 from typing import List
 
+import numpy as np
 import portion
+from anytree import RenderTree
 from random_events.variables import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
@@ -16,7 +18,8 @@ class InductionStepTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self.induction_step = InductionStep(self.sorted_data, self.weights, 0, len(self.sorted_data),
-                                            NygaDistribution(self.variable, 1.1), 1 / 9, 0)
+                                            NygaDistribution(self.variable, min_samples_per_quantile=1,
+                                                             min_likelihood_improvement=0.01))
 
     def test_variable(self):
         self.assertEqual(self.induction_step.variable, self.variable)
@@ -47,17 +50,21 @@ class InductionStepTestCase(unittest.TestCase):
     def test_sum_weights_from_indices(self):
         self.assertAlmostEqual(self.induction_step.sum_weights_from_indices(3, 5), 1 / 3)
 
-    def test_create_deterministic_uniform_mixture_from_split_index(self):
-        distribution = self.induction_step.create_deterministic_uniform_mixture_from_split_index(3)
-        self.assertEqual(distribution.children[0], UniformDistribution(self.variable, portion.closedopen(1, 3.5)))
-        self.assertEqual(distribution.children[1], UniformDistribution(self.variable, portion.closed(3.5, 9)))
-        self.assertAlmostEqual(distribution.weights[0], 1 / 2)
-        self.assertAlmostEqual(distribution.weights[1], 1 / 2)
-
     def test_compute_best_split(self):
         maximum, index = self.induction_step.compute_best_split()
         self.assertEqual(index, 1)
         self.assertAlmostEqual(maximum, 0.148158, delta=0.001)
+
+    def test_compute_best_split_without_result(self):
+        self.induction_step.nyga_distribution.min_samples_per_quantile = 4
+        maximum, index = self.induction_step.compute_best_split()
+        self.assertEqual(index, None)
+        self.assertEqual(maximum, 0)
+
+    def test_compute_best_split_with_induced_indices(self):
+        self.induction_step.begin_index = 3
+        maximum, index = self.induction_step.compute_best_split()
+        self.assertEqual(index, 5)
 
     def test_construct_left_induction_step(self):
         induction_step = self.induction_step.construct_left_induction_step(1)
@@ -65,7 +72,6 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertEqual(induction_step.end_index, 1)
         self.assertEqual(induction_step.data, self.induction_step.data)
         self.assertEqual(induction_step.weights, self.induction_step.weights)
-        self.assertEqual(induction_step.current_node.parent, self.induction_step.current_node)
 
     def test_construct_right_induction_step(self):
         induction_step = self.induction_step.construct_right_induction_step(1)
@@ -73,16 +79,20 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertEqual(induction_step.end_index, 6)
         self.assertEqual(induction_step.data, self.induction_step.data)
         self.assertEqual(induction_step.weights, self.induction_step.weights)
-        self.assertEqual(induction_step.current_node.parent, self.induction_step.current_node)
 
-    def test_construct_induction_step_left_and_right(self):
-        lef_induction_step = self.induction_step.construct_left_induction_step(1)
-        right_induction_step = self.induction_step.construct_right_induction_step(1)
-        self.assertEqual(self.induction_step.current_node.children[0], lef_induction_step.current_node)
-        self.assertEqual(self.induction_step.current_node.children[1], right_induction_step.current_node)
-        self.assertAlmostEqual(self.induction_step.current_node.weights[0], 1 / 6)
-        self.assertAlmostEqual(self.induction_step.current_node.weights[1], 5 / 6)
+    def test_fit(self):
+        np.random.seed(69)
+        data = np.random.normal(0, 1, 100).tolist()
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution.fit(data)
+        self.assertAlmostEqual(sum([leaf.get_weight_if_possible() for leaf in distribution.leaves]), 1.)
 
+    def test_plot(self):
+        np.random.seed(69)
+        data = np.random.normal(0, 1, 100).tolist()
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=-1)
+        distribution.fit(data)
+        distribution.plot()  # .show()
 
 if __name__ == '__main__':
     unittest.main()
