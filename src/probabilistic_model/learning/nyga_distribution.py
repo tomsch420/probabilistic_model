@@ -13,6 +13,9 @@ from ..probabilistic_circuit.units import DeterministicSumUnit, Unit
 
 @dataclasses.dataclass
 class InductionStep:
+    """
+    Class for performing induction in the NygaDistributions.
+    """
 
     data: List[float]
     """
