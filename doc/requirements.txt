@@ -1,3 +1,5 @@
 sphinx_rtd_theme
 sphinx-autoapi
- sphinxcontrib-bibtex
+sphinxcontrib-bibtex
+nbshpinx
+sphinx-gallery

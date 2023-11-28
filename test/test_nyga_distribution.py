@@ -93,5 +93,6 @@ class InductionStepTestCase(unittest.TestCase):
         distribution.fit(data)
         distribution.plot()  # .show()
 
+
 if __name__ == '__main__':
     unittest.main()
