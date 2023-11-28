@@ -146,15 +146,14 @@ class InductionStep:
             split_value = (self.data[split_index - 1] + self.data[split_index]) / 2
 
             # calculate left likelihood
-            average_likelihood_left = (self.sum_weights_from_indices(self.begin_index, split_index) /
-                                       (split_value - left_connecting_point) * (split_index - self.begin_index))
+            average_likelihood_left = ((self.sum_weights_from_indices(self.begin_index, split_index)) /
+                                       (split_value - left_connecting_point))
             # calculate right likelihood
-            average_likelihood_right = (self.sum_weights_from_indices(split_index, self.end_index) /
-                                        (right_connecting_point - split_value) * (self.end_index - split_index))
+            average_likelihood_right = ((self.sum_weights_from_indices(split_index, self.end_index)) /
+                                        (right_connecting_point - split_value))
 
             # calculate average likelihood
-            average_likelihood = ((average_likelihood_left + average_likelihood_right) /
-                                  (self.end_index - self.begin_index))
+            average_likelihood = (average_likelihood_left + average_likelihood_right) / self.sum_weights()
 
             # update the maximum likelihood and the best split index
             if average_likelihood > maximum_likelihood:
@@ -186,7 +185,8 @@ class InductionStep:
         :return: The (possibly empty) list of new induction steps.
         """
         # calculate the likelihood without splitting
-        average_likelihood_without_split = 1 / (self.right_connecting_point() - self.left_connecting_point())
+        average_likelihood_without_split = ((self.sum_weights()) /
+                                            (self.right_connecting_point() - self.left_connecting_point()))
 
         # calculate the best likelihood with splitting
         maximum_likelihood, best_split_index = self.compute_best_split()

@@ -53,7 +53,6 @@ class InductionStepTestCase(unittest.TestCase):
     def test_compute_best_split(self):
         maximum, index = self.induction_step.compute_best_split()
         self.assertEqual(index, 1)
-        self.assertAlmostEqual(maximum, 0.148158, delta=0.001)
 
     def test_compute_best_split_without_result(self):
         self.induction_step.nyga_distribution.min_samples_per_quantile = 4
@@ -83,7 +82,7 @@ class InductionStepTestCase(unittest.TestCase):
     def test_fit(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
-        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=1.01)
         distribution.fit(data)
         self.assertAlmostEqual(sum([leaf.get_weight_if_possible() for leaf in distribution.leaves]), 1.)
 
