@@ -17,7 +17,7 @@ class InductionStepTestCase(unittest.TestCase):
     induction_step: InductionStep
 
     def setUp(self) -> None:
-        self.induction_step = InductionStep(self.sorted_data, self.weights, 0, len(self.sorted_data),
+        self.induction_step = InductionStep(self.sorted_data, 6, self.weights, 0, len(self.sorted_data),
                                             NygaDistribution(self.variable, min_samples_per_quantile=1,
                                                              min_likelihood_improvement=0.01))
 
@@ -82,14 +82,14 @@ class InductionStepTestCase(unittest.TestCase):
     def test_fit(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
-        distribution = NygaDistribution(self.variable, min_likelihood_improvement=1.01)
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
         distribution.fit(data)
         self.assertAlmostEqual(sum([leaf.get_weight_if_possible() for leaf in distribution.leaves]), 1.)
 
     def test_plot(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
-        distribution = NygaDistribution(self.variable, min_likelihood_improvement=-1)
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
         distribution.fit(data)
         distribution.plot()  # .show()
 
