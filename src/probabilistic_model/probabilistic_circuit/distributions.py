@@ -273,7 +273,6 @@ class SymbolicDistribution(UnivariateDiscreteDistribution):
     def representation(self):
         return f"Nominal{self.variable.domain}"
 
-
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         return VariableMap()
 
