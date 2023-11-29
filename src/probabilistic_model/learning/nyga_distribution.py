@@ -7,7 +7,7 @@ import portion
 from random_events.variables import Continuous
 from typing_extensions import Self
 
-from ..probabilistic_circuit.distributions import ContinuousDistribution, UniformDistribution
+from ..probabilistic_circuit.distributions import ContinuousDistribution, UniformDistribution, DiracDeltaDistribution
 from ..probabilistic_circuit.units import DeterministicSumUnit, Unit
 
 
@@ -242,6 +242,8 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     The minimal number of samples per quantile.
     """
 
+    weights: List[float]
+
     def __init__(self, variable: Continuous, min_samples_per_quantile: Optional[int] = 1,
                  min_likelihood_improvement: Optional[float] = 1.1, parent: 'Unit' = None):
         DeterministicSumUnit.__init__(self, [variable], [], parent)
@@ -255,7 +257,10 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     def _cdf(self, value: Union[float, int]) -> float:
         return sum([child._cdf(value) * weight for child, weight in zip(self.children, self.weights)])
 
-    def fit(self, data: List[float]) -> Self:
+    def fit(self, data: List[float]):
+        return self._fit(list(self.variable.encode_many(data)))
+
+    def _fit(self, data: List[float]) -> Self:
         """
         Fit the distribution to the data.
 
@@ -266,6 +271,12 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
         # sort the data and calculate the weights
         sorted_data = sorted(set(data))
+
+        if len(sorted_data) == 1:
+            self.weights.append(1.)
+            distribution = DiracDeltaDistribution(self.variable, sorted_data[0], parent=self)
+            return self
+
         weights = [data.count(value) / len(data) for value in sorted_data]
 
         # construct the initial induction step

@@ -7,7 +7,7 @@ from anytree import RenderTree
 from random_events.variables import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
+from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, DiracDeltaDistribution
 
 
 class InductionStepTestCase(unittest.TestCase):
@@ -92,6 +92,14 @@ class InductionStepTestCase(unittest.TestCase):
         distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
         distribution.fit(data)
         distribution.plot()  # .show()
+
+    def test_fit_from_singular_data(self):
+        data = [1., 1.]
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution.fit(data)
+        self.assertEqual(len(distribution.leaves), 1)
+        self.assertEqual(distribution.weights, [1.])
+        self.assertIsInstance(distribution.children[0], DiracDeltaDistribution)
 
 
 if __name__ == '__main__':
