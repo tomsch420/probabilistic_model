@@ -1,10 +1,11 @@
 import unittest
 
+import anytree
 import portion
 from random_events.events import Event
 
 from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit, DecomposableProductUnit, \
-    SumUnit, ProductUnit
+    SumUnit, ProductUnit, SmoothSumUnit
 from probabilistic_model.probabilistic_circuit.distributions import (IntegerDistribution, UniformDistribution,
                                                                      SymbolicDistribution)
 from random_events.variables import Integer, Symbolic, Continuous
@@ -183,6 +184,121 @@ class ProbabilisticCircuitTestCase(unittest.TestCase):
             self.model.variables[2]: ["a", "b"]})
 
         self.assertEqual(self.model.probability(event), model.probability(event))
+
+class SimplifyTestCase (unittest.TestCase):
+
+    model: Unit
+
+    @classmethod
+    def setUpClass(cls):
+        integer = Integer("integer", (1, 2, 4))
+        integer_distribution_0 = IntegerDistribution(integer, [0.5, 0.5, 0])
+        integer_distribution_0_not = IntegerDistribution(integer, [0, 0, 1])
+
+        symbol = Symbolic("symbol", ("a", "b", "c"))
+        symbolic_distribution_0 = SymbolicDistribution(symbol, [0, 1, 0])
+        symbolic_distribution_0_not = SymbolicDistribution(symbol, [0.5, 0, 0.5])
+
+        real = Continuous("real")
+        real_distribution_0 = UniformDistribution(real, portion.closedopen(0, 1))
+        real_distribution_0_not = UniformDistribution(real, portion.closedopen(1.5, 2.5))
+
+        integer = Integer("integer", (6, 10, 12))
+        integer_distribution_1 = IntegerDistribution(integer, [0.5, 0.5, 0])
+        integer_distribution_1_not = IntegerDistribution(integer, [0, 0, 1])
+
+        product_0 = integer_distribution_0 * real_distribution_0_not
+        sum_0 = integer_distribution_0 + integer_distribution_0_not
+        product_1 = sum_0 * real_distribution_0
+        product_2 = symbolic_distribution_0 * integer_distribution_1
+        sum_1 = integer_distribution_1 + integer_distribution_1_not
+        product_3 = symbolic_distribution_0_not * sum_1
+        sum_3 = product_0 + product_1
+        sum_4 = product_2 + product_3
+
+        model = sum_3 * sum_4
+        model.weights = [0.4, 0.6]
+        #print(RenderTree(model))
+        # print(model.is_decomposable())
+        # print(model.is_smooth())
+        #print(model.is_deterministic())
+        cls.model = model.maximize_expressiveness()
+        #print(RenderTree(cls.model))
+        print(RenderTree(cls.model.simplify()))
+
+    def test_simplify_complex_case(self):
+        simplified_model = self.model.simplify()
+        self.assertIsInstance(simplified_model.children[0], DeterministicSumUnit)
+        self.assertIsInstance(simplified_model.children[1], DeterministicSumUnit)
+        self.assertIsInstance(simplified_model.children[0].children[0], UniformDistribution)
+        self.assertIsInstance(simplified_model.children[0].children[1], DecomposableProductUnit)
+        self.assertIsInstance(simplified_model.children[0].children[1].children[0], DeterministicSumUnit)
+        self.assertIsInstance(simplified_model.children[0].children[1].children[1], UniformDistribution)
+        self.assertIsInstance(simplified_model.children[1].children[0], SymbolicDistribution)
+        self.assertIsInstance(simplified_model.children[1].children[1], DecomposableProductUnit)
+        self.assertIsInstance(simplified_model.children[1].children[1].children[0], SymbolicDistribution)
+        self.assertIsInstance(simplified_model.children[1].children[1].children[1], DeterministicSumUnit)
+        self.assertIsInstance(simplified_model.children[1].children[1].children[1].children[0], IntegerDistribution)
+        self.assertIsInstance(simplified_model.children[1].children[1].children[1].children[1], IntegerDistribution)
+
+    def test_simplify_only_smooth_sum_units(self):
+        real = Continuous("real")
+
+        model = SmoothSumUnit([real], [0.4, 0.6])
+        child_1 = SmoothSumUnit([real], [0.25, 0.75], parent=model)
+        child_1.children = [UniformDistribution(real, portion.closedopen(0, 1)),
+                            UniformDistribution(real, portion.closedopen(1, 2))]
+
+        child_2 = SmoothSumUnit([real], [1.], parent=model)
+        child_2.children = [UniformDistribution(real, portion.closedopen(0, 1))]
+
+        simplified = model.simplify()
+        self.assertEqual(simplified.weights, [0.4*0.25, 0.4*0.75, 0.6])
+
+    def test_simplify_smooth_and_deterministic_sum_units(self):
+        real = Continuous("real")
+
+        model = SmoothSumUnit([real], [0.4, 0.6])
+        child_1 = DeterministicSumUnit([real], [0.25, 0.75], parent=model)
+        child_1.children = [UniformDistribution(real, portion.closedopen(0, 1)),
+                            UniformDistribution(real, portion.closedopen(1, 2))]
+
+        child_2 = SmoothSumUnit([real], [1.], parent=model)
+        child_2.children = [UniformDistribution(real, portion.closedopen(0, 1))]
+        simplified = model.simplify()
+        self.assertEqual(simplified.weights, [0.4, 0.6])
+        self.assertIsInstance(simplified.children[0], DeterministicSumUnit)
+        self.assertIsInstance(simplified.children[1], UniformDistribution)
+        self.assertIsInstance(simplified, SmoothSumUnit)
+
+    def test_simplify_one_child_only(self):
+        real = Continuous("real")
+        model = SmoothSumUnit([real], [1.])
+        deterministic_sum_unit = DeterministicSumUnit([real], [1.], parent=model)
+        deterministic_sum_unit.children = [UniformDistribution(real, portion.closedopen(0, 1))]
+        simplified = model.simplify()
+        self.assertEqual(simplified, UniformDistribution(real, portion.closedopen(0, 1)))
+
+    def test_simplify_decomposable_products(self):
+        real = Continuous("real")
+        real_2 = Continuous("real2")
+        real_3 = Continuous("real3")
+        real_4 = Continuous("real4")
+
+        distribution_1 = UniformDistribution(real, portion.closedopen(0, 1))
+        distribution_2 = UniformDistribution(real_2, portion.closedopen(1, 2))
+        distribution_3 = UniformDistribution(real_3, portion.closedopen(2, 3))
+        distribution_4 = UniformDistribution(real_4, portion.closedopen(3, 4))
+
+        model = distribution_1 * distribution_2 * distribution_3 * distribution_4
+        simplified_model = model.simplify()
+        print(RenderTree(simplified_model))
+        self.assertIsInstance(simplified_model.children[0], UniformDistribution)
+        self.assertIsInstance(simplified_model.children[1], UniformDistribution)
+        self.assertIsInstance(simplified_model.children[2], UniformDistribution)
+        self.assertIsInstance(simplified_model.children[3], UniformDistribution)
+        self.assertIsInstance(simplified_model, DecomposableProductUnit)
+
 
 
 if __name__ == '__main__':

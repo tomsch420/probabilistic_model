@@ -457,12 +457,29 @@ class SmoothSumUnit(SumUnit):
 
         return result
 
+    def simplify(self) -> Self:
+
+        if len(self.children) == 1:
+            return self.children[0].simplify()
+
+        result = self.__class__(self.variables, [])
+        for weight, child in zip(self.weights, self.children):
+            simplified_child = child.simplify()
+            if type(simplified_child) is type(self):
+                for grand_child_weight, grand_child in zip(simplified_child.weights, simplified_child.children):
+                    result.weights.append(grand_child_weight * weight)
+                    grand_child.parent = result
+            else:
+                result.weights.append(weight)
+                simplified_child.parent = result
+        return result
+
 
 class DeterministicSumUnit(SmoothSumUnit):
     """
     Deterministic sum node used in a probabilistic circuit
     """
-
+    representation = "⊕"
     def merge_modes_if_one_dimensional(self, modes: List[EncodedEvent]) -> List[EncodedEvent]:
         """
         Merge the modes in `modes` to one mode if the model is one dimensional.
@@ -519,6 +536,10 @@ class DeterministicSumUnit(SmoothSumUnit):
         result = DeterministicSumUnit(variables=unit.variables, weights=unit.weights)
         result.children = unit.children
         return result
+
+
+
+
 
 
 class ProductUnit(Unit):
@@ -685,4 +706,22 @@ class DecomposableProductUnit(ProductUnit):
 
             result = VariableMap({**result, **child_moment})
 
+        return result
+
+    def simplify(self) -> Self:
+
+        if len(self.children) == 1:
+            return self.children[0].simplify()
+
+        result = self.__class__(self.variables)
+
+        for child in self.children:
+            simplified_child = child.simplify()
+            if type(simplified_child) is type(self):
+                for grand_child in simplified_child.children:
+                    #result.children.append(grand_child)
+                    grand_child.parent = result
+            else:
+                #result.weights.append(weight)
+                simplified_child.parent = result
         return result
