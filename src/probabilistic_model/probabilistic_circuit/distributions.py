@@ -58,6 +58,9 @@ class UnivariateDistribution(Unit):
     def maximize_expressiveness(self) -> Self:
         return copy.copy(self)
 
+    def simplify(self) -> Self:
+        return copy.copy(self)
+
     def to_json(self) -> Dict[str, Any]:
         return {**super().to_json(), "variable": self.variable.to_json()}
 
@@ -171,9 +174,9 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         if len(self.weights) != len(self.variable.domain):
             raise ValueError("The number of weights has to be equal to the number of values of the variable.")
 
-    @property
-    def representation(self):
-        return f"Categorical()"
+    # @property
+    # def representation(self):
+    #     return f"Categorical()"
 
     @property
     def domain(self) -> Event:
@@ -271,6 +274,11 @@ class SymbolicDistribution(UnivariateDiscreteDistribution):
     def variable(self) -> Symbolic:
         return self.variables[0]
 
+    @property
+    def representation(self):
+        return f"Nominal{self.variable.domain}"
+
+
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         return VariableMap()
 
@@ -285,6 +293,10 @@ class IntegerDistribution(UnivariateDiscreteDistribution, ContinuousDistribution
     @property
     def variable(self) -> Integer:
         return self.variables[0]
+
+    @property
+    def representation(self):
+        return f"Ordinal{self.variable.domain}"
 
     def _cdf(self, value: int) -> float:
         """
