@@ -1,4 +1,7 @@
 import unittest
+
+from anytree import RenderTree
+
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, SymbolicDistribution, \
     IntegerDistribution, DiracDeltaDistribution
 from probabilistic_model.probabilistic_circuit.units import DeterministicSumUnit, Unit
@@ -266,6 +269,9 @@ class DiracDeltaTestCase(unittest.TestCase):
         center = self.distribution.expectation([self.variable])
         order = VariableMap({self.variable: 3})
         self.assertEqual(self.distribution.moment(order, center)[self.variable], 0)
+
+    def test_equality_dirac_delta_and_other(self):
+        self.assertNotEqual(self.distribution, UniformDistribution(self.variable, portion.closed(0, 2)))
 
 
 if __name__ == '__main__':

@@ -213,11 +213,6 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         normalized_weights = [weight / probability for weight in unnormalized_weights]
         return self.__class__(self.variable, normalized_weights), probability
 
-    def __eq__(self, other):
-        if not isinstance(other, SymbolicDistribution):
-            return False
-        return self.variable == other.variable and self.weights == other.weights
-
     def sample(self, amount: int) -> Iterable:
         return [random.choices(self.variable.domain, self.weights) for _ in range(amount)]
 
@@ -495,7 +490,8 @@ class DiracDeltaDistribution(ContinuousDistribution):
             return VariableMap({self.variable: 0})
 
     def __eq__(self, other):
-        return self.location == other.location and self.density_cap == other.density_cap and super().__eq__(other)
+        return (isinstance(other, self.__class__) and self.location == other.location
+                and self.density_cap == other.density_cap and super().__eq__(other))
 
     @property
     def representation(self):
