@@ -7,15 +7,24 @@ import portion
 from random_events.variables import Continuous
 from typing_extensions import Self
 
-from ..probabilistic_circuit.distributions import ContinuousDistribution, UniformDistribution
+from ..probabilistic_circuit.distributions import ContinuousDistribution, UniformDistribution, DiracDeltaDistribution
 from ..probabilistic_circuit.units import DeterministicSumUnit, Unit
 
 
 @dataclasses.dataclass
 class InductionStep:
+    """
+    Class for performing induction in the NygaDistributions.
+    """
+
     data: List[float]
     """
-    The entire sorted data.
+    The entire sorted and unique data points.
+    """
+
+    total_number_of_samples: int
+    """
+    The total number of samples in the dataset.
     """
 
     weights: List[float]
@@ -138,6 +147,9 @@ class InductionStep:
         right_connecting_point = self.right_connecting_point()
         left_connecting_point = self.left_connecting_point()
 
+        # calculate the number of samples that are involved in this partition
+        total_number_of_samples = self.sum_weights() * self.total_number_of_samples
+
         # for every possible splitting index
         for split_index in range(self.begin_index + self.min_samples_per_quantile,
                                  self.end_index - self.min_samples_per_quantile + 1):
@@ -146,14 +158,18 @@ class InductionStep:
             split_value = (self.data[split_index - 1] + self.data[split_index]) / 2
 
             # calculate left likelihood
-            average_likelihood_left = ((self.sum_weights_from_indices(self.begin_index, split_index)) /
-                                       (split_value - left_connecting_point))
-            # calculate right likelihood
-            average_likelihood_right = ((self.sum_weights_from_indices(split_index, self.end_index)) /
-                                        (right_connecting_point - split_value))
+            weight_sum_left = self.sum_weights_from_indices(self.begin_index, split_index)
+            number_of_samples_left = self.total_number_of_samples * weight_sum_left
+            average_likelihood_left = weight_sum_left / (split_value - left_connecting_point) * number_of_samples_left
+
+            # calculate right sum of likelihoods
+            weight_sum_right = self.sum_weights_from_indices(split_index, self.end_index)
+            number_of_samples_right = self.total_number_of_samples * weight_sum_right
+            average_likelihood_right = (weight_sum_right / (right_connecting_point - split_value) *
+                                        number_of_samples_right)
 
             # calculate average likelihood
-            average_likelihood = (average_likelihood_left + average_likelihood_right) / self.sum_weights()
+            average_likelihood = (average_likelihood_left + average_likelihood_right) / total_number_of_samples
 
             # update the maximum likelihood and the best split index
             if average_likelihood > maximum_likelihood:
@@ -168,7 +184,8 @@ class InductionStep:
 
         :param split_index: The index of the split.
         """
-        return InductionStep(self.data, self.weights, self.begin_index, split_index, self.nyga_distribution)
+        return InductionStep(self.data, self.total_number_of_samples,
+                             self.weights, self.begin_index, split_index, self.nyga_distribution)
 
     def construct_right_induction_step(self, split_index: int) -> Self:
         """
@@ -176,7 +193,8 @@ class InductionStep:
 
         :param split_index: The index of the split.
         """
-        return InductionStep(self.data, self.weights, split_index, self.end_index, self.nyga_distribution)
+        return InductionStep(self.data, self.total_number_of_samples,
+                             self.weights, split_index, self.end_index, self.nyga_distribution)
 
     def induce(self) -> List[Self]:
         """
@@ -224,6 +242,8 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     The minimal number of samples per quantile.
     """
 
+    weights: List[float]
+
     def __init__(self, variable: Continuous, min_samples_per_quantile: Optional[int] = 1,
                  min_likelihood_improvement: Optional[float] = 1.1, parent: 'Unit' = None):
         DeterministicSumUnit.__init__(self, [variable], [], parent)
@@ -237,7 +257,10 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     def _cdf(self, value: Union[float, int]) -> float:
         return sum([child._cdf(value) * weight for child, weight in zip(self.children, self.weights)])
 
-    def fit(self, data: List[float]) -> Self:
+    def fit(self, data: List[float]):
+        return self._fit(list(self.variable.encode_many(data)))
+
+    def _fit(self, data: List[float]) -> Self:
         """
         Fit the distribution to the data.
 
@@ -248,11 +271,18 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
         # sort the data and calculate the weights
         sorted_data = sorted(set(data))
+
+        if len(sorted_data) == 1:
+            self.weights.append(1.)
+            distribution = DiracDeltaDistribution(self.variable, sorted_data[0], parent=self)
+            return self
+
         weights = [data.count(value) / len(data) for value in sorted_data]
 
         # construct the initial induction step
-        initial_induction_step = InductionStep(data=sorted_data, weights=weights, begin_index=0,
-                                               end_index=len(sorted_data), nyga_distribution=self)
+        initial_induction_step = InductionStep(data=sorted_data, total_number_of_samples=len(data),
+                                               weights=weights, begin_index=0, end_index=len(sorted_data),
+                                               nyga_distribution=self)
         # initialize the queue
         induction_steps: Deque[InductionStep] = collections.deque([initial_induction_step])
 
@@ -309,7 +339,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         mode = mode[0][self.variable]
 
         expectation = self.expectation([self.variable])[self.variable]
-        figure.add_trace(go.Scatter(x=[mode.lower, mode.upper, mode.upper, mode.lower],
+        figure.add_trace(go.Scatter(x=[mode.lower, mode.lower, mode.upper, mode.upper, ],
                                     y=[0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0],
                                     mode='lines+markers',name="Mode", fill="toself"))
         figure.add_trace(go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05],

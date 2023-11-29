@@ -181,6 +181,12 @@ class SymbolicDistributionTestCase(unittest.TestCase):
         domain = distribution.domain
         self.assertEqual(domain, Event({distribution.variable: "dog"}))
 
+    def test_fit(self):
+        distribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}), [1/3] * 3)
+        data = ["cat", "dog", "dog", "chicken", "chicken", "chicken"]
+        distribution.fit(data)
+        self.assertEqual(distribution.weights, [1/6, 3/6, 2/6])
+
 
 class IntegerDistributionTestCase(unittest.TestCase):
     distribution: IntegerDistribution = IntegerDistribution(Integer("number", {1, 2, 4}), [0.3, 0.3, 0.4])
@@ -199,6 +205,12 @@ class IntegerDistributionTestCase(unittest.TestCase):
         self.assertEqual(expectation[self.distribution.variable], 2.5)
         variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}), expectation)
         self.assertEqual(variance[self.distribution.variable], 1.65)
+
+    def test_fit(self):
+        distribution = IntegerDistribution(Integer("number", {1, 2, 4}), [1/3] * 3)
+        data = [1, 2, 2, 4, 4, 4]
+        distribution.fit(data)
+        self.assertEqual(distribution.weights, [1/6, 2/6, 3/6])
 
 
 class DiracDeltaTestCase(unittest.TestCase):

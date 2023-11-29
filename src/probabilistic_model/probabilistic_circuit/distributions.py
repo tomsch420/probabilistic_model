@@ -240,6 +240,28 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         variable = random_events.variables.Variable.from_json(data["variable"])
         return cls(variable, data["weights"])
 
+    def _fit(self, data: List[int]) -> Self:
+        """
+        Fit the distribution to a list of encoded values
+
+        :param data: The encoded values
+        :return: The fitted distribution
+        """
+        weights = []
+        for value in range(len(self.variable.domain)):
+            weights.append(data.count(value) / len(data))
+        self.weights = weights
+        return self
+
+    def fit(self, data: Iterable[Any]) -> Self:
+        """
+        Fit the distribution to a list of raw values.
+
+        :param data: The not processed data.
+        :return: The fitted distribution
+        """
+        return self._fit(list(self.variable.encode_many(data)))
+
 
 class SymbolicDistribution(UnivariateDiscreteDistribution):
     """
