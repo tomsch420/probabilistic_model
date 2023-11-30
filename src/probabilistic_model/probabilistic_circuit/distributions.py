@@ -90,12 +90,16 @@ class ContinuousDistribution(UnivariateDistribution):
         :param value: The value to evaluate the cdf on.
         :return: The cumulative probability.
         """
+        if value <= -float("inf"):
+            return 0
+        if value >= float("inf"):
+            return 1
         return self._cdf(self.variable.encode(value))
 
     def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[
         Optional['DiracDeltaDistribution'], float]:
         """
-        Create a dirac impulse from a singleton interval.
+        Create a dirac impulse from a singleton interval. The density is capped at the likelihood of the given value.
 
         :param singleton: The singleton interval from an encoded event.
         :return: A dirac impulse and the likelihood.
@@ -109,7 +113,7 @@ class ContinuousDistribution(UnivariateDistribution):
             return None, 0
 
         else:
-            return DiracDeltaDistribution(self.variable, singleton.lower), likelihood
+            return DiracDeltaDistribution(self.variable, singleton.lower, density_cap=likelihood), likelihood
 
     def conditional_from_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
         """
@@ -348,9 +352,9 @@ class UniformDistribution(ContinuousDistribution):
     def _cdf(self, value: float) -> float:
 
         # check edge cases
-        if value == -portion.inf:
+        if value <= -portion.inf:
             return 0.
-        if value == portion.inf:
+        if value >= portion.inf:
             return 1.
 
         # convert to singleton
@@ -378,8 +382,8 @@ class UniformDistribution(ContinuousDistribution):
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.uniform(self.lower, self.upper)] for _ in range(amount)]
 
-    def conditional_from_interval(self, interval: portion.Interval) \
-            -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
+    def conditional_from_interval(self, interval: portion.Interval) -> Tuple[
+        Optional[Union[DeterministicSumUnit, Self]], float]:
 
         # calculate the probability of the interval
         probability = self._probability(EncodedEvent({self.variable: interval}))
@@ -414,8 +418,7 @@ class UniformDistribution(ContinuousDistribution):
         return VariableMap({self.variable: result})
 
     def __eq__(self, other):
-        return (isinstance(other,
-                           UniformDistribution) and self.interval == other.interval and super().__eq__(other))
+        return (isinstance(other, UniformDistribution) and self.interval == other.interval and super().__eq__(other))
 
     @property
     def representation(self):
@@ -501,8 +504,9 @@ class DiracDeltaDistribution(ContinuousDistribution):
             return VariableMap({self.variable: 0})
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and self.location == other.location
-                and self.density_cap == other.density_cap and super().__eq__(other))
+        return (isinstance(other,
+                           self.__class__) and self.location == other.location and self.density_cap == other.density_cap and super().__eq__(
+            other))
 
     @property
     def representation(self):

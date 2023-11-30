@@ -135,7 +135,6 @@ class UniformDistributionTestCase(unittest.TestCase):
         deserialized = Unit.from_json(serialization)
         self.assertIsInstance(deserialized, UniformDistribution)
 
-
 class SymbolicDistributionTestCase(unittest.TestCase):
     distribution: SymbolicDistribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}),
                                                               [0.3, 0.3, 0.4])
