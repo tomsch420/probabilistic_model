@@ -10,6 +10,7 @@ from typing_extensions import Self
 
 from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit
 from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
+import plotly.graph_objects as go
 
 
 class UnivariateDistribution(Unit):
@@ -261,6 +262,21 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         """
         return self._fit(list(self.variable.encode_many(data)))
 
+    def plot(self) -> go.Figure:
+        """
+        Plot the distribution.
+        """
+        figure = go.Figure()
+
+        mode, likelihood = self.mode()
+        mode = mode[0][self.variable]
+
+        figure.add_trace(go.Bar(x=[value for value in self.variable.domain if value not in mode],
+                                y=self.weights, name="Probability"))
+        figure.add_trace(go.Bar(x=mode, y=[likelihood] * len(mode), name="Mode"))
+        figure.update_layout(title=f"{self.representation} Distribution of {self.variable.name}")
+        return figure
+
 
 class SymbolicDistribution(UnivariateDiscreteDistribution):
     """
@@ -310,6 +326,13 @@ class IntegerDistribution(UnivariateDiscreteDistribution, ContinuousDistribution
         result = sum([self.pdf(value) * (value - center) ** order for value in self.variable.domain])
         return VariableMap({self.variable: result})
 
+    def plot(self) -> go.Figure:
+        fig = UnivariateDiscreteDistribution.plot(self)
+        _, likelihood = self.mode()
+        expectation = self.expectation([self.variable])[self.variable]
+        fig.add_trace(go.Scatter(x=[expectation, expectation], y=[0, likelihood * 1.05], mode="lines+markers",
+                                 name="Expectation"))
+        return fig
 
 class UniformDistribution(ContinuousDistribution):
     """

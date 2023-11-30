@@ -8,6 +8,7 @@ from probabilistic_model.probabilistic_circuit.units import DeterministicSumUnit
 from random_events.events import Event, VariableMap
 from random_events.variables import Continuous, Symbolic, Integer
 import portion
+import plotly.graph_objects as go
 
 
 class UniformDistributionTestCase(unittest.TestCase):
@@ -135,6 +136,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         deserialized = Unit.from_json(serialization)
         self.assertIsInstance(deserialized, UniformDistribution)
 
+
 class SymbolicDistributionTestCase(unittest.TestCase):
     distribution: SymbolicDistribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}),
                                                               [0.3, 0.3, 0.4])
@@ -189,6 +191,11 @@ class SymbolicDistributionTestCase(unittest.TestCase):
         distribution.fit(data)
         self.assertEqual(distribution.weights, [1/6, 3/6, 2/6])
 
+    def test_plot(self):
+        fig = self.distribution.plot()
+        self.assertIsNotNone(fig)
+        # fig.show()
+
 
 class IntegerDistributionTestCase(unittest.TestCase):
     distribution: IntegerDistribution = IntegerDistribution(Integer("number", {1, 2, 4}), [0.3, 0.3, 0.4])
@@ -213,6 +220,11 @@ class IntegerDistributionTestCase(unittest.TestCase):
         data = [1, 2, 2, 4, 4, 4]
         distribution.fit(data)
         self.assertEqual(distribution.weights, [1/6, 2/6, 3/6])
+
+    def test_plot(self):
+        fig = self.distribution.plot()
+        self.assertIsNotNone(fig)
+        fig.show()
 
 
 class DiracDeltaTestCase(unittest.TestCase):
