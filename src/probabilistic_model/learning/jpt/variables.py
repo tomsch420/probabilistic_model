@@ -5,13 +5,17 @@ import pandas as pd
 from random_events.variables import Variable, Continuous as REContinuous, Integer as REInteger, Symbolic
 
 
-def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: bool = True) -> List[Variable]:
+def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: bool = True,
+                                   min_likelihood_improvement: float = 0.1, min_samples_per_quantile: int = 10)\
+        -> List[Variable]:
     """
     Infer the variables from a dataframe.
     The variables are inferred by the column names and types of the dataframe.
 
     :param data: The dataframe to infer the variables from.
     :param scale_continuous_types: Whether to scale numeric types.
+    :param min_likelihood_improvement: The minimum likelihood improvement passed to the Continuous Variables.
+    :param min_samples_per_quantile: The minimum number of samples per quantile passed to the Continuous Variables.
     :return: The inferred variables.
     """
     result = []
@@ -25,10 +29,15 @@ def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: b
             mean = data[column].mean()
             std = data[column].std()
 
+            # select the correct class type
             if scale_continuous_types:
-                variable = ScaledContinuous(column, mean, std, minimal_distance_between_values)
+                variable_class = ScaledContinuous
+
             else:
-                variable = Continuous(column, mean, std, minimal_distance_between_values)
+                variable_class = Continuous
+
+            variable = variable_class(column, mean, std, minimal_distance_between_values, min_likelihood_improvement,
+                                      min_samples_per_quantile)
 
         # handle discrete variables
         elif datatype in [object, int]:
@@ -115,8 +124,9 @@ class ScaledContinuous(Continuous):
     A continuous variable that is standardized.
     """
 
-    def __init__(self, name: str, mean: float, std: float, minimal_distance: float = 1.):
-        super().__init__(name, mean, std, minimal_distance)
+    def __init__(self, name: str, mean: float, std: float, minimal_distance: float = 1.,
+                 min_likelihood_improvement: float = 0.1, min_samples_per_quantile: int = 10):
+        super().__init__(name, mean, std, minimal_distance, min_likelihood_improvement, min_samples_per_quantile)
 
     def encode(self, value: Any):
         return (value - self.mean) / self.std

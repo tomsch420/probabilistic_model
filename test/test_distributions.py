@@ -224,7 +224,7 @@ class IntegerDistributionTestCase(unittest.TestCase):
     def test_plot(self):
         fig = self.distribution.plot()
         self.assertIsNotNone(fig)
-        fig.show()
+        # fig.show()
 
 
 class DiracDeltaTestCase(unittest.TestCase):

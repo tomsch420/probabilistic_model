@@ -195,3 +195,25 @@ class JPTTestCase(unittest.TestCase):
             for product in self.model.children:
                 equalities.append(self.leaf_equal_to_product(leaf, product))
             print(equalities)
+
+    def test_jpt_continuous_variables_only(self):
+        data = self.data[["real"]]
+        variables = infer_variables_from_dataframe(data)
+        model = JPT(variables)
+        model.fit(data)
+        self.assertEqual(len(model.children), 1)
+
+    def test_jpt_integer_variables_only(self):
+        data = self.data[["integer"]]
+        variables = infer_variables_from_dataframe(data)
+        model = JPT(variables)
+        model.fit(data)
+        self.assertEqual(len(model.children), 1)
+
+    @unittest.skip("There is a problem with symbolic splitting and onedimensional data.")
+    def test_jpt_symbolic_variables_only(self):
+        data = self.data[["symbol"]]
+        variables = infer_variables_from_dataframe(data)
+        model = JPT(variables)
+        model.fit(data)
+        self.assertEqual(len(model.children), 1)

@@ -271,19 +271,19 @@ class JPT(DeterministicSumUnit):
         min_samples_leaf = self.min_samples_leaf
 
         numeric_vars = (
-            np.array([index for index, variable in enumerate(self.variables) if variable in self.numeric_targets]))
+            np.array([index for index, variable in enumerate(self.variables) if variable in self.numeric_targets], dtype=int))
         symbolic_vars = np.array(
-            [index for index, variable in enumerate(self.variables) if variable in self.symbolic_targets])
+            [index for index, variable in enumerate(self.variables) if variable in self.symbolic_targets], dtype=int)
 
-        invert_impurity = np.array([0] * len(self.symbolic_targets))
+        invert_impurity = np.array([0] * len(self.symbolic_targets), dtype=int)
 
         n_sym_vars_total = len(self.symbolic_variables)
         n_num_vars_total = len(self.numeric_variables)
 
         numeric_features = np.array(
-            [index for index, variable in enumerate(self.variables) if variable in self.numeric_features])
+            [index for index, variable in enumerate(self.variables) if variable in self.numeric_features], dtype=int)
         symbolic_features = np.array(
-            [index for index, variable in enumerate(self.variables) if variable in self.symbolic_features])
+            [index for index, variable in enumerate(self.variables) if variable in self.symbolic_features], dtype=int)
 
         symbols = np.array([len(variable.domain) for variable in self.symbolic_variables])
         max_variances = np.array([variable.std ** 2 for variable in self.numeric_variables])
