@@ -192,7 +192,7 @@ class SymbolicDistributionTestCase(unittest.TestCase):
         self.assertEqual(distribution.weights, [1/6, 3/6, 2/6])
 
     def test_plot(self):
-        fig = self.distribution.plot()
+        fig = go.Figure(data=self.distribution.plot())
         self.assertIsNotNone(fig)
         # fig.show()
 
@@ -222,7 +222,7 @@ class IntegerDistributionTestCase(unittest.TestCase):
         self.assertEqual(distribution.weights, [1/6, 2/6, 3/6])
 
     def test_plot(self):
-        fig = self.distribution.plot()
+        fig = go.Figure(self.distribution.plot())
         self.assertIsNotNone(fig)
         # fig.show()
 

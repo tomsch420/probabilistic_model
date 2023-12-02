@@ -4,8 +4,9 @@ from typing import Tuple, Union, Optional, List, Iterable
 
 import numpy as np
 import pandas as pd
+import portion
 
-from random_events.events import VariableMap
+from random_events.events import VariableMap, Event, EncodedEvent
 from random_events.variables import Variable
 
 from .variables import Continuous, Integer, Symbolic
@@ -13,6 +14,8 @@ from ..nyga_distribution import NygaDistribution
 from ...probabilistic_circuit.distributions import DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution
 from ...probabilistic_circuit.units import DeterministicSumUnit, DecomposableProductUnit
 from jpt.learning.impurity import Impurity
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 
 
 class JPT(DeterministicSumUnit):
@@ -213,15 +216,15 @@ class JPT(DeterministicSumUnit):
 
         number_of_samples = end - start
 
-        # if the inducing in this step would result in inadmissible nodes, skip the impurity calculation
-        if depth >= self.max_depth or number_of_samples < self.min_samples_leaf:
+        # if the inducing in this step results in inadmissible nodes, skip the impurity calculation
+        if depth >= self.max_depth or number_of_samples < 2 * self.min_samples_leaf:
             max_gain = -float("inf")
         else:
             max_gain = self.impurity.compute_best_split(start, end)
 
         # if the max gain is insufficient
         if max_gain <= self.min_impurity_improvement:
-            print(f"create left with indices {self.indices[start:end]} at index {len(self.children)}")
+
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
             self.weights.append(number_of_samples/len(data))
@@ -239,6 +242,31 @@ class JPT(DeterministicSumUnit):
         # append the new induction steps
         self.c45queue.append((data, start, start + split_pos + 1, new_depth))
         self.c45queue.append((data, start + split_pos + 1, end, new_depth))
+
+    def get_split_value(self, data: np.ndarray, start: int) -> Tuple[Event, Event]:
+        """
+        Get the split value from the impurity and data.
+        Return events describing the split.
+
+        :param data: The data to calculate the split value from.
+        :param start: The starting index in the data.
+
+        :return: The splitting events left and right.
+        """
+        split_position = self.impurity.best_split_pos
+        split_variable_index = self.impurity.best_var
+        split_variable = self.variables[split_variable_index]
+
+        if isinstance(split_variable, Continuous):
+            split_value = (data[self.indices[start + split_position], split_variable_index] +
+                           data[self.indices[start + split_position + 1], split_variable_index]) / 2
+            left_event = Event({split_variable: portion.closedopen(-np.inf, split_value)})
+            right_event = Event({split_variable: portion.closed(split_value, np.inf)})
+        else:
+            split_value = int(data[self.indices[start + split_position], split_variable_index])
+            left_event = EncodedEvent({split_variable: split_value}).decode()
+            right_event = Event() - left_event
+        return left_event, right_event
 
     def create_leaf_node(self, data: np.ndarray) -> DecomposableProductUnit:
         result = DecomposableProductUnit(self.variables)
@@ -299,3 +327,31 @@ class JPT(DeterministicSumUnit):
         return Impurity(min_samples_leaf, numeric_vars, symbolic_vars, invert_impurity, n_sym_vars_total,
                         n_num_vars_total, numeric_features, symbolic_features, symbols, max_variances,
                         dependency_indices)
+
+    def plot(self) -> go.Figure:
+        """
+        Plot the model.
+        """
+        subplot_titles = [distribution.__class__.__name__ for child in self.children for distribution in child.children]
+        figure = make_subplots(rows=len(self.children), cols=len(self.variables),
+                               row_titles=[f"P(Leaf = {child_index}) = {weight}" for weight, child_index
+                                           in zip(self.weights, range(len(self.children)))],
+                               subplot_titles=subplot_titles)
+
+        for child_index, child in enumerate(self.children):
+            child: DecomposableProductUnit
+
+            for distribution_index, distribution in enumerate(child.children):
+                traces: List[go.Scatter] = distribution.plot()
+                legend_group = child_index * len(self.variables) + distribution_index + 1
+                traces = [trace.update(legendgroup=legend_group)
+                          for trace in traces]
+                figure.add_traces(traces, rows=child_index + 1, cols=distribution_index + 1)
+                figure.update_xaxes(title_text=distribution.variable.name,
+                                    row=child_index + 1,
+                                    col=distribution_index + 1)
+
+        figure.update_layout(height=300*len(self.children), width=600*len(self.variables),
+                             title=f"Joint Probability Tree over {len(self.variables)} variables",)
+
+        return figure

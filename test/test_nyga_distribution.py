@@ -8,6 +8,7 @@ from random_events.variables import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, DiracDeltaDistribution
+import plotly.graph_objects as go
 
 
 class InductionStepTestCase(unittest.TestCase):
@@ -91,7 +92,9 @@ class InductionStepTestCase(unittest.TestCase):
         data = np.random.normal(0, 1, 100).tolist()
         distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
         distribution.fit(data)
-        distribution.plot()  # .show()
+        fig = go.Figure(distribution.plot())
+        self.assertIsNotNone(fig)
+        # fig.show()
 
     def test_fit_from_singular_data(self):
         data = [1., 1.]

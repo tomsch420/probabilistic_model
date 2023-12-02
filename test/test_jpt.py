@@ -89,7 +89,7 @@ class JPTTestCase(unittest.TestCase):
         self.real, self.integer, self.symbol = infer_variables_from_dataframe(self.data, scale_continuous_types=False)
         self.model = JPT([self.real, self.integer, self.symbol])
 
-    @unittest.skip
+    @unittest.skip("Scaled variables are kinda buggy.")
     def test_preprocess_data(self):
         preprocessed_data = self.model.preprocess_data(self.data)
         mean = preprocessed_data[:, 1].mean()
@@ -177,7 +177,7 @@ class JPTTestCase(unittest.TestCase):
 
         return True
 
-    @unittest.skip("There is some weird reason why 1 sample shifts to another leaf in the first splits.")
+    @unittest.skip("Only the first split is different to JPTs.")
     def test_fit_and_compare_to_jpt(self):
         self.model._min_samples_leaf = 10
         self.model.fit(self.data)
@@ -187,9 +187,9 @@ class JPTTestCase(unittest.TestCase):
 
         original_jpt = original_jpt.learn(self.data, keep_samples=True)
         self.assertEqual(len(self.model.children), len(original_jpt.leaves))
-
+        # original_jpt.plot()
         for leaf in original_jpt.leaves.values():
-
+            print(leaf.idx)
             equalities = []
             print(leaf.s_indices)
             for product in self.model.children:
@@ -210,10 +210,16 @@ class JPTTestCase(unittest.TestCase):
         model.fit(data)
         self.assertEqual(len(model.children), 1)
 
-    @unittest.skip("There is a problem with symbolic splitting and onedimensional data.")
     def test_jpt_symbolic_variables_only(self):
         data = self.data[["symbol"]]
         variables = infer_variables_from_dataframe(data)
         model = JPT(variables)
         model.fit(data)
-        self.assertEqual(len(model.children), 1)
+        self.assertEqual(len(model.children), 4)
+
+    def test_plot(self):
+        self.model._min_samples_leaf = 10
+        self.model.fit(self.data)
+        fig = self.model.plot()
+        self.assertIsNotNone(fig)
+        # fig.show()

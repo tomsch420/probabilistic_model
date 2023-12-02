@@ -2,6 +2,7 @@ import copy
 import random
 from typing import Iterable, Tuple, Union, List, Optional, Any, Dict
 
+import plotly.graph_objects as go
 import portion
 import random_events.variables
 from random_events.events import EncodedEvent, VariableMap, Event
@@ -10,7 +11,6 @@ from typing_extensions import Self
 
 from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit
 from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
-import plotly.graph_objects as go
 
 
 class UnivariateDistribution(Unit):
@@ -64,6 +64,12 @@ class UnivariateDistribution(Unit):
 
     def to_json(self) -> Dict[str, Any]:
         return {**super().to_json(), "variable": self.variable.to_json()}
+
+    def plot(self) -> List:
+        """
+        Generate a list of traces that can be used to plot the distribution in plotly figures.
+        """
+        raise NotImplementedError
 
 
 class ContinuousDistribution(UnivariateDistribution):
@@ -262,20 +268,19 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         """
         return self._fit(list(self.variable.encode_many(data)))
 
-    def plot(self) -> go.Figure:
+    def plot(self) -> List[go.Bar]:
         """
         Plot the distribution.
         """
-        figure = go.Figure()
 
         mode, likelihood = self.mode()
         mode = mode[0][self.variable]
 
-        figure.add_trace(go.Bar(x=[value for value in self.variable.domain if value not in mode],
-                                y=self.weights, name="Probability"))
-        figure.add_trace(go.Bar(x=mode, y=[likelihood] * len(mode), name="Mode"))
-        figure.update_layout(title=f"{self.representation} Distribution of {self.variable.name}")
-        return figure
+        traces = list()
+        traces.append(go.Bar(x=[value for value in self.variable.domain if value not in mode], y=self.weights,
+                             name="Probability"))
+        traces.append(go.Bar(x=mode, y=[likelihood] * len(mode), name="Mode"))
+        return traces
 
 
 class SymbolicDistribution(UnivariateDiscreteDistribution):
@@ -326,13 +331,14 @@ class IntegerDistribution(UnivariateDiscreteDistribution, ContinuousDistribution
         result = sum([self.pdf(value) * (value - center) ** order for value in self.variable.domain])
         return VariableMap({self.variable: result})
 
-    def plot(self) -> go.Figure:
-        fig = UnivariateDiscreteDistribution.plot(self)
+    def plot(self) -> List[Union[go.Bar, go.Scatter]]:
+        traces = UnivariateDiscreteDistribution.plot(self)
         _, likelihood = self.mode()
         expectation = self.expectation([self.variable])[self.variable]
-        fig.add_trace(go.Scatter(x=[expectation, expectation], y=[0, likelihood * 1.05], mode="lines+markers",
+        traces.append(go.Scatter(x=[expectation, expectation], y=[0, likelihood * 1.05], mode="lines+markers",
                                  name="Expectation"))
-        return fig
+        return traces
+
 
 class UniformDistribution(ContinuousDistribution):
     """
@@ -441,7 +447,7 @@ class UniformDistribution(ContinuousDistribution):
         return VariableMap({self.variable: result})
 
     def __eq__(self, other):
-        return (isinstance(other, UniformDistribution) and self.interval == other.interval and super().__eq__(other))
+        return isinstance(other, UniformDistribution) and self.interval == other.interval and super().__eq__(other)
 
     @property
     def representation(self):
