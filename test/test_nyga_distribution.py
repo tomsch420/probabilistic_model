@@ -104,6 +104,24 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertEqual(distribution.weights, [1.])
         self.assertIsInstance(distribution.children[0], DiracDeltaDistribution)
 
+    def test_serialization(self):
+        np.random.seed(69)
+        data = np.random.normal(0, 1, 100).tolist()
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution.fit(data)
+        serialized = distribution.to_json()
+        deserialized = NygaDistribution.from_json(serialized)
+        self.assertEqual(distribution, deserialized)
+
+    def test_equality_and_copy(self):
+        np.random.seed(69)
+        data = np.random.normal(0, 1, 100).tolist()
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution.fit(data)
+        distribution_ = distribution.__copy__()
+        self.assertEqual(distribution, distribution_)
+        distribution.min_likelihood_improvement = 0
+        self.assertNotEqual(distribution, distribution_)
 
 if __name__ == '__main__':
     unittest.main()

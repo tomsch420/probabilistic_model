@@ -1,10 +1,10 @@
 import collections
 import dataclasses
-from typing import Optional, List, Deque, Union, Tuple
+from typing import Optional, List, Deque, Union, Tuple, Dict, Any
 
 import plotly.graph_objects as go
 import portion
-from random_events.variables import Continuous
+from random_events.variables import Continuous, Variable
 from typing_extensions import Self
 
 from ..probabilistic_circuit.distributions import ContinuousDistribution, UniformDistribution, DiracDeltaDistribution
@@ -345,3 +345,35 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
                                  name="Expectation"))
 
         return traces
+
+    def __eq__(self, other: Self):
+        return (isinstance(other, NygaDistribution) and
+                self.min_likelihood_improvement == other.min_likelihood_improvement and
+                self.min_samples_per_quantile == other.min_samples_per_quantile and super().__eq__(other))
+
+    def __copy__(self) -> Self:
+        """
+        Create a copy of the distribution.
+        """
+        result = NygaDistribution(self.variable, self.min_samples_per_quantile, self.min_likelihood_improvement)
+        result.weights = self.weights.copy()
+        result.children = self._copy_children()
+        return result
+
+    def to_json(self) -> Dict[str, Any]:
+        """
+        Create a json representation of the distribution.
+        """
+        result = super().to_json()
+        result["min_samples_per_quantile"] = self.min_samples_per_quantile
+        result["min_likelihood_improvement"] = self.min_likelihood_improvement
+        return result
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        result = cls(list(variables)[0], data["min_samples_per_quantile"], data["min_likelihood_improvement"])
+        result.weights = data["weights"]
+        result.children = children
+        return result

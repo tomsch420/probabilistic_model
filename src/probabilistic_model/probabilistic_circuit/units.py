@@ -480,6 +480,7 @@ class DeterministicSumUnit(SmoothSumUnit):
     Deterministic sum node used in a probabilistic circuit
     """
     representation = "⊕"
+
     def merge_modes_if_one_dimensional(self, modes: List[EncodedEvent]) -> List[EncodedEvent]:
         """
         Merge the modes in `modes` to one mode if the model is one dimensional.
