@@ -539,10 +539,6 @@ class DeterministicSumUnit(SmoothSumUnit):
         return result
 
 
-
-
-
-
 class ProductUnit(Unit):
     """
     Product node used in a probabilistic circuit
@@ -720,9 +716,7 @@ class DecomposableProductUnit(ProductUnit):
             simplified_child = child.simplify()
             if type(simplified_child) is type(self):
                 for grand_child in simplified_child.children:
-                    #result.children.append(grand_child)
                     grand_child.parent = result
             else:
-                #result.weights.append(weight)
                 simplified_child.parent = result
         return result

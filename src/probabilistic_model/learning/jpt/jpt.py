@@ -126,6 +126,7 @@ class JPT(DeterministicSumUnit):
                 self.variables == other.variables and
                 self.targets == other.targets and
                 self.features == other.features and
+                self.weights == other.weights and
                 self.children == other.children and
                 self.min_impurity_improvement == other.min_impurity_improvement and
                 self.max_depth == other.max_depth)

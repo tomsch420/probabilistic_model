@@ -1,4 +1,5 @@
 import math
+import os
 import unittest
 from datetime import datetime
 
@@ -21,6 +22,8 @@ from jpt.trees import JPT as OldJPT, Leaf
 from jpt import infer_from_dataframe as old_infer_from_dataframe
 
 from probabilistic_model.probabilistic_circuit.units import DecomposableProductUnit, Unit
+from probabilistic_model.probabilistic_circuit.exporter.dotexporter import GraphVizExporter
+import tempfile
 
 
 class VariableTestCase(unittest.TestCase):
@@ -249,3 +252,11 @@ class JPTTestCase(unittest.TestCase):
         serialized = self.model.to_json()
         deserialized = Unit.from_json(serialized)
         self.assertEqual(self.model, deserialized)
+
+    def test_dot_exporter(self):
+        self.model._min_samples_leaf = 10
+        self.model.fit(self.data)
+        exporter = GraphVizExporter(self.model)
+        dot = exporter.to_graphviz()
+        self.assertIsNotNone(dot)
+        # dot.view(tempfile.mktemp('.gv'))
