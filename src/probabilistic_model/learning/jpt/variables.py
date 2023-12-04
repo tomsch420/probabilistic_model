@@ -1,13 +1,14 @@
-from typing import List, Iterable, Any
+from typing import List, Iterable, Any, Dict
 
 import numpy as np
 import pandas as pd
 from random_events.variables import Variable, Continuous as REContinuous, Integer as REInteger, Symbolic
+from typing_extensions import Self
 
 
 def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: bool = True,
-                                   min_likelihood_improvement: float = 0.1, min_samples_per_quantile: int = 10)\
-        -> List[Variable]:
+                                   min_likelihood_improvement: float = 0.1, min_samples_per_quantile: int = 10) -> List[
+    Variable]:
     """
     Infer the variables from a dataframe.
     The variables are inferred by the column names and types of the dataframe.
@@ -77,6 +78,22 @@ class Integer(REInteger):
         self.mean = mean
         self.std = std
 
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["mean"] = self.mean
+        result["std"] = self.std
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        return cls(name=data["name"], domain=data["domain"], mean=data["mean"], std=data["std"])
+
+    def __eq__(self, other):
+        return super().__eq__(other) and self.mean == other.mean and self.std == other.std
+
+    def __hash__(self):
+        return hash((self.name, self.domain, self.mean, self.std))
+
 
 class Continuous(REContinuous):
     """
@@ -118,6 +135,32 @@ class Continuous(REContinuous):
         self.min_likelihood_improvement = min_likelihood_improvement
         self.min_samples_per_quantile = min_samples_per_quantile
 
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["mean"] = self.mean
+        result["std"] = self.std
+        result["minimal_distance"] = self.minimal_distance
+        result["min_likelihood_improvement"] = self.min_likelihood_improvement
+        result["min_samples_per_quantile"] = self.min_samples_per_quantile
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        return cls(name=data["name"], mean=data["mean"], std=data["std"], minimal_distance=data["minimal_distance"],
+                   min_likelihood_improvement=data["min_likelihood_improvement"],
+                   min_samples_per_quantile=data["min_samples_per_quantile"])
+
+    def __eq__(self, other):
+        return (super().__eq__(other) and
+                self.mean == other.mean and
+                self.std == other.std and
+                self.minimal_distance == other.minimal_distance and
+                self.min_likelihood_improvement == other.min_likelihood_improvement and
+                self.min_samples_per_quantile == other.min_samples_per_quantile)
+
+    def __hash__(self):
+        return hash((self.name, self.domain, self.mean, self.std, self.minimal_distance,
+                     self.min_likelihood_improvement, self.min_samples_per_quantile))
 
 class ScaledContinuous(Continuous):
     """

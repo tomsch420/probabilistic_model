@@ -10,6 +10,8 @@ from probabilistic_model.learning.nyga_distribution import NygaDistribution, Ind
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, DiracDeltaDistribution
 import plotly.graph_objects as go
 
+from probabilistic_model.probabilistic_circuit.units import Unit
+
 
 class InductionStepTestCase(unittest.TestCase):
     variable: Continuous = Continuous("x")
@@ -110,7 +112,8 @@ class InductionStepTestCase(unittest.TestCase):
         distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
         distribution.fit(data)
         serialized = distribution.to_json()
-        deserialized = NygaDistribution.from_json(serialized)
+        deserialized = Unit.from_json(serialized)
+        self.assertIsInstance(deserialized, NygaDistribution)
         self.assertEqual(distribution, deserialized)
 
     def test_equality_and_copy(self):

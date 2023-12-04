@@ -8,6 +8,7 @@ import portion
 import random_events
 from anytree import RenderTree
 from random_events.events import Event
+from random_events.variables import Variable
 
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic, Continuous)
@@ -19,7 +20,7 @@ from probabilistic_model.probabilistic_circuit.distributions import IntegerDistr
 from jpt.trees import JPT as OldJPT, Leaf
 from jpt import infer_from_dataframe as old_infer_from_dataframe
 
-from probabilistic_model.probabilistic_circuit.units import DecomposableProductUnit
+from probabilistic_model.probabilistic_circuit.units import DecomposableProductUnit, Unit
 
 
 class VariableTestCase(unittest.TestCase):
@@ -34,6 +35,18 @@ class VariableTestCase(unittest.TestCase):
         self.assertEqual(self.variable.decode(0), 2)
         self.assertEqual(self.variable.decode(1), 5)
         self.assertEqual(self.variable.decode(-2 / 3), 0)
+
+    def test_serialization_integer(self):
+        variable = Integer('x', [1, 2, 3], 2, 1)
+        serialized = variable.to_json()
+        deserialized = Variable.from_json(serialized)
+        self.assertEqual(variable, deserialized)
+
+    def test_serialization_continuous(self):
+        variable = ScaledContinuous('x', 2, 3, 1., 0.1, 10)
+        serialized = variable.to_json()
+        deserialized = Variable.from_json(serialized)
+        self.assertEqual(variable, deserialized)
 
 
 class InferFromDataFrameTestCase(unittest.TestCase):
@@ -223,3 +236,16 @@ class JPTTestCase(unittest.TestCase):
         fig = self.model.plot()
         self.assertIsNotNone(fig)
         # fig.show()
+
+    def test_variable_dependencies_to_json(self):
+        serialized = self.model._variable_dependencies_to_json()
+        all_variable_names = [variable.name for variable in self.model.variables]
+        self.assertEqual(serialized, {'real': all_variable_names, 'integer': all_variable_names,
+                                      'symbol': all_variable_names})
+
+    def test_serialization(self):
+        self.model._min_samples_leaf = 10
+        self.model.fit(self.data)
+        serialized = self.model.to_json()
+        deserialized = Unit.from_json(serialized)
+        self.assertEqual(self.model, deserialized)

@@ -1,6 +1,7 @@
 import math
 from collections import deque
-from typing import Tuple, Union, Optional, List, Iterable
+from typing import Tuple, Union, Optional, List, Iterable, Dict, Any
+from typing_extensions import Self
 
 import numpy as np
 import pandas as pd
@@ -12,7 +13,7 @@ from random_events.variables import Variable
 from .variables import Continuous, Integer, Symbolic
 from ..nyga_distribution import NygaDistribution
 from ...probabilistic_circuit.distributions import DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution
-from ...probabilistic_circuit.units import DeterministicSumUnit, DecomposableProductUnit
+from ...probabilistic_circuit.units import DeterministicSumUnit, DecomposableProductUnit, Unit
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -355,3 +356,42 @@ class JPT(DeterministicSumUnit):
                              title=f"Joint Probability Tree over {len(self.variables)} variables",)
 
         return figure
+
+    def _variable_dependencies_to_json(self) -> Dict[str, List[str]]:
+        """
+        Convert the variable dependencies to a json compatible format.
+        The result maps variable names to lists of variable names.
+        """
+        return {variable.name: [dependency.name for dependency in dependencies]
+                for variable, dependencies in self.dependencies.items()}
+
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["targets"] = [variable.name for variable in self.targets]
+        result["features"] = [variable.name for variable in self.features]
+        result["_min_samples_leaf"] = self._min_samples_leaf
+        result["min_impurity_improvement"] = self.min_impurity_improvement
+        result["max_leaves"] = self.max_leaves
+        result["max_depth"] = self.max_depth
+        result["dependencies"] = self._variable_dependencies_to_json()
+        result["total_samples"] = self.total_samples
+        return result
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List[Unit]) -> Self:
+        targets = [variable for variable in variables if variable.name in data["targets"]]
+        features = [variable for variable in variables if variable.name in data["features"]]
+        dependencies = VariableMap()
+        for variable in variables:
+            dependencies[variable] = [dep_var for dep_var in variables if dep_var.name
+                                      in data["dependencies"][variable.name]]
+        result = cls(variables=variables, targets=targets, features=features,
+                     min_samples_leaf=data["_min_samples_leaf"],
+                     min_impurity_improvement=data["min_impurity_improvement"], max_leaves=data["max_leaves"],
+                     max_depth=data["max_depth"], dependencies=dependencies)
+        result.total_samples = data["total_samples"]
+        result.children = children
+        result.weights = data["weights"]
+        return result
