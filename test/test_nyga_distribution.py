@@ -7,7 +7,7 @@ from anytree import RenderTree
 from random_events.variables import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
+from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, DiracDeltaDistribution
 
 
 class InductionStepTestCase(unittest.TestCase):
@@ -17,7 +17,7 @@ class InductionStepTestCase(unittest.TestCase):
     induction_step: InductionStep
 
     def setUp(self) -> None:
-        self.induction_step = InductionStep(self.sorted_data, self.weights, 0, len(self.sorted_data),
+        self.induction_step = InductionStep(self.sorted_data, 6, self.weights, 0, len(self.sorted_data),
                                             NygaDistribution(self.variable, min_samples_per_quantile=1,
                                                              min_likelihood_improvement=0.01))
 
@@ -82,16 +82,25 @@ class InductionStepTestCase(unittest.TestCase):
     def test_fit(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
-        distribution = NygaDistribution(self.variable, min_likelihood_improvement=1.01)
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
         distribution.fit(data)
         self.assertAlmostEqual(sum([leaf.get_weight_if_possible() for leaf in distribution.leaves]), 1.)
 
     def test_plot(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
-        distribution = NygaDistribution(self.variable, min_likelihood_improvement=-1)
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
         distribution.fit(data)
         distribution.plot()  # .show()
+
+    def test_fit_from_singular_data(self):
+        data = [1., 1.]
+        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution.fit(data)
+        self.assertEqual(len(distribution.leaves), 1)
+        self.assertEqual(distribution.weights, [1.])
+        self.assertIsInstance(distribution.children[0], DiracDeltaDistribution)
+
 
 if __name__ == '__main__':
     unittest.main()

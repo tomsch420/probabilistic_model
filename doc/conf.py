@@ -46,6 +46,8 @@ extensions = [
     'sphinx_rtd_theme',
     'autoapi.extension',
     'sphinxcontrib.bibtex',
+    'nbsphinx',
+    'sphinx_gallery.load_style'
 ]
 
 # -- AutoAPI configuration ---------------------------------------------------
