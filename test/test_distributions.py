@@ -1,6 +1,6 @@
 import unittest
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, SymbolicDistribution, \
-    IntegerDistribution, DiracDeltaDistribution
+    IntegerDistribution, DiracDeltaDistribution, GaussianDistribution, TruncatedGaussianDistribution
 from probabilistic_model.probabilistic_circuit.units import DeterministicSumUnit, Unit
 from random_events.events import Event, VariableMap
 from random_events.variables import Continuous, Symbolic, Integer
@@ -254,6 +254,118 @@ class DiracDeltaTestCase(unittest.TestCase):
         center = self.distribution.expectation([self.variable])
         order = VariableMap({self.variable: 3})
         self.assertEqual(self.distribution.moment(order, center)[self.variable], 0)
+
+
+class GaussianDistributionTestCase(unittest.TestCase):
+    distribution: GaussianDistribution = GaussianDistribution(Continuous("x"), mean=2, variance=4)
+
+    def test_domain(self):
+        self.assertEqual(self.distribution.domain,
+                         Event({self.distribution.variable: portion.closedopen(-portion.inf, portion.inf)}))
+
+    def test_likelihood(self):
+        self.assertEqual(self.distribution.likelihood([1]), self.distribution.pdf(1))
+        self.assertEqual(self.distribution.likelihood([0]), self.distribution.pdf(0))
+        self.assertEqual(self.distribution.likelihood([200]), self.distribution.pdf(200))
+        self.assertEqual(self.distribution.likelihood([-portion.inf]), 0)
+        self.assertEqual(self.distribution.likelihood([portion.inf]), self.distribution.pdf(portion.inf))
+
+    def test_probability_of_domain(self):
+        self.assertEqual(self.distribution.probability(self.distribution.domain), 1)
+
+    def test_cdf(self):
+        self.assertEqual(self.distribution.cdf(2), 0.5)
+        self.assertEqual(self.distribution.cdf(1), self.distribution.cdf(1))
+        self.assertEqual(self.distribution.cdf(-portion.inf), 0)
+        self.assertEqual(self.distribution.cdf(portion.inf), 1)
+        self.assertEqual(self.distribution.cdf(portion.inf), self.distribution.cdf(portion.inf))
+
+    def test_probability_of_slices(self):
+        event = Event({self.distribution.variable: portion.closed(0, 1)})
+        self.assertEqual(self.distribution.probability(event), self.distribution.cdf(1) - self.distribution.cdf(0))
+
+    def test_mode(self):
+        mode = self.distribution.mode()
+        self.assertEqual(mode[1], self.distribution.mean)
+
+    def test_sample(self):
+        samples = self.distribution.sample(100)
+        self.assertEqual(len(samples), 100)
+        for sample in samples:
+            self.assertGreaterEqual(self.distribution.likelihood(sample), 0)
+
+    def test_conditional_simple_intersection(self):
+        event = Event({self.distribution.variable: portion.closed(1, 2)})
+        conditional, probability = self.distribution.conditional(event)
+        self.assertIsInstance(conditional, TruncatedGaussianDistribution)
+        self.assertEqual(probability, self.distribution.cdf(2) - self.distribution.cdf(1))
+        self.assertEqual(conditional.lower, 1)
+        self.assertEqual(conditional.upper, 2)
+
+    #This unit test is not working, should work only for Truncated Gaussians
+    def test_conditional_complex_intersection(self):
+        event = Event({self.distribution.variable: portion.closed(1.5, 2) | portion.closed(0, 1)})
+        conditional, probability = self.distribution.conditional(event)
+        self.assertIsInstance(conditional, DeterministicSumUnit)
+        self.assertEqual(probability, 0.75)
+        self.assertEqual(len(conditional.children), 2)
+        self.assertEqual(conditional.weights, [2 / 3, 1 / 3])
+        self.assertEqual(conditional.children[0].interval, portion.closed(0, 1))
+        self.assertEqual(conditional.children[1].interval, portion.closedopen(1.5, 2))
+
+    # This unit test is not working, should work only for Truncated Gaussians
+    def test_conditional_triple_complex_intersection(self):
+        event = Event(
+            {self.distribution.variable: portion.closed(1.5, 2) | portion.closed(0, 0.25) | portion.closed(0.75, 1)})
+
+        conditional, probability = self.distribution.conditional(event)
+        self.assertIsInstance(conditional, DeterministicSumUnit)
+        self.assertEqual(probability, 0.5)
+        self.assertEqual(len(conditional.children), 3)
+        self.assertEqual(conditional.weights, [1 / 4, 1 / 4, 1 / 2])
+        self.assertEqual(conditional.children[0].interval, portion.closed(0, 0.25))
+        self.assertEqual(conditional.children[1].interval, portion.closed(0.75, 1))
+        self.assertEqual(conditional.children[2].interval, portion.closedopen(1.5, 2))
+
+    # This unit test is not working, should work only for Truncated Gaussians
+    def test_conditional_mode(self):
+        event = Event({
+            self.distribution.variable: portion.closedopen(1.5, 2) | portion.closedopen(0, 0.25) | portion.closedopen(
+                0.75, 1)})
+
+        conditional, probability = self.distribution.conditional(event)
+        modes, likelihood = conditional.mode()
+        self.assertEqual(len(modes), 1)
+        self.assertEqual(modes[0][self.distribution.variable], event[conditional.variables[0]])
+        self.assertEqual(likelihood, 1.)
+
+    def test_moment(self):
+        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}))
+        self.assertEqual(expectation[self.distribution.variable], 2)
+        variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}))
+        self.assertEqual(variance[self.distribution.variable], 8)
+
+    def test_serialization(self):
+        serialization = self.distribution.to_json()
+        self.assertEqual(serialization["type"],
+                         "probabilistic_model.probabilistic_circuit.distributions.GaussianDistribution")
+        self.assertEqual(serialization["mean"], 2)
+        self.assertEqual(serialization["variance"], 4)
+        deserialized = Unit.from_json(serialization)
+        self.assertIsInstance(deserialized, GaussianDistribution)
+
+
+class TruncatedGaussianDistributionTestCase(unittest.TestCase):
+
+    distribution: TruncatedGaussianDistribution
+
+    def setUp(self):
+        self.distribution = TruncatedGaussianDistribution(Continuous("real"), portion.closed(-2, 2), 0, 1.)
+
+    def test_init(self):
+        # print(self.distribution.mean)
+        print(self.distribution)
+        self.assertEqual(self.distribution.mean, 0.)
 
 
 if __name__ == '__main__':

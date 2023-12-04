@@ -1,6 +1,10 @@
 import copy
 import random
+import math
 from typing import Iterable, Tuple, Union, List, Optional, Any, Dict
+from scipy.stats import truncnorm # This is needed for the Truncated Gaussian Distribution,
+                                  # but it would probably be nice to have it implemented as a general method
+                                  # for sampling by using the uniform trasformation
 
 import portion
 import random_events.variables
@@ -92,6 +96,15 @@ class ContinuousDistribution(UnivariateDistribution):
         """
         return self._cdf(self.variable.encode(value))
 
+    def _probability(self, event: EncodedEvent) -> float:
+        interval: portion.Interval = event[self.variable]
+        probability = 0.
+
+        for interval_ in interval:
+            probability += self.cdf(interval_.upper) - self.cdf(interval_.lower)
+
+        return probability
+
     def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[
         Optional['DiracDeltaDistribution'], float]:
         """
@@ -174,9 +187,6 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         if len(self.weights) != len(self.variable.domain):
             raise ValueError("The number of weights has to be equal to the number of values of the variable.")
 
-    # @property
-    # def representation(self):
-    #     return f"Categorical()"
 
     @property
     def domain(self) -> Event:
@@ -403,7 +413,7 @@ class UniformDistribution(ContinuousDistribution):
 
     @property
     def representation(self):
-        return f"U{self.interval}"
+        return f"\N{MATHEMATICAL SCRIPT CAPITAL U}{self.interval}"
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval)
@@ -502,3 +512,203 @@ class DiracDeltaDistribution(ContinuousDistribution):
                                               children: List['Unit']) -> Self:
         variable = random_events.variables.Variable.from_json(data["variable"])
         return cls(variable, data["location"], data["density_cap"])
+
+class GaussianDistribution(ContinuousDistribution):
+    """
+    Class for Gaussian distributions.
+    """
+
+    mean: float
+    """
+    The mean of the Gaussian distribution.
+    """
+
+    variance: float
+    """
+    The variance of the Gaussian distribution.
+    """
+
+    def __init__(self, variable: Continuous, mean: float, variance: float, parent=None):
+        super().__init__(variable, parent)
+        self.mean = mean
+        self.variance = variance
+
+    @property
+    def domain(self) -> Event:
+        return Event({self.variable: portion.open(-portion.inf, portion.inf)})
+
+    def _pdf(self, value: float) -> float:
+        r"""
+            Helper method to calculate the cdf of a Gaussian distribution.
+
+            .. math::
+
+            \varphi\left( \frac{x-\mu}{\sigma} \right) = \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac{1}{2} \left(\frac{x-\mu}{\sigma} \right )^2}
+
+        """
+        if value == -portion.inf or value == portion.inf:
+            return 0
+        return 1/math.sqrt(2 * math.pi * self.variance) * math.exp(-1/2 * (value - self.mean) ** 2 / self.variance)
+
+    def _cdf(self, value: float) -> float:
+        r"""
+            Helper method to calculate the cdf of a Gaussian distribution.
+
+            .. math::
+
+            \Phi \left( \frac{x-\mu}{\sigma} \right) = \frac{1}{2} \left[ 1 + \mathbf{erf}\left( \frac{x-\mu}{\sigma\sqrt{2}} \right) \right]
+
+        """
+        if value == -portion.inf:
+            return 0
+        elif value == portion.inf:
+            return 1
+        return 0.5 * (1 + math.erf((value - self.mean) / math.sqrt(2 * self.variance)))
+
+
+    def _mode(self):
+        return [self.domain.encode()], self.mean
+
+    def sample(self, amount: int) -> List[List[float]]:
+        return [[random.gauss(self.mean, self.variance)] for _ in range(amount)]
+
+    #Truncated Gaussians are needed for the following method
+    def conditional_from_interval(self, interval: portion.Interval) \
+            -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
+
+        # calculate the probability of the interval
+        probability = self._probability(EncodedEvent({self.variable: interval}))
+
+        # if the probability is 0, return None
+        if probability == 0:
+            return None, 0
+
+        # else, form the intersection of the interval and the domain
+        intersection = interval
+        resulting_distribution = TruncatedGaussianDistribution(self.variable, interval=intersection,
+                                                               mean= self.mean, variance=self.variance)
+        return resulting_distribution, probability
+
+    def moment(self, order: OrderType) -> MomentType: # I still have some doubts regarding including the center in this method
+        order = order[self.variable]
+        # center = center[self.variable]
+
+        if order == 1:
+            return VariableMap({self.variable: self.mean})
+        elif order == 2:
+            return VariableMap({self.variable: (self.mean ** 2 + self.variance)})
+        else:
+            return VariableMap({self.variable: 0})
+
+    def __eq__(self, other):
+        return self.mean == other.mean and self.variance == other.variance and super().__eq__(other)
+
+    @property
+    def representation(self):
+        return f"\N{MATHEMATICAL SCRIPT CAPITAL N}(\u03BC={self.mean},\u03C3\u00b2={self.variance})"
+
+    def __copy__(self):
+        return self.__class__(self.variable, self.mean, self.variance)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "mean": self.mean, "variance": self.variance}
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any], variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        variable = random_events.variables.Variable.from_json(data["variable"])
+        return cls(variable, data["mean"], data["variance"])
+
+
+class TruncatedGaussianDistribution(GaussianDistribution):
+    """
+    Class for Truncated Gaussian distributions.
+    """
+    interval: portion.Interval
+    """
+    The interval that the Truncated Gaussian distribution is defined over.
+    """
+    def __init__(self, variable: Continuous, interval: portion.Interval, mean: float, variance: float, parent=None):
+        super().__init__(variable, mean, variance, parent)
+        self.interval = interval
+
+    @property
+    def domain(self) -> Event:
+        return Event({self.variable: self.interval})
+
+    @property
+    def lower(self) -> float:
+        return self.interval.lower
+
+    @property
+    def upper(self) -> float:
+        return self.interval.upper
+
+    @property
+    def normalizing_constant(self) -> float:
+        r"""
+            Helper method to calculate
+
+            .. math::
+
+            Z = {\mathbf{\Phi}\left ( \frac{self.interval.upper-\mu}{\sigma} \right )-\mathbf{\Phi}\left ( \frac{self.interval.lower-\mu}{\sigma} \right )}
+
+        """
+        return super.cdf(self.upper) - super.cdf(self.lower)
+
+    def _pdf(self, value: float) -> float:
+
+        if value in self.interval:
+            return super.pdf(value)/self.normalizing_constant
+        else:
+            return 0
+
+    def _cdf(self, value: float) -> float:
+
+        if value in self.interval:
+            return (super.cdf(value) - super.cdf(self.lower))/self.normalizing_constant
+        elif value < self.lower:
+            return 0
+        else:
+            return 1
+
+    def _mode(self):
+        if self.mean in self.interval:
+            return [self.domain.encode()], self.mean
+        elif self.mean < self.lower:
+            return [self.domain.encode()], self.lower
+        else:
+            return [self.domain.encode()], self.upper
+
+    def sample(self, amount: int) -> List[List[float]]:
+        return [[truncnorm.rvs(self.lower, self.upper, self.mean, self.variance)] for _ in range(amount)]
+
+    def moment(self, order: OrderType) -> MomentType:
+        order = order[self.variable]
+
+        if order == 1:
+            return VariableMap({self.variable: self.mean})
+        elif order == 2:
+            return VariableMap({self.variable: (self.mean ** 2 + self.variance)})
+        else:
+            return VariableMap({self.variable: 0})
+
+
+    def __eq__(self, other):
+        return self.interval == other.interval and super().__eq__(other)
+
+    @property
+    def representation(self):
+        return f"\N{MATHEMATICAL SCRIPT CAPITAL N}(\u03BC={self.mean},\u03C3\u00b2={self.variance}|{self.interval})"
+
+    def __copy__(self):
+        return self.__class__(self.variable, self.interval, self.mean, self.variance)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "interval": portion.to_data(self.interval), "mean": self.mean, "variance": self.variance}
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any], variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        variable = random_events.variables.Variable.from_json(data["variable"])
+        return cls(variable, portion.from_data(data["interval"]), data["mean"], data["variance"])
