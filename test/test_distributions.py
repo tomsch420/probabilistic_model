@@ -1,10 +1,14 @@
 import unittest
+
+from anytree import RenderTree
+
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, SymbolicDistribution, \
     IntegerDistribution, DiracDeltaDistribution, GaussianDistribution, TruncatedGaussianDistribution
 from probabilistic_model.probabilistic_circuit.units import DeterministicSumUnit, Unit
 from random_events.events import Event, VariableMap
 from random_events.variables import Continuous, Symbolic, Integer
 import portion
+import plotly.graph_objects as go
 
 
 class UniformDistributionTestCase(unittest.TestCase):
@@ -187,6 +191,11 @@ class SymbolicDistributionTestCase(unittest.TestCase):
         distribution.fit(data)
         self.assertEqual(distribution.weights, [1/6, 3/6, 2/6])
 
+    def test_plot(self):
+        fig = go.Figure(data=self.distribution.plot())
+        self.assertIsNotNone(fig)
+        # fig.show()
+
 
 class IntegerDistributionTestCase(unittest.TestCase):
     distribution: IntegerDistribution = IntegerDistribution(Integer("number", {1, 2, 4}), [0.3, 0.3, 0.4])
@@ -211,6 +220,11 @@ class IntegerDistributionTestCase(unittest.TestCase):
         data = [1, 2, 2, 4, 4, 4]
         distribution.fit(data)
         self.assertEqual(distribution.weights, [1/6, 2/6, 3/6])
+
+    def test_plot(self):
+        fig = go.Figure(self.distribution.plot())
+        self.assertIsNotNone(fig)
+        # fig.show()
 
 
 class DiracDeltaTestCase(unittest.TestCase):
@@ -266,6 +280,9 @@ class DiracDeltaTestCase(unittest.TestCase):
         center = self.distribution.expectation([self.variable])
         order = VariableMap({self.variable: 3})
         self.assertEqual(self.distribution.moment(order, center)[self.variable], 0)
+
+    def test_equality_dirac_delta_and_other(self):
+        self.assertNotEqual(self.distribution, UniformDistribution(self.variable, portion.closed(0, 2)))
 
 
 class GaussianDistributionTestCase(unittest.TestCase):

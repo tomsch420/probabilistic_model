@@ -480,6 +480,7 @@ class DeterministicSumUnit(SmoothSumUnit):
     Deterministic sum node used in a probabilistic circuit
     """
     representation = "⊕"
+
     def merge_modes_if_one_dimensional(self, modes: List[EncodedEvent]) -> List[EncodedEvent]:
         """
         Merge the modes in `modes` to one mode if the model is one dimensional.
@@ -536,10 +537,6 @@ class DeterministicSumUnit(SmoothSumUnit):
         result = DeterministicSumUnit(variables=unit.variables, weights=unit.weights)
         result.children = unit.children
         return result
-
-
-
-
 
 
 class ProductUnit(Unit):
@@ -719,9 +716,7 @@ class DecomposableProductUnit(ProductUnit):
             simplified_child = child.simplify()
             if type(simplified_child) is type(self):
                 for grand_child in simplified_child.children:
-                    #result.children.append(grand_child)
                     grand_child.parent = result
             else:
-                #result.weights.append(weight)
                 simplified_child.parent = result
         return result

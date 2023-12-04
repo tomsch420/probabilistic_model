@@ -1,10 +1,10 @@
 import collections
 import dataclasses
-from typing import Optional, List, Deque, Union, Tuple
+from typing import Optional, List, Deque, Union, Tuple, Dict, Any
 
 import plotly.graph_objects as go
 import portion
-from random_events.variables import Continuous
+from random_events.variables import Continuous, Variable
 from typing_extensions import Self
 
 from ..probabilistic_circuit.distributions import ContinuousDistribution, UniformDistribution, DiracDeltaDistribution
@@ -165,8 +165,8 @@ class InductionStep:
             # calculate right sum of likelihoods
             weight_sum_right = self.sum_weights_from_indices(split_index, self.end_index)
             number_of_samples_right = self.total_number_of_samples * weight_sum_right
-            average_likelihood_right = (weight_sum_right / (right_connecting_point - split_value) *
-                                        number_of_samples_right)
+            average_likelihood_right = (
+                        weight_sum_right / (right_connecting_point - split_value) * number_of_samples_right)
 
             # calculate average likelihood
             average_likelihood = (average_likelihood_left + average_likelihood_right) / total_number_of_samples
@@ -184,8 +184,8 @@ class InductionStep:
 
         :param split_index: The index of the split.
         """
-        return InductionStep(self.data, self.total_number_of_samples,
-                             self.weights, self.begin_index, split_index, self.nyga_distribution)
+        return InductionStep(self.data, self.total_number_of_samples, self.weights, self.begin_index, split_index,
+                             self.nyga_distribution)
 
     def construct_right_induction_step(self, split_index: int) -> Self:
         """
@@ -193,8 +193,8 @@ class InductionStep:
 
         :param split_index: The index of the split.
         """
-        return InductionStep(self.data, self.total_number_of_samples,
-                             self.weights, split_index, self.end_index, self.nyga_distribution)
+        return InductionStep(self.data, self.total_number_of_samples, self.weights, split_index, self.end_index,
+                             self.nyga_distribution)
 
     def induce(self) -> List[Self]:
         """
@@ -203,8 +203,8 @@ class InductionStep:
         :return: The (possibly empty) list of new induction steps.
         """
         # calculate the likelihood without splitting
-        average_likelihood_without_split = ((self.sum_weights()) /
-                                            (self.right_connecting_point() - self.left_connecting_point()))
+        average_likelihood_without_split = (
+                    (self.sum_weights()) / (self.right_connecting_point() - self.left_connecting_point()))
 
         # calculate the best likelihood with splitting
         maximum_likelihood, best_split_index = self.compute_best_split()
@@ -280,9 +280,8 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         weights = [data.count(value) / len(data) for value in sorted_data]
 
         # construct the initial induction step
-        initial_induction_step = InductionStep(data=sorted_data, total_number_of_samples=len(data),
-                                               weights=weights, begin_index=0, end_index=len(sorted_data),
-                                               nyga_distribution=self)
+        initial_induction_step = InductionStep(data=sorted_data, total_number_of_samples=len(data), weights=weights,
+                                               begin_index=0, end_index=len(sorted_data), nyga_distribution=self)
         # initialize the queue
         induction_steps: Deque[InductionStep] = collections.deque([initial_induction_step])
 
@@ -329,22 +328,52 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         y.extend([1, 1])
         return go.Scatter(x=x, y=y, mode='lines', name="Cumulative Distribution Function")
 
-    def plot(self) -> go.Figure:
+    def plot(self) -> List[go.Scatter]:
         """
         Plot the distribution with PDF, CDF, Expectation and Mode.
         """
-        figure = go.Figure(data=[self.pdf_trace(), self.cdf_trace()])
+        traces = [self.pdf_trace(), self.cdf_trace()]
 
         mode, maximum_likelihood = self.mode()
         mode = mode[0][self.variable]
 
         expectation = self.expectation([self.variable])[self.variable]
-        figure.add_trace(go.Scatter(x=[mode.lower, mode.lower, mode.upper, mode.upper, ],
-                                    y=[0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0],
-                                    mode='lines+markers',name="Mode", fill="toself"))
-        figure.add_trace(go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05],
-                                    mode='lines+markers', name="Expectation"))
+        traces.append(go.Scatter(x=[mode.lower, mode.lower, mode.upper, mode.upper, ],
+                                 y=[0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0], mode='lines+markers',
+                                 name="Mode", fill="toself"))
+        traces.append(go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05], mode='lines+markers',
+                                 name="Expectation"))
 
-        figure.update_layout(title=f'Nyga Distribution of {self.variable.name}',
-                             xaxis_title=self.variable.name)
-        return figure
+        return traces
+
+    def __eq__(self, other: Self):
+        return (isinstance(other, NygaDistribution) and
+                self.min_likelihood_improvement == other.min_likelihood_improvement and
+                self.min_samples_per_quantile == other.min_samples_per_quantile and super().__eq__(other))
+
+    def __copy__(self) -> Self:
+        """
+        Create a copy of the distribution.
+        """
+        result = NygaDistribution(self.variable, self.min_samples_per_quantile, self.min_likelihood_improvement)
+        result.weights = self.weights.copy()
+        result.children = self._copy_children()
+        return result
+
+    def to_json(self) -> Dict[str, Any]:
+        """
+        Create a json representation of the distribution.
+        """
+        result = super().to_json()
+        result["min_samples_per_quantile"] = self.min_samples_per_quantile
+        result["min_likelihood_improvement"] = self.min_likelihood_improvement
+        return result
+
+    @classmethod
+    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
+                                              variables: List[Variable],
+                                              children: List['Unit']) -> Self:
+        result = cls(list(variables)[0], data["min_samples_per_quantile"], data["min_likelihood_improvement"])
+        result.weights = data["weights"]
+        result.children = children
+        return result

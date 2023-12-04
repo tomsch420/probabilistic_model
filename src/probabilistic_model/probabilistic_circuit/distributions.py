@@ -6,6 +6,7 @@ from scipy.stats import truncnorm # This is needed for the Truncated Gaussian Di
                                   # but it would probably be nice to have it implemented as a general method
                                   # for sampling by using the uniform trasformation
 
+import plotly.graph_objects as go
 import portion
 import random_events.variables
 from random_events.events import EncodedEvent, VariableMap, Event
@@ -68,6 +69,12 @@ class UnivariateDistribution(Unit):
     def to_json(self) -> Dict[str, Any]:
         return {**super().to_json(), "variable": self.variable.to_json()}
 
+    def plot(self) -> List:
+        """
+        Generate a list of traces that can be used to plot the distribution in plotly figures.
+        """
+        raise NotImplementedError
+
 
 class ContinuousDistribution(UnivariateDistribution):
     """
@@ -94,6 +101,10 @@ class ContinuousDistribution(UnivariateDistribution):
         :param value: The value to evaluate the cdf on.
         :return: The cumulative probability.
         """
+        if value <= -float("inf"):
+            return 0
+        if value >= float("inf"):
+            return 1
         return self._cdf(self.variable.encode(value))
 
     def _probability(self, event: EncodedEvent) -> float:
@@ -108,7 +119,7 @@ class ContinuousDistribution(UnivariateDistribution):
     def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[
         Optional['DiracDeltaDistribution'], float]:
         """
-        Create a dirac impulse from a singleton interval.
+        Create a dirac impulse from a singleton interval. The density is capped at the likelihood of the given value.
 
         :param singleton: The singleton interval from an encoded event.
         :return: A dirac impulse and the likelihood.
@@ -122,7 +133,7 @@ class ContinuousDistribution(UnivariateDistribution):
             return None, 0
 
         else:
-            return DiracDeltaDistribution(self.variable, singleton.lower), likelihood
+            return DiracDeltaDistribution(self.variable, singleton.lower, density_cap=likelihood), likelihood
 
     def conditional_from_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
         """
@@ -226,11 +237,6 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         normalized_weights = [weight / probability for weight in unnormalized_weights]
         return self.__class__(self.variable, normalized_weights), probability
 
-    def __eq__(self, other):
-        if not isinstance(other, SymbolicDistribution):
-            return False
-        return self.variable == other.variable and self.weights == other.weights
-
     def sample(self, amount: int) -> Iterable:
         return [random.choices(self.variable.domain, self.weights) for _ in range(amount)]
 
@@ -272,6 +278,20 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
         """
         return self._fit(list(self.variable.encode_many(data)))
 
+    def plot(self) -> List[go.Bar]:
+        """
+        Plot the distribution.
+        """
+
+        mode, likelihood = self.mode()
+        mode = mode[0][self.variable]
+
+        traces = list()
+        traces.append(go.Bar(x=[value for value in self.variable.domain if value not in mode], y=self.weights,
+                             name="Probability"))
+        traces.append(go.Bar(x=mode, y=[likelihood] * len(mode), name="Mode"))
+        return traces
+
 
 class SymbolicDistribution(UnivariateDiscreteDistribution):
     """
@@ -287,7 +307,6 @@ class SymbolicDistribution(UnivariateDiscreteDistribution):
     @property
     def representation(self):
         return f"Nominal{self.variable.domain}"
-
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         return VariableMap()
@@ -321,6 +340,14 @@ class IntegerDistribution(UnivariateDiscreteDistribution, ContinuousDistribution
         center = center[self.variable]
         result = sum([self.pdf(value) * (value - center) ** order for value in self.variable.domain])
         return VariableMap({self.variable: result})
+
+    def plot(self) -> List[Union[go.Bar, go.Scatter]]:
+        traces = UnivariateDiscreteDistribution.plot(self)
+        _, likelihood = self.mode()
+        expectation = self.expectation([self.variable])[self.variable]
+        traces.append(go.Scatter(x=[expectation, expectation], y=[0, likelihood * 1.05], mode="lines+markers",
+                                 name="Expectation"))
+        return traces
 
 
 class UniformDistribution(ContinuousDistribution):
@@ -364,9 +391,9 @@ class UniformDistribution(ContinuousDistribution):
     def _cdf(self, value: float) -> float:
 
         # check edge cases
-        if value == -portion.inf:
+        if value <= -portion.inf:
             return 0.
-        if value == portion.inf:
+        if value >= portion.inf:
             return 1.
 
         # convert to singleton
@@ -394,8 +421,8 @@ class UniformDistribution(ContinuousDistribution):
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.uniform(self.lower, self.upper)] for _ in range(amount)]
 
-    def conditional_from_interval(self, interval: portion.Interval) \
-            -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
+    def conditional_from_interval(self, interval: portion.Interval) -> Tuple[
+        Optional[Union[DeterministicSumUnit, Self]], float]:
 
         # calculate the probability of the interval
         probability = self._probability(EncodedEvent({self.variable: interval}))
@@ -430,8 +457,7 @@ class UniformDistribution(ContinuousDistribution):
         return VariableMap({self.variable: result})
 
     def __eq__(self, other):
-        return (isinstance(other,
-                           UniformDistribution) and self.interval == other.interval and super().__eq__(other))
+        return isinstance(other, UniformDistribution) and self.interval == other.interval and super().__eq__(other)
 
     @property
     def representation(self):
@@ -517,7 +543,9 @@ class DiracDeltaDistribution(ContinuousDistribution):
             return VariableMap({self.variable: 0})
 
     def __eq__(self, other):
-        return self.location == other.location and self.density_cap == other.density_cap and super().__eq__(other)
+        return (isinstance(other,
+                           self.__class__) and self.location == other.location and self.density_cap == other.density_cap and super().__eq__(
+            other))
 
     @property
     def representation(self):
