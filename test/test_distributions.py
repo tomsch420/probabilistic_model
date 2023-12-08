@@ -314,8 +314,9 @@ class GaussianDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.probability(event), self.distribution.cdf(1) - self.distribution.cdf(0))
 
     def test_mode(self):
-        mode = self.distribution.mode()
-        self.assertEqual(mode[1], self.distribution.mean)
+        modes, likelihood = self.distribution.mode()
+        mode = modes[0]
+        self.assertEqual(mode[self.distribution.variable].lower, self.distribution.mean)
 
     def test_sample(self):
         samples = self.distribution.sample(100)
@@ -368,11 +369,37 @@ class GaussianDistributionTestCase(unittest.TestCase):
         self.assertEqual(modes[0][self.distribution.variable], event[conditional.variables[0]])
         self.assertEqual(likelihood, 1.)
 
-    def test_moment(self):
-        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}))
+    def test_raw_moment(self):
+        self.assertEqual(self.distribution.raw_moment(0), 1)
+        self.assertEqual(self.distribution.raw_moment(1), self.distribution.mean)
+        self.assertEqual(self.distribution.raw_moment(2), self.distribution.mean ** 2 + self.distribution.variance)
+
+    def test_centered_moment(self):
+        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}),
+                                               VariableMap({self.distribution.variable: 0}))
         self.assertEqual(expectation[self.distribution.variable], 2)
-        variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}))
-        self.assertEqual(variance[self.distribution.variable], 8)
+        variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}),
+                                            expectation)
+        self.assertEqual(variance[self.distribution.variable], 4)
+
+        third_order_moment = self.distribution.moment(VariableMap({self.distribution.variable: 3}),
+                                                      expectation)
+        self.assertEqual(third_order_moment[self.distribution.variable], 0)
+
+        fourth_order_moment = self.distribution.moment(VariableMap({self.distribution.variable: 4}), expectation)
+        self.assertEqual(fourth_order_moment[self.distribution.variable], 48)
+
+    def test_moment_with_different_center_than_expectation(self):
+        center = VariableMap({self.distribution.variable: 2.5})
+
+        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}), center)
+        self.assertEqual(expectation[self.distribution.variable], -0.5)
+        variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}),
+                                            center)
+        self.assertEqual(variance[self.distribution.variable], 4.25)
+
+        third_order_moment = self.distribution.moment(VariableMap({self.distribution.variable: 3}), center)
+        self.assertEqual(third_order_moment[self.distribution.variable], -6.125)
 
     def test_serialization(self):
         serialization = self.distribution.to_json()

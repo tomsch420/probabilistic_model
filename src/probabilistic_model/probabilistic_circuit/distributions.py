@@ -589,7 +589,7 @@ class GaussianDistribution(ContinuousDistribution):
 
     def _pdf(self, value: float) -> float:
         r"""
-            Helper method to calculate the cdf of a Gaussian distribution.
+            Helper method to calculate the pdf of a Gaussian distribution.
 
             .. math::
 
@@ -616,13 +616,13 @@ class GaussianDistribution(ContinuousDistribution):
         return 0.5 * (1 + math.erf((value - self.mean) / math.sqrt(2 * self.variance)))
 
 
-    def _mode(self):
-        return [self.domain.encode()], self.mean
+    def _mode(self) -> Tuple[List[EncodedEvent], float]:
+        return [EncodedEvent({self.variable: portion.singleton(self.mean)})], self._pdf(self.mean)
 
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.gauss(self.mean, self.variance)] for _ in range(amount)]
 
-    #Truncated Gaussians are needed for the following method
+    #Truncated Gaussians are needed for the following method:
     def conditional_from_interval(self, interval: portion.Interval) \
             -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
 
@@ -639,16 +639,50 @@ class GaussianDistribution(ContinuousDistribution):
                                                                mean= self.mean, variance=self.variance)
         return resulting_distribution, probability
 
-    def moment(self, order: OrderType) -> MomentType: # I still have some doubts regarding including the center in this method
-        order = order[self.variable]
-        # center = center[self.variable]
 
-        if order == 1:
-            return VariableMap({self.variable: self.mean})
-        elif order == 2:
-            return VariableMap({self.variable: (self.mean ** 2 + self.variance)})
-        else:
-            return VariableMap({self.variable: 0})
+    def raw_moment(self, order: int) -> float:
+        r"""
+        Helper method to calculate the raw moment of a Gaussian distribution.
+
+        The raw moment is given by:
+
+        .. math::
+
+            E(X^n) = \sum_{j=0}^{\lfloor \frac{n}{2}\rfloor}\binom{n}{2j}\dfrac{\mu^{n-2j}\sigma^{2j}(2j)!}{j!2^j}.
+
+
+        """
+        raw_moment = 0 # Initialize the raw moment
+        for j in range(math.floor(order/2)+1):
+            mu_term= self.mean ** (order - 2*j)
+            sigma_term = self.variance ** j
+
+            raw_moment += math.comb(order, 2*j) * mu_term * sigma_term * math.factorial(2*j) / (math.factorial(j) * (2 ** j))
+
+        return raw_moment
+
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        r"""
+        Calculate the moment of the distribution using Alessandro's (made up) Equation:
+
+        .. math::
+
+            E(X-center)^i = \sum_{i=0}^{order} \binom{order}{i} E[X^i] * (- center)^{(order-i)}
+        """
+        order = order[self.variable]
+        center = center[self.variable]
+
+        # get the raw moments from 0 to i
+        raw_moments = [self.raw_moment(i) for i in range(order+1)]
+
+        moment = 0
+
+        # Compute the desired moment:
+        for order_ in range(order+1):
+            moment += math.comb(order, order_) * raw_moments[order_] * (-center) ** (order - order_)
+
+        return VariableMap({self.variable: moment})
 
     def __eq__(self, other):
         return self.mean == other.mean and self.variance == other.variance and super().__eq__(other)
@@ -721,7 +755,7 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             return 0
         else:
             return 1
-
+    #The following method needs to be changed: (look up at the GaussianDistribution one)
     def _mode(self):
         if self.mean in self.interval:
             return [self.domain.encode()], self.mean
@@ -733,16 +767,54 @@ class TruncatedGaussianDistribution(GaussianDistribution):
     def sample(self, amount: int) -> List[List[float]]:
         return [[truncnorm.rvs(self.lower, self.upper, self.mean, self.variance)] for _ in range(amount)]
 
-    def moment(self, order: OrderType) -> MomentType:
+    #The following method needs to be changed:
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
         order = order[self.variable]
+        center = center[self.variable]
 
         if order == 1:
-            return VariableMap({self.variable: self.mean})
+            return VariableMap({self.variable: self.mean-center})
         elif order == 2:
-            return VariableMap({self.variable: (self.mean ** 2 + self.variance)})
+            return VariableMap({self.variable: (self.mean ** 2 + center ** 2)})
         else:
             return VariableMap({self.variable: 0})
 
+        if dtype == 'r':
+            d = 0
+        elif dtype == 'c':
+            d = mu + sigma * sqrt(2 / pi) / alpha * 0.5 * np.sum(-gamma.cdf(a ** 2 / 2, 1) + gamma.cdf(b ** 2 / 2, 1))
+
+        if s % 2 == 0:
+            absol = False
+
+        d = (d - mu) / sigma
+        vabd = np.zeros(len(a))
+
+        for j in range(len(a)):
+            if a[j] < d and d < b[j]:
+                vabd[j] = 1
+
+        if absol:
+            indabs = 1
+            vad = np.sign(b - d) - 2 * vabd
+            vbd = np.sign(b - d)
+        else:
+            indabs = 0
+            vad = 1
+            vbd = 1
+
+        monst = 0
+
+        for k in range(s + 1):
+            monst += sigma ** s * factorial(s) / (factorial(k) * factorial(s - k)) * 2 ** (k / 2) * gamma((k + 1) / 2) / (
+                        sqrt(pi) * alpha) * 0.5 * np.sum(
+                -gamma.cdf(a ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(a) + k % 2) * vad
+
+                - 2 * indabs * gamma.cdf(d ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(d) + k % 2) * vabd
+                + gamma.cdf(b ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(b) + k % 2) * vbd
+                * (-d) ** (s - k)
+            )
+        return monst
 
     def __eq__(self, other):
         return self.interval == other.interval and super().__eq__(other)
