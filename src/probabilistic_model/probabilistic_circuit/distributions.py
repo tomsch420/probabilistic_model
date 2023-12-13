@@ -1,8 +1,10 @@
 import copy
 import random
 import math
+import numpy as np
+from math import factorial, sqrt, pi
 from typing import Iterable, Tuple, Union, List, Optional, Any, Dict
-from scipy.stats import truncnorm # This is needed for the Truncated Gaussian Distribution,
+from scipy.stats import truncnorm, gamma # This is needed for the Truncated Gaussian Distribution,
                                   # but it would probably be nice to have it implemented as a general method
                                   # for sampling by using the uniform trasformation
 
@@ -13,7 +15,7 @@ from random_events.events import EncodedEvent, VariableMap, Event
 from random_events.variables import Variable, Continuous, Symbolic, Integer, Discrete
 from typing_extensions import Self
 
-from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit
+from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit, SmoothSumUnit
 from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
 
 
@@ -178,6 +180,72 @@ class ContinuousDistribution(UnivariateDistribution):
             deterministic_sum = DeterministicSumUnit(self.variables, resulting_probabilities)
             deterministic_sum.children = resulting_distributions
             return deterministic_sum.normalize(), sum(resulting_probabilities)
+
+    def plot(self) -> List:
+
+        traces = []
+        samples = [sample[0] for sample in self.sample(1000)]
+        samples.sort()
+
+        minimal_value = self.domain[self.variable].lower
+        if minimal_value <= -float("inf"):
+            minimal_value = samples[0]
+
+        maximal_value = self.domain[self.variable].upper
+        if maximal_value >= float("inf"):
+            maximal_value = samples[-1]
+
+        sample_range = maximal_value - minimal_value
+        minimal_value -= 0.05 * sample_range
+        maximal_value += 0.05 * sample_range
+
+        samples_with_padding = [minimal_value, samples[0]] + samples + [samples[-1], maximal_value]
+
+        pdf_values = [0, 0] + [self.pdf(sample) for sample in samples] + [0, 0]
+        traces.append(go.Scatter(x=samples_with_padding, y=pdf_values, mode="lines", name="PDF"))
+
+        cdf_values = [0, 0] + [self.cdf(sample) for sample in samples] + [1, 1]
+
+        traces.append(go.Scatter(x=samples_with_padding, y=cdf_values, mode="lines", name="CDF"))
+        mean = self.expectation([self.variable])[self.variable]
+
+        try:
+            modes, maximum_likelihood = self.mode()
+        except NotImplementedError:
+            modes = []
+            maximum_likelihood = max(pdf_values)
+
+        mean_trace = go.Scatter(x=[mean, mean], y=[0, maximum_likelihood * 1.05], mode="lines+markers",
+                                name="Expectation")
+        traces.append(mean_trace)
+
+        xs = []
+        ys = []
+        for mode in modes:
+            mode = mode[self.variable]
+            xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
+            ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
+        mode_trace = go.Scatter(x=xs, y=ys, mode="lines+markers", name="Mode", fill="toself")
+        traces.append(mode_trace)
+
+        return traces
+
+class UnivariateContinuousSumUnit(SmoothSumUnit, ContinuousDistribution):
+    """
+    Class for univariate continuous mixtures.
+    """
+
+    variables: Tuple[Continuous]
+
+    def __init__(self, variable: Continuous, weights: Iterable[float], parent=None):
+        SmoothSumUnit.__init__(self, [variable], weights, parent)
+        ContinuousDistribution.__init__(self, variable, parent)
+
+    def _pdf(self, value: Union[float, int]) -> float:
+        return sum([child._pdf(value) * weight for child, weight in zip(self.children, self.weights)])
+
+    def _cdf(self, value: Union[float, int]) -> float:
+        return sum([child._cdf(value) * weight for child, weight in zip(self.children, self.weights)])
 
 
 class UnivariateDiscreteDistribution(UnivariateDistribution):
@@ -624,7 +692,7 @@ class GaussianDistribution(ContinuousDistribution):
 
     #Truncated Gaussians are needed for the following method:
     def conditional_from_interval(self, interval: portion.Interval) \
-            -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
+            -> Tuple[Optional['TruncatedGaussianDistribution'], float]:
 
         # calculate the probability of the interval
         probability = self._probability(EncodedEvent({self.variable: interval}))
@@ -738,83 +806,82 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             Z = {\mathbf{\Phi}\left ( \frac{self.interval.upper-\mu}{\sigma} \right )-\mathbf{\Phi}\left ( \frac{self.interval.lower-\mu}{\sigma} \right )}
 
         """
-        return super.cdf(self.upper) - super.cdf(self.lower)
+        return super()._cdf(self.upper) - super()._cdf(self.lower)
 
     def _pdf(self, value: float) -> float:
 
         if value in self.interval:
-            return super.pdf(value)/self.normalizing_constant
+            return super()._pdf(value)/self.normalizing_constant
         else:
             return 0
 
     def _cdf(self, value: float) -> float:
 
         if value in self.interval:
-            return (super.cdf(value) - super.cdf(self.lower))/self.normalizing_constant
+            return (super()._cdf(value) - super()._cdf(self.lower))/self.normalizing_constant
         elif value < self.lower:
             return 0
         else:
             return 1
-    #The following method needs to be changed: (look up at the GaussianDistribution one)
-    def _mode(self):
+
+    def _mode(self) -> Tuple[List[EncodedEvent], float]:
         if self.mean in self.interval:
-            return [self.domain.encode()], self.mean
+            return [EncodedEvent({self.variable: portion.singleton(self.mean)})], self._pdf(self.mean)
         elif self.mean < self.lower:
-            return [self.domain.encode()], self.lower
+            return [EncodedEvent({self.variable: portion.singleton(self.lower)})], self._pdf(self.lower)
         else:
-            return [self.domain.encode()], self.upper
+            return [EncodedEvent({self.variable: portion.singleton(self.upper)})], self._pdf(self.upper)
 
     def sample(self, amount: int) -> List[List[float]]:
-        return [[truncnorm.rvs(self.lower, self.upper, self.mean, self.variance)] for _ in range(amount)]
+        """
+
+        .. note::
+            This uses rejection sampling and hence is inefficient.
+
+        """
+        samples = super().sample(amount)
+        samples = [sample for sample in samples if sample[0] in self.interval]
+        rejected_samples = amount - len(samples)
+        if rejected_samples > 0:
+            samples.extend(self.sample(rejected_samples))
+        return samples
 
     #The following method needs to be changed:
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         order = order[self.variable]
         center = center[self.variable]
 
-        if order == 1:
-            return VariableMap({self.variable: self.mean-center})
-        elif order == 2:
-            return VariableMap({self.variable: (self.mean ** 2 + center ** 2)})
-        else:
-            return VariableMap({self.variable: 0})
+        lower_bound=(self.lower-self.mean)/math.sqrt(self.variance) #normalize the lower bound
+        upper_bound=(self.upper-self.mean)/math.sqrt(self.variance) #normalize the upper bound
+        normalized_center = (center-self.mean)/math.sqrt(self.variance) #normalize the center
+        truncated_moment = 0
 
-        if dtype == 'r':
-            d = 0
-        elif dtype == 'c':
-            d = mu + sigma * sqrt(2 / pi) / alpha * 0.5 * np.sum(-gamma.cdf(a ** 2 / 2, 1) + gamma.cdf(b ** 2 / 2, 1))
+        for k in range(order + 1):
 
-        if s % 2 == 0:
-            absol = False
+            multiplying_constant = sqrt(self.variance) ** order * factorial(order) / (factorial(k) * factorial(order - k)) \
+                                    * 2 ** (k / 2) * math.gamma((k + 1) / 2) / (sqrt(pi) * self.normalizing_constant)
+            gamma_term_a = -gamma.cdf(lower_bound ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(lower_bound) + k % 2)
+            gamma_term_b = gamma.cdf(upper_bound ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(upper_bound) + k % 2)
 
-        d = (d - mu) / sigma
-        vabd = np.zeros(len(a))
+            truncated_moment +=  multiplying_constant * 0.5 * (gamma_term_a + gamma_term_b) * (-normalized_center) ** (order - k)
 
-        for j in range(len(a)):
-            if a[j] < d and d < b[j]:
-                vabd[j] = 1
+        return VariableMap({self.variable: truncated_moment})
 
-        if absol:
-            indabs = 1
-            vad = np.sign(b - d) - 2 * vabd
-            vbd = np.sign(b - d)
-        else:
-            indabs = 0
-            vad = 1
-            vbd = 1
+    def conditional_from_interval(self, interval: portion.Interval) \
+            -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
 
-        monst = 0
+        # calculate the probability of the interval
+        probability = self._probability(EncodedEvent({self.variable: interval}))
 
-        for k in range(s + 1):
-            monst += sigma ** s * factorial(s) / (factorial(k) * factorial(s - k)) * 2 ** (k / 2) * gamma((k + 1) / 2) / (
-                        sqrt(pi) * alpha) * 0.5 * np.sum(
-                -gamma.cdf(a ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(a) + k % 2) * vad
+        # if the probability is 0, return None
+        if probability == 0:
+            return None, 0
 
-                - 2 * indabs * gamma.cdf(d ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(d) + k % 2) * vabd
-                + gamma.cdf(b ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(b) + k % 2) * vbd
-                * (-d) ** (s - k)
-            )
-        return monst
+        # else, form the intersection of the interval and the domain
+        intersection = self.interval & interval
+        resulting_distribution = TruncatedGaussianDistribution(self.variable, interval=intersection,
+                                                               mean= self.mean, variance=self.variance)
+        return resulting_distribution, probability
 
     def __eq__(self, other):
         return self.interval == other.interval and super().__eq__(other)
