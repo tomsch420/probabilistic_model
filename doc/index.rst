@@ -18,7 +18,7 @@ You can read more about the theory behind probabilistic models in these resource
 .. nbgallery::
    examples/nyga_distribution
    examples/joint_probability_trees
-
+   examples/truncated_gaussians
 
 .. toctree::
    :maxdepth: 3
