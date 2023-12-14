@@ -230,6 +230,7 @@ class ContinuousDistribution(UnivariateDistribution):
 
         return traces
 
+
 class UnivariateContinuousSumUnit(SmoothSumUnit, ContinuousDistribution):
     """
     Class for univariate continuous mixtures.
