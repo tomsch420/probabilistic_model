@@ -37,3 +37,21 @@ class GraphVizExporter:
                     dot.edge(str(id(weight)), str(id(node)))
                     dot.edge(str(id(node.parent)), str(id(weight)), dir="none")
         return dot
+
+    def to_graphviz_without_plots(self) -> graphviz.Digraph:
+        dot = graphviz.Digraph(node_attr={'shape': 'plaintext'})
+
+        for node in PreOrderIter(self.model):
+            node: Unit
+
+            dot.node(str(id(node)), node.representation, fontsize="30pt")
+
+            if node.parent is not None:
+                weight = node.get_weight_if_possible()
+                if weight is None:
+                    dot.edge(str(id(node.parent)), str(id(node)))
+                else:
+                    dot.node(str(id(weight)), label=f"{round(weight, 3)}")
+                    dot.edge(str(id(weight)), str(id(node)))
+                    dot.edge(str(id(node.parent)), str(id(weight)), dir="none")
+        return dot
