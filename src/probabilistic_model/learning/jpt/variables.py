@@ -23,10 +23,15 @@ def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: b
 
     for column, datatype in zip(data.columns, data.dtypes):
 
+        unique_values = data[column].unique()
+
         # handle continuous variables
         if datatype in [float]:
 
-            minimal_distance_between_values = np.diff(np.sort(data[column].unique())).min()
+            if len(unique_values) == 1:
+                minimal_distance_between_values = 1.
+            else:
+                minimal_distance_between_values = np.diff(np.sort(unique_values)).min()
             mean = data[column].mean()
             std = data[column].std()
 

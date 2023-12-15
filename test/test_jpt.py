@@ -1,29 +1,26 @@
+import json
 import math
-import os
+import tempfile
 import unittest
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
-import portion
 import random_events
-from anytree import RenderTree
-from random_events.events import Event
+import sklearn.datasets
+from jpt import infer_from_dataframe as old_infer_from_dataframe
+from jpt.learning.impurity import Impurity
+from jpt.trees import JPT as OldJPT, Leaf
 from random_events.variables import Variable
 
+from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic, Continuous)
-from jpt.learning.impurity import Impurity
-from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions import IntegerDistribution, SymbolicDistribution, \
     UnivariateDiscreteDistribution
-from jpt.trees import JPT as OldJPT, Leaf
-from jpt import infer_from_dataframe as old_infer_from_dataframe
-
-from probabilistic_model.probabilistic_circuit.units import DecomposableProductUnit, Unit
 from probabilistic_model.probabilistic_circuit.exporter.dotexporter import GraphVizExporter
-import tempfile
+from probabilistic_model.probabilistic_circuit.units import DecomposableProductUnit, Unit
 
 
 class VariableTestCase(unittest.TestCase):
@@ -182,13 +179,13 @@ class JPTTestCase(unittest.TestCase):
             if isinstance(variable, Continuous):
                 continue
             old_distribution = leaf.distributions[variable.name]
-            new_distribution: UnivariateDiscreteDistribution = [child for child in product.children
-                                                                if child.variable == variable][0]
+            new_distribution: UnivariateDiscreteDistribution = \
+                [child for child in product.children if child.variable == variable][0]
             for value in variable.domain:
                 old_probability = old_distribution.p(value)
                 new_probability = new_distribution.pdf(value)
 
-                if abs(old_probability-new_probability) > epsilon:
+                if abs(old_probability - new_probability) > epsilon:
                     return False
 
         return True
@@ -237,14 +234,13 @@ class JPTTestCase(unittest.TestCase):
         self.model._min_samples_leaf = 10
         self.model.fit(self.data)
         fig = self.model.plot()
-        self.assertIsNotNone(fig)
-        # fig.show()
+        self.assertIsNotNone(fig)  # fig.show()
 
     def test_variable_dependencies_to_json(self):
         serialized = self.model._variable_dependencies_to_json()
         all_variable_names = [variable.name for variable in self.model.variables]
-        self.assertEqual(serialized, {'real': all_variable_names, 'integer': all_variable_names,
-                                      'symbol': all_variable_names})
+        self.assertEqual(serialized,
+                         {'real': all_variable_names, 'integer': all_variable_names, 'symbol': all_variable_names})
 
     def test_serialization(self):
         self.model._min_samples_leaf = 10
@@ -258,5 +254,74 @@ class JPTTestCase(unittest.TestCase):
         self.model.fit(self.data)
         exporter = GraphVizExporter(self.model)
         dot = exporter.to_graphviz()
-        self.assertIsNotNone(dot)
-        # dot.view(tempfile.mktemp('.gv'))
+        self.assertIsNotNone(dot)  # dot.view(tempfile.mktemp('.gv'))
+
+
+class BreastCancerTestCase(unittest.TestCase):
+    data: pd.DataFrame
+    model: JPT
+
+    @classmethod
+    def setUpClass(cls):
+        data = sklearn.datasets.load_breast_cancer(as_frame=True)
+
+        df = data.data
+        target = data.target
+        target[target == 1] = "malignant"
+        target[target == 0] = "friendly"
+
+        df["malignant"] = target
+        cls.data = df
+
+        variables = infer_variables_from_dataframe(cls.data, scale_continuous_types=False)
+
+        cls.model = JPT(variables, min_samples_leaf=0.1)
+        cls.model.fit(cls.data)
+
+    def test_serialization(self):
+        json_dict = self.model.to_json()
+        model = JPT.from_json(json_dict)
+        self.assertEqual(model, self.model)
+
+        file = tempfile.NamedTemporaryFile()
+
+        with open(file.name, "w") as f:
+            json.dump(json_dict, f)
+
+        with open(file.name, "r") as f:
+            model_ = json.load(f)
+        model_ = JPT.from_json(model_)
+        self.assertEqual(model, model_)
+        file.close()
+
+
+class MNISTTestCase(unittest.TestCase):
+    model: JPT
+
+    @classmethod
+    def setUpClass(cls):
+        mnist = sklearn.datasets.load_digits(as_frame=True)
+        df = mnist.data
+        target = mnist.target
+        df["digit"] = target
+        df["digit"] = df['digit'].astype(str)
+
+        variables = infer_variables_from_dataframe(df, scale_continuous_types=False, min_likelihood_improvement=0.01)
+        cls.model = JPT(variables, min_samples_leaf=0.1)
+        cls.model.fit(df)
+
+    def test_serialization(self):
+        json_dict = self.model.to_json()
+        model = JPT.from_json(json_dict)
+        self.assertEqual(model, self.model)
+
+        file = tempfile.NamedTemporaryFile()
+
+        with open(file.name, "w") as f:
+            json.dump(json_dict, f)
+
+        with open(file.name, "r") as f:
+            model_ = json.load(f)
+        model_ = JPT.from_json(model_)
+        self.assertEqual(model, model_)
+        file.close()
