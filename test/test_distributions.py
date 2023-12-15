@@ -407,7 +407,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
     # This unit test is not working, should work only for Truncated Gaussians
     def test_conditional_mode(self):
         event = Event({
-            self.distribution.variable: portion.closedopen(1.5, 2) | portion.closedopen(0, 0.25) | portion.closedopen(
+            self.distribution.variable: portion.closed(1.5, 2) | portion.closed(0, 0.25) | portion.closed(
                 0.75, 1)})
 
         conditional, probability = self.distribution.conditional(event)
