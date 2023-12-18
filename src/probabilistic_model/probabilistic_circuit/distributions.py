@@ -2,7 +2,6 @@ import copy
 import random
 import math
 import numpy as np
-from math import factorial, sqrt, pi
 from typing import Iterable, Tuple, Union, List, Optional, Any, Dict
 from scipy.stats import truncnorm, gamma # This is needed for the Truncated Gaussian Distribution,
                                   # but it would probably be nice to have it implemented as a general method
@@ -870,8 +869,32 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             samples.extend(self.sample(rejected_samples))
         return samples
 
-    #The following method needs to be changed:
+
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        r"""
+                Helper method to calculate the moment of a Truncated Gaussian distribution.
+
+                .. note::
+                This method follows the equation (2.8) in :cite:p:`ogasawara2022moments`.
+
+                .. math::
+
+                    \mathbb{E} \left[ \left( X-center \right)^{order} \right]\mathds{1}_{\left[ lower , upper \right]}(x)
+                    = \sigma^{order} \frac{1}{\Phi(upper)-\Phi(lower)} \sum_{k=0}^{order} \binom{order}{k} I_k (-center)^{(order-k)}.
+
+                    where:
+
+                    .. math::
+
+                        I_k = \frac{2^{\frac{k}{2}}}{\sqrt{\pi}}\Gamma \left( \frac{k+1}{2} \right) \left[ sgn \left(upper\right)
+                         \mathds{1}\left \{ k=2 \nu \right \} + \mathds{1} \left\{k = 2\nu -1 \right\} \frac{1}{2}
+                          F_{\Gamma} \left( \frac{upper^2}{2},\frac{k+1}{2} \right) - sgn \left(lower\right) \mathds{1}\left \{ k=2 \nu \right \}
+                         + \mathds{1} \left\{k = 2\nu -1 \right\} \frac{1}{2} F_{\Gamma} \left( \frac{lower^2}{2},\frac{k+1}{2} \right) \right]
+
+                :return: The moment of the distribution.
+
+                """
+
         order = order[self.variable]
         center = center[self.variable]
 
@@ -882,12 +905,21 @@ class TruncatedGaussianDistribution(GaussianDistribution):
 
         for k in range(order + 1):
 
-            multiplying_constant = sqrt(self.variance) ** order * factorial(order) / (factorial(k) * factorial(order - k)) \
-                                    * 2 ** (k / 2) * math.gamma((k + 1) / 2) / (sqrt(pi) * self.normalizing_constant)
-            gamma_term_a = -gamma.cdf(lower_bound ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(lower_bound) + k % 2)
-            gamma_term_b = gamma.cdf(upper_bound ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(upper_bound) + k % 2)
+            multiplying_constant = math.comb(order, k) * 2 ** (k/2) * math.gamma((k+1)/2) /math.sqrt(math.pi)
 
-            truncated_moment +=  multiplying_constant * 0.5 * (gamma_term_a + gamma_term_b) * (-normalized_center) ** (order - k)
+            if k % 2 == 0:
+                bound_selection_lower = np.sign(lower_bound)
+                bound_selection_upper = np.sign(upper_bound)
+            else:
+                bound_selection_lower = 1
+                bound_selection_upper = 1
+
+            gamma_term_lower = -0.5 * gamma.cdf(lower_bound ** 2 / 2, (k + 1) / 2) * bound_selection_lower
+            gamma_term_upper = 0.5 * gamma.cdf(upper_bound ** 2 / 2, (k + 1) / 2) * bound_selection_upper
+
+            truncated_moment +=  multiplying_constant * (gamma_term_lower + gamma_term_upper) * (-normalized_center) ** (order - k)
+
+        truncated_moment *= (math.sqrt(self.variance) ** order) / self.normalizing_constant
 
         return VariableMap({self.variable: truncated_moment})
 
