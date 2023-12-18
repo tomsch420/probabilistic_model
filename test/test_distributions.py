@@ -1,20 +1,19 @@
-import random
+import math
 import unittest
+from math import factorial, sqrt, pi
 
 import numpy as np
+import plotly.graph_objects as go
+import portion
 from anytree import RenderTree
+from random_events.events import Event, VariableMap
+from random_events.variables import Continuous, Symbolic, Integer
+from scipy.stats import gamma
 
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, SymbolicDistribution, \
     IntegerDistribution, DiracDeltaDistribution, GaussianDistribution, TruncatedGaussianDistribution, \
     UnivariateContinuousSumUnit
 from probabilistic_model.probabilistic_circuit.units import DeterministicSumUnit, Unit
-from random_events.events import Event, VariableMap
-from random_events.variables import Continuous, Symbolic, Integer
-import portion
-import math
-from math import factorial, sqrt, pi
-from scipy.stats import gamma
-import plotly.graph_objects as go
 
 
 class UniformDistributionTestCase(unittest.TestCase):
@@ -126,9 +125,8 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(likelihood, 0.5)
 
     def test_conditional_with_mixture_of_interval_and_singleton(self):
-        event = Event({self.distribution.variable: portion.closed(1, 2) |
-                                                   portion.closed(0, 0.25) |
-                                                   portion.singleton(0.75)})
+        event = Event(
+            {self.distribution.variable: portion.closed(1, 2) | portion.closed(0, 0.25) | portion.singleton(0.75)})
         conditional, likelihood = self.distribution.conditional(event)
         self.assertIsInstance(conditional, DeterministicSumUnit)
         self.assertEqual(likelihood, 1.125)
@@ -141,6 +139,11 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(serialization["interval"], [(True, 0, 2, False)])
         deserialized = Unit.from_json(serialization)
         self.assertIsInstance(deserialized, UniformDistribution)
+
+    def test_plot(self):
+        fig = go.Figure(data=self.distribution.plot())
+        self.assertIsNotNone(fig)
+        # fig.show()
 
 
 class SymbolicDistributionTestCase(unittest.TestCase):
@@ -192,15 +195,14 @@ class SymbolicDistributionTestCase(unittest.TestCase):
         self.assertEqual(domain, Event({distribution.variable: "dog"}))
 
     def test_fit(self):
-        distribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}), [1/3] * 3)
+        distribution = SymbolicDistribution(Symbolic("animal", {"cat", "dog", "chicken"}), [1 / 3] * 3)
         data = ["cat", "dog", "dog", "chicken", "chicken", "chicken"]
         distribution.fit(data)
-        self.assertEqual(distribution.weights, [1/6, 3/6, 2/6])
+        self.assertEqual(distribution.weights, [1 / 6, 3 / 6, 2 / 6])
 
     def test_plot(self):
         fig = go.Figure(data=self.distribution.plot())
-        self.assertIsNotNone(fig)
-        # fig.show()
+        self.assertIsNotNone(fig)  # fig.show()
 
 
 class IntegerDistributionTestCase(unittest.TestCase):
@@ -222,15 +224,14 @@ class IntegerDistributionTestCase(unittest.TestCase):
         self.assertEqual(variance[self.distribution.variable], 1.65)
 
     def test_fit(self):
-        distribution = IntegerDistribution(Integer("number", {1, 2, 4}), [1/3] * 3)
+        distribution = IntegerDistribution(Integer("number", {1, 2, 4}), [1 / 3] * 3)
         data = [1, 2, 2, 4, 4, 4]
         distribution.fit(data)
-        self.assertEqual(distribution.weights, [1/6, 2/6, 3/6])
+        self.assertEqual(distribution.weights, [1 / 6, 2 / 6, 3 / 6])
 
     def test_plot(self):
         fig = go.Figure(self.distribution.plot())
-        self.assertIsNotNone(fig)
-        # fig.show()
+        self.assertIsNotNone(fig)  # fig.show()
 
 
 class DiracDeltaTestCase(unittest.TestCase):
@@ -292,12 +293,10 @@ class DiracDeltaTestCase(unittest.TestCase):
 
 
 class UnivariateContinuousSumUnitTestCase(unittest.TestCase):
-
     model: UnivariateContinuousSumUnit
 
     def setUp(self):
-        self.model = UnivariateContinuousSumUnit(Continuous("x"),
-                                                 [0.5, 0.5])
+        self.model = UnivariateContinuousSumUnit(Continuous("x"), [0.5, 0.5])
         self.model.children = [UniformDistribution(Continuous("x"), portion.closed(0, 1)),
                                UniformDistribution(Continuous("x"), portion.closed(2, 3))]
 
@@ -327,7 +326,7 @@ class UnivariateContinuousSumUnitTestCase(unittest.TestCase):
     def test_plot(self):
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
-        fig.show()
+        # fig.show()
 
 
 class GaussianDistributionTestCase(unittest.TestCase):
@@ -377,7 +376,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
         self.assertEqual(conditional.lower, 1)
         self.assertEqual(conditional.upper, 2)
 
-    #This unit test is not working, should work only for Truncated Gaussians
+    # This unit test is not working, should work only for Truncated Gaussians
     def test_conditional_complex_intersection(self):
         event = Event({self.distribution.variable: portion.closed(1.5, 2) | portion.closed(3, 4)})
         conditional, probability = self.distribution.conditional(event)
@@ -386,14 +385,13 @@ class GaussianDistributionTestCase(unittest.TestCase):
         self.assertEqual(len(conditional.children), 2)
 
         weights_by_hand = [self.distribution.probability(Event({self.distribution.variable: portion.closed(1.5, 2)})),
-                          self.distribution.probability(Event({self.distribution.variable: portion.closed(3, 4)}))]
+                           self.distribution.probability(Event({self.distribution.variable: portion.closed(3, 4)}))]
         weights_by_hand = [weight / sum(weights_by_hand) for weight in weights_by_hand]
 
         self.assertEqual(conditional.weights, weights_by_hand)
 
         self.assertEqual(conditional.children[0].interval, portion.closed(1.5, 2))
         self.assertEqual(conditional.children[1].interval, portion.closed(3, 4))
-
 
     @unittest.skip("This unit test is not working, should work only for Truncated Gaussians")
     def test_conditional_triple_complex_intersection(self):
@@ -430,12 +428,10 @@ class GaussianDistributionTestCase(unittest.TestCase):
         expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}),
                                                VariableMap({self.distribution.variable: 0}))
         self.assertEqual(expectation[self.distribution.variable], 2)
-        variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}),
-                                            expectation)
+        variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}), expectation)
         self.assertEqual(variance[self.distribution.variable], 4)
 
-        third_order_moment = self.distribution.moment(VariableMap({self.distribution.variable: 3}),
-                                                      expectation)
+        third_order_moment = self.distribution.moment(VariableMap({self.distribution.variable: 3}), expectation)
         self.assertEqual(third_order_moment[self.distribution.variable], 0)
 
         fourth_order_moment = self.distribution.moment(VariableMap({self.distribution.variable: 4}), expectation)
@@ -451,24 +447,29 @@ class GaussianDistributionTestCase(unittest.TestCase):
         print(RenderTree(conditional))
         variance = conditional.variance(conditional.variables)
         sub_cond_1, prob_1 = self.distribution.conditional(sub_event_1)
-        sub_cond_2, prob_2  = self.distribution.conditional(sub_event_2)
+        sub_cond_2, prob_2 = self.distribution.conditional(sub_event_2)
         sub_expectation_1 = sub_cond_1.expectation(sub_cond_1.variables)
         sub_expectation_2 = sub_cond_2.expectation(sub_cond_2.variables)
-        self.assertAlmostEqual(expectation[conditional.variables[0]], conditional.weights[0] * \
-                                sub_expectation_1[sub_cond_1.variables[0]] + conditional.weights[1] * sub_expectation_2[sub_cond_2.variables[0]], places = 7)
+        self.assertAlmostEqual(expectation[conditional.variables[0]],
+                               conditional.weights[0] * sub_expectation_1[sub_cond_1.variables[0]] +
+                               conditional.weights[1] * sub_expectation_2[sub_cond_2.variables[0]], places=7)
 
-        sub_variance_1 = sub_cond_1.moment(VariableMap({sub_cond_1.variable: 2}), sub_cond_1.expectation(sub_cond_1.variables))
-        sub_variance_2 = sub_cond_2.moment(VariableMap({sub_cond_2.variable: 2}), sub_cond_2.expectation(sub_cond_2.variables))
-        print("Mixture Expectation: " , expectation[conditional.variables[0]])
+        sub_variance_1 = sub_cond_1.moment(VariableMap({sub_cond_1.variable: 2}),
+                                           sub_cond_1.expectation(sub_cond_1.variables))
+        sub_variance_2 = sub_cond_2.moment(VariableMap({sub_cond_2.variable: 2}),
+                                           sub_cond_2.expectation(sub_cond_2.variables))
+        print("Mixture Expectation: ", expectation[conditional.variables[0]])
 
-        self.assertAlmostEqual(variance[conditional.variables[0]], conditional.weights[0] * \
-                                   sub_variance_1[sub_cond_1.variables[0]] + conditional.weights[1] * sub_variance_2[sub_cond_2.variables[0]] + \
-                                   conditional.weights[0] * sub_expectation_1[sub_cond_1.variables[0]]**2 + \
-                                   conditional.weights[1] * sub_expectation_2[sub_cond_2.variables[0]]**2 -
-                                   (conditional.weights[0] * sub_expectation_1[sub_cond_1.variables[0]] + \
-                                    conditional.weights[1] * sub_expectation_2[sub_cond_2.variables[0]]) ** 2, places = 7)
+        self.assertAlmostEqual(variance[conditional.variables[0]],
+                               conditional.weights[0] * sub_variance_1[sub_cond_1.variables[0]] + conditional.weights[
+                                   1] * sub_variance_2[sub_cond_2.variables[0]] + conditional.weights[0] *
+                               sub_expectation_1[sub_cond_1.variables[0]] ** 2 + conditional.weights[1] *
+                               sub_expectation_2[sub_cond_2.variables[0]] ** 2 - (
+                                           conditional.weights[0] * sub_expectation_1[sub_cond_1.variables[0]] + \
+                                           conditional.weights[1] * sub_expectation_2[sub_cond_2.variables[0]]) ** 2,
+                               places=7)
 
-        print("Mixture Variance: " , variance[conditional.variables[0]])
+        print("Mixture Variance: ", variance[conditional.variables[0]])
 
         a_1 = (sub_cond_1.lower - sub_cond_1.mean) / math.sqrt(sub_cond_1.variance)
         b_1 = (sub_cond_1.upper - sub_cond_1.mean) / math.sqrt(sub_cond_1.variance)
@@ -476,40 +477,38 @@ class GaussianDistributionTestCase(unittest.TestCase):
         b_2 = (sub_cond_2.upper - sub_cond_2.mean) / math.sqrt(sub_cond_2.variance)
         # normalized_center = (expectation[conditional.variables[0]] - sub_cond_1.mean) / math.sqrt(sub_cond_1.variance)
         total_norm_const = sub_cond_1.normalizing_constant + sub_cond_2.normalizing_constant
-        center = sub_cond_1.mean + sqrt(sub_cond_1.variance) * sqrt(2/pi)/total_norm_const * 0.5 * \
-                            (-gamma.cdf(a_1**2/2 , 1) + gamma.cdf(b_1**2/2 , 1) -gamma.cdf(a_2**2/2 , 1) + gamma.cdf(b_2**2/2 , 1))
+        center = sub_cond_1.mean + sqrt(sub_cond_1.variance) * sqrt(2 / pi) / total_norm_const * 0.5 * (
+                    -gamma.cdf(a_1 ** 2 / 2, 1) + gamma.cdf(b_1 ** 2 / 2, 1) - gamma.cdf(a_2 ** 2 / 2, 1) + gamma.cdf(
+                b_2 ** 2 / 2, 1))
         print("Center: ", center)
-        normalized_center = (center - sub_cond_1.mean)/ sqrt(sub_cond_1.variance)
-        print ("Normalized Center: " , normalized_center)
+        normalized_center = (center - sub_cond_1.mean) / sqrt(sub_cond_1.variance)
+        print("Normalized Center: ", normalized_center)
         truncated_moment = 0
 
         for k in range(3):
+            multiplying_constant = sub_cond_1.variance * factorial(2) / (factorial(k) * factorial(2 - k)) * 1 / (
+                total_norm_const) * 2 ** (k / 2) * math.gamma((k + 1) / 2) / sqrt(pi) * 0.5
 
-           multiplying_constant = sub_cond_1.variance * factorial(2) / (factorial(k) * factorial(2 - k)) \
-                                   * 1/(total_norm_const) * 2 ** (k / 2) * math.gamma((k + 1) / 2) / sqrt(pi) * 0.5
+            gamma_term_a_1 = -gamma.cdf(a_1 ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(a_1) + k % 2)
+            gamma_term_b_1 = gamma.cdf(b_1 ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(b_1) + k % 2)
+            gamma_term_a_2 = -gamma.cdf(a_2 ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(a_2) + k % 2)
+            gamma_term_b_2 = gamma.cdf(b_2 ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(b_2) + k % 2)
 
-           gamma_term_a_1 = -gamma.cdf(a_1 ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(a_1) + k % 2)
-           gamma_term_b_1 = gamma.cdf(b_1 ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(b_1) + k % 2)
-           gamma_term_a_2 = -gamma.cdf(a_2 ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(a_2) + k % 2)
-           gamma_term_b_2 = gamma.cdf(b_2 ** 2 / 2, (k + 1) / 2) * ((1 - k % 2) * np.sign(b_2) + k % 2)
+            I_1 = (gamma_term_a_1 + gamma_term_b_1) * (-normalized_center) ** (2 - k)
+            I_2 = (gamma_term_a_2 + gamma_term_b_2) * (normalized_center) ** (2 - k)
+            truncated_moment += multiplying_constant * (I_1 + I_2)
 
-           I_1 = (gamma_term_a_1 + gamma_term_b_1) * (-normalized_center) ** (2 - k)
-           I_2 = (gamma_term_a_2 + gamma_term_b_2) * (normalized_center) ** (2 - k)
-           truncated_moment += multiplying_constant * (I_1 + I_2)
+        print("Variance according to Japanese Man formula: ", truncated_moment)
 
-        print("Variance according to Japanese Man formula: " , truncated_moment)
-
-        self.assertAlmostEqual(variance[conditional.variables[0]], truncated_moment, places=7)
-        #TODO: Fix this test, in order to fix it something might need to change in the truncated moment for supporting the striped truncation
-
+        self.assertAlmostEqual(variance[conditional.variables[0]], truncated_moment,
+                               places=7)  # TODO: Fix this test, in order to fix it something might need to change in the truncated moment for supporting the striped truncation
 
     def test_moment_with_different_center_than_expectation(self):
         center = VariableMap({self.distribution.variable: 2.5})
 
         expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}), center)
         self.assertEqual(expectation[self.distribution.variable], -0.5)
-        variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}),
-                                            center)
+        variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}), center)
         self.assertEqual(variance[self.distribution.variable], 4.25)
 
         third_order_moment = self.distribution.moment(VariableMap({self.distribution.variable: 3}), center)
@@ -524,15 +523,12 @@ class GaussianDistributionTestCase(unittest.TestCase):
         deserialized = Unit.from_json(serialization)
         self.assertIsInstance(deserialized, GaussianDistribution)
 
-
     def test_plot(self):
         fig = go.Figure(data=self.distribution.plot())
-        self.assertIsNotNone(fig)
-        # fig.show()
+        self.assertIsNotNone(fig)  # fig.show()
 
 
 class TruncatedGaussianDistributionTestCase(unittest.TestCase):
-
     distribution: TruncatedGaussianDistribution
 
     def setUp(self):
@@ -542,54 +538,57 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
         print(self.distribution)
         self.assertEqual(self.distribution.mean, 2.)
 
-
     def test_cdf(self):
         self.assertAlmostEqual(self.distribution.cdf(0), 0.285, places=3)
         self.assertEqual(self.distribution.cdf(3), 1)
         self.assertEqual(self.distribution.cdf(-3), 0)
 
-
     def test_raw_moment(self):
-
         gauss_distribution: GaussianDistribution = GaussianDistribution(Continuous("x"), mean=0, variance=1)
         beta = (self.distribution.upper - self.distribution.mean) / math.sqrt(self.distribution.variance)
         alpha = (self.distribution.lower - self.distribution.mean) / math.sqrt(self.distribution.variance)
-        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}), VariableMap({self.distribution.variable: 0}))
+        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}),
+                                               VariableMap({self.distribution.variable: 0}))
         self.assertAlmostEqual(expectation[self.distribution.variable], 0.5544205, places=7)
-        second_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}), VariableMap({self.distribution.variable: 0}))
-        variance = self.distribution.variance*((1-(beta*gauss_distribution.pdf(beta) - alpha * gauss_distribution.pdf(alpha))/self.distribution.normalizing_constant)-
-        ((gauss_distribution.pdf(beta)- gauss_distribution.pdf(alpha))/self.distribution.normalizing_constant)**2)
-        self.assertAlmostEqual(second_moment[self.distribution.variable], variance + expectation[self.distribution.variable]**2, places=7)
+        second_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}),
+                                                 VariableMap({self.distribution.variable: 0}))
+        variance = self.distribution.variance * ((1 - (
+                    beta * gauss_distribution.pdf(beta) - alpha * gauss_distribution.pdf(
+                alpha)) / self.distribution.normalizing_constant) - ((gauss_distribution.pdf(
+            beta) - gauss_distribution.pdf(alpha)) / self.distribution.normalizing_constant) ** 2)
+        self.assertAlmostEqual(second_moment[self.distribution.variable],
+                               variance + expectation[self.distribution.variable] ** 2, places=7)
 
     def test_centered_moment(self):
         gauss_distribution: GaussianDistribution = GaussianDistribution(Continuous("x"), mean=0, variance=1)
-        beta = (self.distribution.upper-self.distribution.mean)/math.sqrt(self.distribution.variance)
-        alpha = (self.distribution.lower-self.distribution.mean)/math.sqrt(self.distribution.variance)
+        beta = (self.distribution.upper - self.distribution.mean) / math.sqrt(self.distribution.variance)
+        alpha = (self.distribution.lower - self.distribution.mean) / math.sqrt(self.distribution.variance)
         center = VariableMap({self.distribution.variable: self.distribution.mean})
         expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}), center)
-        offset_term = -math.sqrt(self.distribution.variance) * (gauss_distribution.pdf(beta) -
-                                                                gauss_distribution.pdf(alpha)) / self.distribution.normalizing_constant
+        offset_term = -math.sqrt(self.distribution.variance) * (gauss_distribution.pdf(beta) - gauss_distribution.pdf(
+            alpha)) / self.distribution.normalizing_constant
         self.assertAlmostEqual(expectation[self.distribution.variable], 0 + offset_term, places=7)
-        second_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}),
-                                                 center)
-        variance = self.distribution.variance * ((1 - (beta * gauss_distribution.pdf(beta) - alpha * gauss_distribution.pdf(
-                                                alpha)) / self.distribution.normalizing_constant) -
-                                                 ((gauss_distribution.pdf(beta) - gauss_distribution.pdf(
-                                                     alpha)) / self.distribution.normalizing_constant) ** 2)
+        second_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}), center)
+        variance = self.distribution.variance * ((1 - (
+                    beta * gauss_distribution.pdf(beta) - alpha * gauss_distribution.pdf(
+                alpha)) / self.distribution.normalizing_constant) - ((gauss_distribution.pdf(
+            beta) - gauss_distribution.pdf(alpha)) / self.distribution.normalizing_constant) ** 2)
         self.assertAlmostEqual(second_moment[self.distribution.variable], variance + offset_term ** 2, places=7)
 
     def test_moment_with_different_center_than_expectation(self):
-
         center = VariableMap({self.distribution.variable: 2.5})
-        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}), VariableMap({self.distribution.variable: 0}))
+        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}),
+                                               VariableMap({self.distribution.variable: 0}))
         first_moment = self.distribution.moment(VariableMap({self.distribution.variable: 1}), center)
-        self.assertAlmostEqual(first_moment[self.distribution.variable], expectation[self.distribution.variable] -
-                               center[self.distribution.variable], places = 7)
-        second_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}),
-                                                 center)
-        second_raw_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}), VariableMap({self.distribution.variable: 0}))
-        self.assertAlmostEqual(second_moment[self.distribution.variable], second_raw_moment[self.distribution.variable] +
-                               center[self.distribution.variable]**2 - 2 * center[self.distribution.variable] * expectation[self.distribution.variable], places=7)
+        self.assertAlmostEqual(first_moment[self.distribution.variable],
+                               expectation[self.distribution.variable] - center[self.distribution.variable], places=7)
+        second_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}), center)
+        second_raw_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}),
+                                                     VariableMap({self.distribution.variable: 0}))
+        self.assertAlmostEqual(second_moment[self.distribution.variable],
+                               second_raw_moment[self.distribution.variable] + center[
+                                   self.distribution.variable] ** 2 - 2 * center[self.distribution.variable] *
+                               expectation[self.distribution.variable], places=7)
 
     def test_conditional_simple_intersection(self):
         event = Event({self.distribution.variable: portion.closed(1, 2)})
@@ -610,8 +609,7 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
     def test_plot(self):
         fig = go.Figure(data=self.distribution.plot())
         self.assertIsNotNone(fig)
-        fig.show()
-
+        # fig.show()
 
 
 if __name__ == '__main__':

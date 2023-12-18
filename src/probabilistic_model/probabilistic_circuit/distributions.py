@@ -544,6 +544,29 @@ class UniformDistribution(ContinuousDistribution):
         variable = random_events.variables.Variable.from_json(data["variable"])
         return cls(variable, portion.from_data(data["interval"]))
 
+    def plot(self) -> List:
+        domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
+        x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None,
+             self.domain[self.variable].lower, self.domain[self.variable].upper, None,
+             self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05]
+
+        pdf_values = [0, 0, None, self.pdf_value(), self.pdf_value(), None, 0, 0]
+        pdf_trace = go.Scatter(x=x, y=pdf_values, mode='lines', name="Probability Density Function")
+
+        cdf_values = [value if value is None else self.cdf(value) for value in x]
+        cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name="Cumulative Distribution Function")
+
+        mode, maximum_likelihood = self.mode()
+        mode = mode[0][self.variable]
+
+        expectation = self.expectation([self.variable])[self.variable]
+        mode_trace = (go.Scatter(x=[mode.lower, mode.lower, mode.upper, mode.upper, ],
+                                 y=[0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0], mode='lines+markers',
+                                 name="Mode", fill="toself"))
+        expectation_trace = (go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05],
+                                        mode='lines+markers', name="Expectation"))
+        return [pdf_trace, cdf_trace, mode_trace, expectation_trace]
+
 
 class DiracDeltaDistribution(ContinuousDistribution):
     """
