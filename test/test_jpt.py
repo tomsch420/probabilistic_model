@@ -17,7 +17,7 @@ from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic, Continuous)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.probabilistic_circuit.distributions import IntegerDistribution, SymbolicDistribution, \
+from probabilistic_model.probabilistic_circuit.distribution import IntegerDistribution, SymbolicDistribution, \
     UnivariateDiscreteDistribution
 from probabilistic_model.probabilistic_circuit.exporter.dotexporter import GraphVizExporter
 from probabilistic_model.probabilistic_circuit.units import DecomposableProductUnit, Unit

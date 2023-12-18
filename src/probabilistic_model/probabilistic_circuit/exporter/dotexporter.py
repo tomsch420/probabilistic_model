@@ -1,7 +1,7 @@
 import graphviz
 from anytree import PreOrderIter
 
-from probabilistic_model.probabilistic_circuit.distributions import UnivariateDistribution
+from probabilistic_model.probabilistic_circuit.distribution import UnivariateDistribution
 from probabilistic_model.probabilistic_circuit.units import Unit
 import plotly.graph_objects as go
 import tempfile

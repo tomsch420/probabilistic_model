@@ -7,7 +7,8 @@ import portion
 from random_events.variables import Continuous, Variable
 from typing_extensions import Self
 
-from ..probabilistic_circuit.distributions import ContinuousDistribution, UniformDistribution, DiracDeltaDistribution
+from ..probabilistic_circuit.distribution import ContinuousDistribution, DiracDeltaDistribution
+from ..probabilistic_circuit.distributions.uniform import UniformDistribution
 from ..probabilistic_circuit.units import DeterministicSumUnit, Unit
 
 

@@ -6,8 +6,8 @@ from random_events.events import Event
 
 from probabilistic_model.probabilistic_circuit.units import Unit, DeterministicSumUnit, DecomposableProductUnit, \
     SumUnit, ProductUnit, SmoothSumUnit
-from probabilistic_model.probabilistic_circuit.distributions import (IntegerDistribution, UniformDistribution,
-                                                                     SymbolicDistribution)
+from probabilistic_model.probabilistic_circuit.distribution import (IntegerDistribution, SymbolicDistribution)
+from probabilistic_model.probabilistic_circuit.distributions.uniform import UniformDistribution
 from random_events.variables import Integer, Symbolic, Continuous
 from anytree import PreOrderIter, RenderTree
 

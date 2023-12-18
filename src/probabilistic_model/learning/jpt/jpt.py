@@ -12,7 +12,7 @@ from random_events.variables import Variable
 
 from .variables import Continuous, Integer, Symbolic
 from ..nyga_distribution import NygaDistribution
-from ...probabilistic_circuit.distributions import DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution
+from ...probabilistic_circuit.distribution import DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution
 from ...probabilistic_circuit.units import DeterministicSumUnit, DecomposableProductUnit, Unit
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots

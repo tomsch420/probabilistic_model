@@ -7,7 +7,8 @@ from anytree import RenderTree
 from random_events.variables import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.distribution import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.distributions.uniform import UniformDistribution
 import plotly.graph_objects as go
 
 from probabilistic_model.probabilistic_circuit.units import Unit
