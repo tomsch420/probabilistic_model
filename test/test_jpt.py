@@ -8,10 +8,12 @@ import numpy as np
 import pandas as pd
 import random_events
 import sklearn.datasets
+from anytree import RenderTree
 from jpt import infer_from_dataframe as old_infer_from_dataframe
 from jpt.learning.impurity import Impurity
 from jpt.trees import JPT as OldJPT, Leaf
 from random_events.variables import Variable
+from random_events.events import Event
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
@@ -293,6 +295,14 @@ class BreastCancerTestCase(unittest.TestCase):
         model_ = JPT.from_json(model_)
         self.assertEqual(model, model_)
         file.close()
+
+    def test_conditional_inference(self):
+        evidence = Event()
+        query = Event()
+
+        conditional_model, evidence_probability = self.model.conditional(evidence)
+        self.assertAlmostEqual(1., evidence_probability)
+        self.assertAlmostEqual(1., conditional_model.probability(query))
 
 
 class MNISTTestCase(unittest.TestCase):

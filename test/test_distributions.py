@@ -324,7 +324,7 @@ class UnivariateContinuousSumUnitTestCase(unittest.TestCase):
     def test_plot(self):
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
-        fig.show()
+        # fig.show()
 
 
 class GaussianDistributionTestCase(unittest.TestCase):

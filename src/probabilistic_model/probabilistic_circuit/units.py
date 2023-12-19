@@ -275,7 +275,8 @@ class SumUnit(Unit):
         """
         sum_of_weights = sum(self.weights)
         normalized_weights = [weight / sum_of_weights for weight in self.weights]
-        result = self.__class__(self.variables, normalized_weights)
+        result = self._parameter_copy()
+        result.weights = normalized_weights
         result.children = self.children
         return result
 
@@ -400,6 +401,9 @@ class SmoothSumUnit(SumUnit):
             result.extend(child.sample(states.count(index)))
         return result
 
+    def _parameter_copy(self):
+        return self.__class__(self.variables, weights=self.weights)
+
     def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
         """
         Calculate the condition probability distribution using the latent variable interpretation and bayes theorem.
@@ -432,7 +436,8 @@ class SmoothSumUnit(SumUnit):
         if probability == 0:
             return None, 0
 
-        result = self.__class__(self.variables, conditional_weights)
+        result = self._parameter_copy()
+        result.weights = conditional_weights
         result.children = conditional_children
         return result.normalize(), probability
 

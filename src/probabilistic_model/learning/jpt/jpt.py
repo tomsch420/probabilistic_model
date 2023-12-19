@@ -366,6 +366,17 @@ class JPT(DeterministicSumUnit):
         return {variable.name: [dependency.name for dependency in dependencies]
                 for variable, dependencies in self.dependencies.items()}
 
+    def _parameter_copy(self):
+        result = self.__class__(variables=self.variables,
+                                targets=self.targets,
+                                features=self.features,
+                                min_samples_leaf=self.min_samples_leaf,
+                                min_impurity_improvement=self.min_impurity_improvement,
+                                max_depth=self.max_depth,
+                                dependencies=self.dependencies)
+        result.weights = self.weights
+        return result
+
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
         result["targets"] = [variable.name for variable in self.targets]

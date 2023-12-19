@@ -361,6 +361,13 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         result.children = self._copy_children()
         return result
 
+    def _parameter_copy(self):
+        result = NygaDistribution(variable=self.variable,
+                                  min_samples_per_quantile=self.min_samples_per_quantile,
+                                  min_likelihood_improvement=self.min_likelihood_improvement)
+        result.weights = self.weights
+        return result
+
     def to_json(self) -> Dict[str, Any]:
         """
         Create a json representation of the distribution.
