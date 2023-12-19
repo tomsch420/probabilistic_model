@@ -220,7 +220,6 @@ class InductionStep:
 
         # if the improvement is not good enough
         else:
-
             # mount a uniform distribution
             distribution = self.create_uniform_distribution()
             self.nyga_distribution.weights += [self.sum_weights()]

@@ -20,7 +20,7 @@ from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_
                                                         Symbolic, Continuous)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distribution import IntegerDistribution, SymbolicDistribution, \
-    UnivariateDiscreteDistribution
+    UnivariateDiscreteDistribution, UnivariateDiscreteSumUnit
 from probabilistic_model.probabilistic_circuit.exporter.dotexporter import GraphVizExporter
 from probabilistic_model.probabilistic_circuit.units import DecomposableProductUnit, Unit
 
@@ -303,6 +303,11 @@ class BreastCancerTestCase(unittest.TestCase):
         conditional_model, evidence_probability = self.model.conditional(evidence)
         self.assertAlmostEqual(1., evidence_probability)
         self.assertAlmostEqual(1., conditional_model.probability(query))
+
+    def test_marginal(self):
+        marginal = self.model.marginal(self.model.variables[:1])
+        simplified = marginal.simplify()
+        print(RenderTree(marginal))
 
 
 class MNISTTestCase(unittest.TestCase):
