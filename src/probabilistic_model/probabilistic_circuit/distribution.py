@@ -75,6 +75,15 @@ class UnivariateDistribution(Unit):
         """
         raise NotImplementedError
 
+    def merge(self, other: Self):
+        """
+        Merge two distributions into one distribution.
+
+        :param other: The distribution to merge with
+        :return: The merged distribution
+        """
+        raise NotImplementedError
+
 
 class ContinuousDistribution(UnivariateDistribution):
     """
@@ -229,6 +238,13 @@ class ContinuousDistribution(UnivariateDistribution):
         return traces
 
 
+class UnivariateSumUnit(SmoothSumUnit, UnivariateDistribution):
+
+    def __init__(self, variable: Variable, weights: Iterable[float], parent=None):
+        SmoothSumUnit.__init__(self, [variable], weights, parent)
+        UnivariateDistribution.__init__(self, variable, parent)
+
+
 class UnivariateContinuousSumUnit(SmoothSumUnit, ContinuousDistribution):
     """
     Class for univariate continuous mixtures.
@@ -357,6 +373,27 @@ class UnivariateDiscreteDistribution(UnivariateDistribution):
                              name="Probability"))
         traces.append(go.Bar(x=mode, y=[likelihood] * len(mode), name="Mode"))
         return traces
+
+
+class UnivariateDiscreteSumUnit(UnivariateSumUnit):
+    """
+    Class for Univariate Discrete Mixtures.
+    """
+
+    def simplify(self) -> Self:
+        """
+        Simplify the mixture of discrete distributions into a single, discrete distribution.
+        :return:
+        """
+        new_weights = []
+
+        for value in self.variable.domain:
+            probability = self.probability(Event({self.variable: value}))
+            new_weights.append(probability)
+
+        result = self.children[0]._parameter_copy()
+        result.weights = new_weights
+        return result
 
 
 class SymbolicDistribution(UnivariateDiscreteDistribution):

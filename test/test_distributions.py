@@ -8,7 +8,7 @@ from random_events.events import Event, VariableMap
 from random_events.variables import Continuous, Symbolic, Integer
 
 from probabilistic_model.probabilistic_circuit.distribution import SymbolicDistribution, IntegerDistribution, \
-    DiracDeltaDistribution, UnivariateContinuousSumUnit
+    DiracDeltaDistribution, UnivariateContinuousSumUnit, UnivariateDiscreteSumUnit
 from probabilistic_model.probabilistic_circuit.distributions.gaussian import GaussianDistribution, \
     TruncatedGaussianDistribution
 from probabilistic_model.probabilistic_circuit.distributions.uniform import UniformDistribution
@@ -200,7 +200,36 @@ class SymbolicDistributionTestCase(unittest.TestCase):
 
     def test_plot(self):
         fig = go.Figure(data=self.distribution.plot())
-        self.assertIsNotNone(fig)  # fig.show()
+        self.assertIsNotNone(fig)
+        # fig.show()
+
+
+class UnivariateDiscreteSumUnitTestCase(unittest.TestCase):
+
+    variable: Symbolic = Symbolic("animal", {"cat", "dog", "chicken"})
+    distribution: UnivariateDiscreteSumUnit
+
+    def setUp(self):
+        distribution_1 = SymbolicDistribution(self.variable,
+                                              [1 / 6, 3 / 6, 2 / 6])
+        distribution_2 = SymbolicDistribution(self.variable,
+                                              [3 / 6, 2 / 6, 1 / 6])
+        self.distribution = UnivariateDiscreteSumUnit(self.variable, [0.3, 0.7])
+        self.distribution.children = [distribution_1, distribution_2]
+
+    def test_simplify(self):
+        result = self.distribution.simplify()
+        self.assertIsInstance(result, SymbolicDistribution)
+        self.assertEqual(result.variable, self.variable)
+        weights_by_hand = [(1. * 0.3 + 0.7 * 3.)/6.,
+                           (3. * 0.3 + 0.7 * 2.)/6.,
+                           (2. * 0.3 + 0.7 * 1)/6.]
+        for w, w_ in zip(weights_by_hand, result.weights):
+            self.assertAlmostEqual(w, w_)
+
+    def test_probability(self):
+        result = self.distribution.probability(Event({self.variable: ("cat", "dog")}))
+        self.assertAlmostEqual(result, 1 - ((3. * 0.3 + 0.7 * 2.)/6.))
 
 
 class IntegerDistributionTestCase(unittest.TestCase):
