@@ -307,7 +307,9 @@ class BreastCancerTestCase(unittest.TestCase):
     def test_marginal(self):
         marginal = self.model.marginal(self.model.variables[:1])
         simplified = marginal.simplify()
-        print(RenderTree(marginal))
+        print(RenderTree(simplified))
+        self.assertEqual(marginal.height, 3)
+        self.assertEqual(simplified.height, 1)
 
 
 class MNISTTestCase(unittest.TestCase):

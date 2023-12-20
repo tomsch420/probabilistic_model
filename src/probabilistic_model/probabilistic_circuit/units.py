@@ -467,7 +467,8 @@ class SmoothSumUnit(SumUnit):
         if len(self.children) == 1:
             return self.children[0].simplify()
 
-        result = self.__class__(self.variables, [])
+        result = self._parameter_copy()
+        result.weights = []
         for weight, child in zip(self.weights, self.children):
             simplified_child = child.simplify()
             if type(simplified_child) is type(self):
