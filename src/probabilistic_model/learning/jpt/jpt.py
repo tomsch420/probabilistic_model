@@ -8,11 +8,12 @@ import pandas as pd
 import portion
 
 from random_events.events import VariableMap, Event, EncodedEvent
-from random_events.variables import Variable
+from random_events.variables import Variable, Discrete
 
 from .variables import Continuous, Integer, Symbolic
 from ..nyga_distribution import NygaDistribution
-from ...probabilistic_circuit.distribution import DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution
+from ...probabilistic_circuit.distribution import (DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution,
+                                                   UnivariateDiscreteSumUnit)
 from ...probabilistic_circuit.units import DeterministicSumUnit, DecomposableProductUnit, Unit
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
@@ -407,3 +408,23 @@ class JPT(DeterministicSumUnit):
         result.children = children
         result.weights = data["weights"]
         return result
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        result = super().marginal(variables)
+        if result is None or len(result.variables) > 1:
+            return result
+
+        variable = result.variables[0]
+
+        if isinstance(variable, Continuous):
+            distribution = NygaDistribution.from_uniform_mixture(result)
+
+        elif isinstance(variable, Discrete):
+            distribution = UnivariateDiscreteSumUnit(variable, [])
+            distribution.weights = result.weights
+            distribution.children = result.children[0].children
+            distribution = distribution.simplify()
+        else:
+            raise NotImplementedError(f"Variable {variable} not supported.")
+
+        return distribution

@@ -4,12 +4,13 @@ from typing import Optional, List, Deque, Union, Tuple, Dict, Any
 
 import plotly.graph_objects as go
 import portion
+from random_events.events import Event
 from random_events.variables import Continuous, Variable
 from typing_extensions import Self
 
 from ..probabilistic_circuit.distribution import ContinuousDistribution, DiracDeltaDistribution
 from ..probabilistic_circuit.distributions.uniform import UniformDistribution
-from ..probabilistic_circuit.units import DeterministicSumUnit, Unit
+from ..probabilistic_circuit.units import DeterministicSumUnit, Unit, SmoothSumUnit
 
 
 @dataclasses.dataclass
@@ -383,4 +384,34 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         result = cls(list(variables)[0], data["min_samples_per_quantile"], data["min_likelihood_improvement"])
         result.weights = data["weights"]
         result.children = children
+        return result
+
+    @classmethod
+    def from_uniform_mixture(cls, mixture: SmoothSumUnit) -> Self:
+        """
+        Construct a Nyga Distribution from a mixture of uniform distributions.
+        The mixture does not have to be deterministic.
+        :param mixture: An arbitrary, univariate mixture of uniform distributions
+        :return: A Nyga Distribution describing the same function.
+        """
+        variable: Continuous = mixture.variables[0]
+        result = cls(variable)
+
+        all_mixture_points = set()
+        for leaf in mixture.leaves:
+            leaf: UniformDistribution
+            all_mixture_points.add(leaf.interval.lower)
+            all_mixture_points.add(leaf.interval.upper)
+
+        all_mixture_points = sorted(list(all_mixture_points))
+
+        for index, (lower, upper) in enumerate(zip(all_mixture_points[:-1], all_mixture_points[1:])):
+            if index == len(all_mixture_points) - 2:
+                interval = portion.closed(lower, upper)
+            else:
+                interval = portion.closedopen(lower, upper)
+            leaf = UniformDistribution(variable, interval, parent=result)
+            weight = mixture.probability(Event({variable: interval}))
+            result.weights.append(weight)
+
         return result

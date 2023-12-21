@@ -127,5 +127,18 @@ class InductionStepTestCase(unittest.TestCase):
         distribution.min_likelihood_improvement = 0
         self.assertNotEqual(distribution, distribution_)
 
+    def test_from_mixture_of_uniform_distributions(self):
+        uniform_mixture = (UniformDistribution(self.variable, portion.closed(0, 5)) +
+                           UniformDistribution(self.variable, portion.closed(2, 3)))
+
+        distribution = NygaDistribution.from_uniform_mixture(uniform_mixture)
+        solution_by_hand = NygaDistribution(self.variable)
+        leaf_1 = UniformDistribution(self.variable, portion.closedopen(0, 2), parent=solution_by_hand)
+        leaf_2 = UniformDistribution(self.variable, portion.closedopen(2, 3), parent=solution_by_hand)
+        leaf_3 = UniformDistribution(self.variable, portion.closed(3, 5), parent=solution_by_hand)
+        solution_by_hand.weights = [0.2, 0.6, 0.2]
+        self.assertEqual(distribution, solution_by_hand)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -23,6 +23,7 @@ from probabilistic_model.probabilistic_circuit.distribution import IntegerDistri
     UnivariateDiscreteDistribution, UnivariateDiscreteSumUnit
 from probabilistic_model.probabilistic_circuit.exporter.dotexporter import GraphVizExporter
 from probabilistic_model.probabilistic_circuit.units import DecomposableProductUnit, Unit
+import plotly.graph_objects as go
 
 
 class VariableTestCase(unittest.TestCase):
@@ -304,12 +305,16 @@ class BreastCancerTestCase(unittest.TestCase):
         self.assertAlmostEqual(1., evidence_probability)
         self.assertAlmostEqual(1., conditional_model.probability(query))
 
-    def test_marginal(self):
+    def test_univariate_continuous_marginal(self):
         marginal = self.model.marginal(self.model.variables[:1])
-        simplified = marginal.simplify()
-        print(RenderTree(simplified))
-        self.assertEqual(marginal.height, 3)
-        self.assertEqual(simplified.height, 1)
+        self.assertIsInstance(marginal, NygaDistribution)
+        self.assertEqual(marginal.height, 1)
+
+    def test_univariate_symbolic_marginal(self):
+        variables = [v for v in self.model.variables if v.name == "malignant"]
+        marginal = self.model.marginal(variables)
+        self.assertIsInstance(marginal, SymbolicDistribution)
+        self.assertEqual(marginal.height, 0)
 
 
 class MNISTTestCase(unittest.TestCase):
