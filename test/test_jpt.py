@@ -193,24 +193,28 @@ class JPTTestCase(unittest.TestCase):
 
         return True
 
-    @unittest.skip("Only the first split is different to JPTs.")
-    def test_fit_and_compare_to_jpt(self):
-        self.model._min_samples_leaf = 10
-        self.model.fit(self.data)
-        variables = old_infer_from_dataframe(self.data, scale_numeric_types=False)
+    def test_preprocessing_and_compare_to_jpt(self):
+        variables = old_infer_from_dataframe(self.data, scale_numeric_types=False, precision=0.)
         original_jpt = OldJPT(variables, min_samples_leaf=self.model.min_samples_leaf,
                               min_impurity_improvement=self.model.min_impurity_improvement)
+        original_preprocessing = original_jpt._preprocess_data(self.data)
+        own_preprocessing = self.model.preprocess_data(self.data)
 
+        # Symbolic columns are not preprocessed in order in JPTs. The difference is intended
+        self.assertTrue(np.all(original_preprocessing[:, :-1] == own_preprocessing[:, :-1]))
+
+    def test_fit_and_compare_to_jpt(self):
+        self.model._min_samples_leaf = 10
+        self.model.keep_sample_indices = True
+        self.model.fit(self.data)
+        variables = old_infer_from_dataframe(self.data, scale_numeric_types=False, precision=0.)
+        original_jpt = OldJPT(variables, min_samples_leaf=self.model.min_samples_leaf,
+                              min_impurity_improvement=self.model.min_impurity_improvement)
         original_jpt = original_jpt.learn(self.data, keep_samples=True)
         self.assertEqual(len(self.model.children), len(original_jpt.leaves))
-        # original_jpt.plot()
-        for leaf in original_jpt.leaves.values():
-            print(leaf.idx)
-            equalities = []
-            print(leaf.s_indices)
-            for product in self.model.children:
-                equalities.append(self.leaf_equal_to_product(leaf, product))
-            print(equalities)
+
+        for original_leaf, new_leaf in zip(original_jpt.leaves.values(), self.model.children):
+            self.assertSetEqual(set(original_leaf.s_indices), set(new_leaf.sample_indices))
 
     def test_jpt_continuous_variables_only(self):
         data = self.data[["real"]]

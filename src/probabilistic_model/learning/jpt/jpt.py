@@ -14,10 +14,23 @@ from .variables import Continuous, Integer, Symbolic
 from ..nyga_distribution import NygaDistribution
 from ...probabilistic_circuit.distribution import (DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution,
                                                    UnivariateDiscreteSumUnit)
-from ...probabilistic_circuit.units import DeterministicSumUnit, DecomposableProductUnit, Unit
+from ...probabilistic_circuit.units import DeterministicSumUnit, DecomposableProductUnit as DPU, Unit
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+
+
+class DecomposableProductUnit(DPU):
+
+    sample_indices: List[int]
+    """
+    The indices of the samples of the training dataset that are used to fit a product unit.
+    """
+
+    total_samples: int
+    """
+    The number of samples that are used to form this product unit.
+    """
 
 
 class JPT(DeterministicSumUnit):
@@ -67,6 +80,11 @@ class JPT(DeterministicSumUnit):
     impurity: Optional[Impurity] = None
     c45queue: deque = deque()
     weights: List[float]
+
+    keep_sample_indices: bool = False
+    """
+    Rather to store the sample indices in the leaves or not.
+    """
 
     def __init__(self, variables: Iterable[Variable], targets: Optional[Iterable[Variable]] = None,
                  features: Optional[Iterable[Variable]] = None, min_samples_leaf: Union[int, float] = 1,
@@ -178,7 +196,8 @@ class JPT(DeterministicSumUnit):
 
         for variable_index, variable in enumerate(self.variables):
             column = data[variable.name]
-            column = variable.encode_many(column)
+            if not isinstance(variable, Integer):
+                column = variable.encode_many(column)
             result[:, variable_index] = column
 
         return result
@@ -231,6 +250,10 @@ class JPT(DeterministicSumUnit):
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
             self.weights.append(number_of_samples/len(data))
+
+            if self.keep_sample_indices:
+                leaf_node.sample_indices = self.indices[start:end]
+
             leaf_node.parent = self
 
             # terminate the induction
@@ -272,7 +295,14 @@ class JPT(DeterministicSumUnit):
         return left_event, right_event
 
     def create_leaf_node(self, data: np.ndarray) -> DecomposableProductUnit:
+        """
+        Create a fully decomposable product node from a 2D data array.
+
+        :param data: The preprocessed data to use for training
+        :return: The leaf node.
+        """
         result = DecomposableProductUnit(self.variables)
+        result.total_samples = len(data)
 
         for index, variable in enumerate(self.variables):
             if isinstance(variable, Continuous):
@@ -290,7 +320,7 @@ class JPT(DeterministicSumUnit):
 
             elif isinstance(variable, Integer):
                 distribution = IntegerDistribution(variable, weights=[1/len(variable.domain)]*len(variable.domain))
-                distribution._fit(data[:, index].tolist())
+                distribution.fit(data[:, index].tolist())
             else:
                 raise ValueError(f"Variable {variable} is not supported.")
 
