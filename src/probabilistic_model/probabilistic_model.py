@@ -228,20 +228,20 @@ class ProbabilisticModelWrapper:
     model: ProbabilisticModel
     """The model that is wrapped."""
 
-    def _likelihood(self, event: Iterable) -> float:
-        return self.model._likelihood(event)
+    def likelihood(self, event: Iterable) -> float:
+        return self.model.likelihood(event)
 
-    def _probability(self, event: EncodedEvent) -> float:
-        return self.model._probability(event)
+    def probability(self, event: Event) -> float:
+        return self.model.probability(event)
 
-    def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
-        return self.model._mode()
+    def mode(self) -> Tuple[List[Event], float]:
+        return self.model.mode()
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         return self.model.marginal(variables)
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
-        return self.model._conditional(event)
+    def conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+        return self.model.conditional(event)
 
     def sample(self, amount: int) -> Iterable:
         return self.model.sample(amount)
