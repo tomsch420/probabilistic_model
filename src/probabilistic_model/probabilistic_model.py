@@ -218,3 +218,33 @@ class ProbabilisticModel(abc.ABC):
         order = VariableMap({variable: 2 for variable in variables})
         center = self.expectation(variables)
         return self.moment(order, center)
+
+
+class ProbabilisticModelWrapper:
+    """
+    Wrapper class for probabilistic models.
+    """
+
+    model: ProbabilisticModel
+    """The model that is wrapped."""
+
+    def _likelihood(self, event: Iterable) -> float:
+        return self.model._likelihood(event)
+
+    def _probability(self, event: EncodedEvent) -> float:
+        return self.model._probability(event)
+
+    def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
+        return self.model._mode()
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        return self.model.marginal(variables)
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+        return self.model._conditional(event)
+
+    def sample(self, amount: int) -> Iterable:
+        return self.model.sample(amount)
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        return self.model.moment(order, center)
