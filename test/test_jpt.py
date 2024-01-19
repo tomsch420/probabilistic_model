@@ -24,6 +24,7 @@ from probabilistic_model.probabilistic_circuit.distribution import IntegerDistri
 from probabilistic_model.probabilistic_circuit.exporter.dotexporter import GraphVizExporter
 from probabilistic_model.probabilistic_circuit.units import DecomposableProductUnit, Unit
 import plotly.graph_objects as go
+from probabilistic_model.distributions.multinomial import Multinomial
 
 
 class VariableTestCase(unittest.TestCase):
@@ -351,3 +352,36 @@ class MNISTTestCase(unittest.TestCase):
         model_ = JPT.from_json(model_)
         self.assertEqual(model, model_)
         file.close()
+
+
+class TemplateJPTTestCase(unittest.TestCase):
+
+    model_1: JPT
+    model_2: JPT
+    interaction_probabilities: Multinomial
+
+    def setUp(self):
+        np.random.seed(69)
+
+        models = []
+        latent_variables = []
+
+        for index in range(2):
+            data = pd.DataFrame()
+            data[f"integer_{index}"] = np.concatenate((np.random.randint(low=0, high=4, size=50),
+                                                         np.random.randint(7, 10, 50)))
+            data[f"real_{index}"] = np.random.normal(2, 4, 100)
+            data[f"symbol_{index}"] = np.random.randint(0, 4, 100).astype(str)
+
+            model = JPT(infer_variables_from_dataframe(data, scale_continuous_types=False),
+                               min_samples_leaf=40)
+            model.fit(data)
+            models.append(model)
+            latent_variables.append(Symbolic(f"latent_{index}", list(range(len(model.children)))))
+
+        self.model_1, self.model_2 = models
+
+        interaction_probabilities = np.array([[0, 0.2],
+                                              [0.3, 0.5]])
+        self.interaction_probabilities = Multinomial(latent_variables, interaction_probabilities)
+
