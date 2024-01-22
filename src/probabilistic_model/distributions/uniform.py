@@ -2,13 +2,13 @@ import random
 from typing_extensions import Self, List, Tuple, Optional, Union, Dict, Any
 
 from random_events.events import Event, EncodedEvent, VariableMap
-from random_events.variables import Continuous, Variable
+from random_events.variables import Continuous
 
 import portion
 
 from plotly import graph_objects as go
 
-from probabilistic_model.probabilistic_circuit import ContinuousDistribution, DeterministicSumUnit, Unit
+from .distributions import ContinuousDistribution
 from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
 
 
@@ -138,3 +138,6 @@ class UniformDistribution(ContinuousDistribution):
         expectation_trace = (go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05],
                                         mode='lines+markers', name="Expectation"))
         return [pdf_trace, cdf_trace, mode_trace, expectation_trace]
+
+    def __hash__(self):
+        return hash((self.variable.name, hash(self.interval)))
