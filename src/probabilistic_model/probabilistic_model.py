@@ -31,13 +31,15 @@ class ProbabilisticModel(abc.ABC):
     _variables: Tuple[Variable]
     """The variables involved in the model."""
 
-    def __init__(self, variables: Iterable[Variable]):
+    def __init__(self, variables: Optional[Iterable[Variable]]):
         """
         Initialize the model.
 
         :param variables: The variables in the model.
         """
-        self._variables = tuple(sorted(variables))
+
+        if variables is not None:
+            self._variables = tuple(sorted(variables))
 
     @property
     def variables(self) -> Tuple[Variable]:

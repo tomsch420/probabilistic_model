@@ -1,2 +1,2 @@
-from .gaussian import *
-from .uniform import *
+from .gaussian import GaussianDistribution
+from .uniform import UniformDistribution

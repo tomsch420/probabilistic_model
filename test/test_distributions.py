@@ -667,5 +667,9 @@ class TruncatedGaussianDistributionJapaneseManTestCase(unittest.TestCase):
         self.assertAlmostEqual(raw_moment, 0, delta=0.01)
 
 
+class NewDistributionTestCase(unittest.TestCase):
+
+    real = Continuous("x")
+
 if __name__ == '__main__':
     unittest.main()
