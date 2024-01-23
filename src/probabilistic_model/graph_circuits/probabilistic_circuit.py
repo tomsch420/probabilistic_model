@@ -1,12 +1,12 @@
 import itertools
 from typing import Tuple, Iterable
 
+import networkx as nx
 from random_events.events import EncodedEvent
 from random_events.variables import Variable
-from typing_extensions import List, Optional, Union, Any
+from typing_extensions import List, Optional, Union, Any, Self
 
-from ..probabilistic_model import ProbabilisticModel, ProbabilisticModelWrapper
-import networkx as nx
+from ..probabilistic_model import ProbabilisticModel, ProbabilisticModelWrapper, OrderType, CenterType, MomentType
 
 
 class ProbabilisticCircuitMixin:
@@ -42,8 +42,8 @@ class ProbabilisticCircuitMixin:
         """
         Return a list of targets to the children of this component.
         """
-        return [self.probabilistic_circuit[source][target]["edge"]
-                for source, target in self.probabilistic_circuit.out_edges(self)]
+        return [self.probabilistic_circuit[source][target]["edge"] for source, target in
+                self.probabilistic_circuit.out_edges(self)]
 
     @property
     def variables(self) -> Tuple[Variable]:
@@ -51,17 +51,30 @@ class ProbabilisticCircuitMixin:
         return tuple(sorted(variables))
 
     def leaf_nodes(self) -> List[ProbabilisticModel]:
-        return [node for node in nx.descendants(self.probabilistic_circuit, self)
-                if self.probabilistic_circuit.out_degree(node) == 0]
+        return [node for node in nx.descendants(self.probabilistic_circuit, self) if
+                self.probabilistic_circuit.out_degree(node) == 0]
 
     def reset_result_of_current_query(self):
         """
         Reset the result of the current query recursively.
         """
         self.result_of_current_query = None
-
         for edge in self.edges_to_sub_circuits():
             edge.target.reset_result_of_current_query()
+
+
+def cache_inference_result(func):
+    """
+    Decorator for caching the result of a function call in a 'ProbabilisticCircuitMixin' object.
+    """
+
+    def wrapper(*args, **kwargs):
+        self: ProbabilisticCircuitMixin = args[0]
+        if self.result_of_current_query is None:
+            self.result_of_current_query = func(*args, **kwargs)
+        return self.result_of_current_query
+
+    return wrapper
 
 
 class Component(ProbabilisticCircuitMixin, ProbabilisticModel):
@@ -76,35 +89,23 @@ class Component(ProbabilisticCircuitMixin, ProbabilisticModel):
 class SmoothSumUnit(Component):
     representation = "+"
 
+    @cache_inference_result
     def _likelihood(self, event: Iterable) -> float:
-
-        # query cache
-        if self.result_of_current_query is not None:
-            return self.result_of_current_query
 
         result = 0.
 
         for edge in self.edges_to_sub_circuits():
             result += edge.weight * edge.target._likelihood(event)
 
-        # update cache
-        self.result_of_current_query = result
-
         return result
 
+    @cache_inference_result
     def _probability(self, event: EncodedEvent) -> float:
-
-        # query cache
-        if self.result_of_current_query is not None:
-            return self.result_of_current_query
 
         result = 0.
 
         for edge in self.edges_to_sub_circuits():
             result += edge.weight * edge.target._probability(event)
-
-        # update cache
-        self.result_of_current_query = result
 
         return result
 
@@ -136,10 +137,6 @@ class DeterministicSumUnit(SmoothSumUnit):
 
     def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
 
-        # query cache
-        if self.result_of_current_query is not None:
-            return self.result_of_current_query
-
         modes = []
         likelihoods = []
 
@@ -160,10 +157,6 @@ class DeterministicSumUnit(SmoothSumUnit):
                 result.extend(mode)
 
         modes = self.merge_modes_if_one_dimensional(result)
-
-        # update cache
-        self.result_of_current_query = (modes, maximum_likelihood)
-
         return modes, maximum_likelihood
 
 
@@ -174,11 +167,8 @@ class DecomposableProductUnit(Component):
 
     representation = "⊗"
 
+    @cache_inference_result
     def _likelihood(self, event: Iterable) -> float:
-
-        # query cache
-        if self.result_of_current_query is not None:
-            return self.result_of_current_query
 
         variables = self.variables
 
@@ -191,21 +181,14 @@ class DecomposableProductUnit(Component):
 
             result *= subcircuit._likelihood(partial_event)
 
-        # update cache
-        self.result_of_current_query = result
-
         return result
 
+    @cache_inference_result
     def _probability(self, event: EncodedEvent) -> float:
-
-        # query cache
-        if self.result_of_current_query is not None:
-            return self.result_of_current_query
 
         result = 1.
 
         for edge in self.edges_to_sub_circuits():
-
             subcircuit = edge.target
             subcircuit_variables = edge.target.variables
 
@@ -214,16 +197,9 @@ class DecomposableProductUnit(Component):
             # construct partial event for child
             result *= subcircuit._probability(subcircuit_event)
 
-        # update cache
-        self.result_of_current_query = result
-
         return result
 
     def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
-
-        # query cache
-        if self.result_of_current_query is not None:
-            return self.result_of_current_query
 
         modes = []
         resulting_likelihood = 1.
@@ -247,11 +223,7 @@ class DecomposableProductUnit(Component):
 
             result.append(mode)
 
-        # update cache
-        self.result_of_current_query = (result, resulting_likelihood)
-
         return result, resulting_likelihood
-
 
 
 class Edge:
@@ -339,6 +311,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
         return nx.is_directed_acyclic_graph(self) and nx.is_weakly_connected(self)
 
     def add_node(self, component: ProbabilisticCircuitMixin, **attr):
+
+        if component in self.nodes():
+            return
+
         component.probabilistic_circuit = self
         component.id = max(node.id for node in self.nodes) + 1 if len(self.nodes) > 0 else 0
         super().add_node(component, **attr)
@@ -353,6 +329,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
         if isinstance(edge.source, DecomposableProductUnit) and isinstance(edge, DirectedWeightedEdge):
             raise ValueError(f"Product units can only have un-weighted edges. Got {type(edge)} instead.")
 
+        self.add_nodes_from([edge.source, edge.target])
         super().add_edge(edge.source, edge.target, edge=edge, **kwargs)
 
     def add_edges_from(self, edges: Iterable[Edge], **kwargs):
@@ -394,3 +371,16 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
         result = self.root._mode()
         root.reset_result_of_current_query()
         return result
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        ...
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+        ...
+
+    def sample(self, amount: int) -> Iterable:
+        ...
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        ...
+

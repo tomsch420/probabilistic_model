@@ -55,6 +55,10 @@ class MinimalGraphCircuitTestCase(unittest.TestCase):
 
         self.model = model
 
+    def show(self):
+        nx.draw(self.model, with_labels=True)
+        plt.show()
+
     def test_setup(self):
         node_ids = set()
         for node in self.model.nodes():
@@ -108,6 +112,15 @@ class MinimalGraphCircuitTestCase(unittest.TestCase):
         for node in self.model.nodes():
             self.assertIsNone(node.result_of_current_query)
 
+    def test_caching(self):
+        event = Event({self.real: portion.closed(0, 5),
+                       self.real2: portion.closed(2, 5)})
+        _ = self.model.root.probability(event)
+
+        for node in self.model.nodes():
+            if not isinstance(node, LeafComponent):
+                self.assertIsNotNone(node.result_of_current_query)
+
     def test_mode(self):
         mode, likelihood = list(self.model.nodes)[2].mode()
         self.assertEqual(likelihood, 0.5)
@@ -118,23 +131,24 @@ class MinimalGraphCircuitTestCase(unittest.TestCase):
             _ = self.model.mode()
 
     def test_mode_with_product(self):
-        non_deterministic_node = list(self.model.nodes)[5]
+        non_deterministic_node = [node for node in self.model.nodes() if node.id == 5][0]
+
+        for descendant in nx.descendants(self.model, non_deterministic_node):
+            self.model.remove_node(descendant)
+
         self.model.remove_node(non_deterministic_node)
         new_node = LeafComponent(UniformDistribution(self.real2, portion.closed(2, 3)))
-        self.model.add_node(new_node)
-
-        nx.draw(self.model, with_labels=True)
-        plt.show()
 
         new_edge = Edge(self.model.root, new_node)
         self.model.add_edge(new_edge)
 
-
+        self.assertTrue(new_node in self.model.nodes())
 
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 0.5)
         self.assertEqual(mode, [Event({self.real: portion.closed(0, 1),
                                        self.real2: portion.closed(2, 3)})])
+
 
 if __name__ == '__main__':
     unittest.main()
