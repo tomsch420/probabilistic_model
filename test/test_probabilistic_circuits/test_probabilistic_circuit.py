@@ -292,7 +292,6 @@ class SimplifyTestCase (unittest.TestCase):
 
         model = distribution_1 * distribution_2 * distribution_3 * distribution_4
         simplified_model = model.simplify()
-        print(RenderTree(simplified_model))
         self.assertIsInstance(simplified_model.children[0], UniformDistribution)
         self.assertIsInstance(simplified_model.children[1], UniformDistribution)
         self.assertIsInstance(simplified_model.children[2], UniformDistribution)

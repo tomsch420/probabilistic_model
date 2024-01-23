@@ -67,6 +67,14 @@ class ContinuousDistribution(UnivariateDistribution):
     def variable(self) -> Continuous:
         return self.variables[0]
 
+    @property
+    def domain(self) -> Event:
+        """
+        The domain of this distribution.
+        :return: The domain (support) of this distribution as event.
+        """
+        raise NotImplementedError
+
     def _cdf(self, value: float) -> float:
         """
         Evaluate the cumulative distribution function at the encoded `value`.
@@ -131,15 +139,23 @@ class ContinuousDistribution(UnivariateDistribution):
 
     def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
 
-        interval: portion.Interval = event[self.variable]
+        # form intersection of event and domain
+        intersection: portion.Interval = event[self.variable].intersection(self.domain[self.variable])
 
-        if interval.lower == interval.upper:
-            return self.conditional_from_singleton(interval)
+        # if intersection is empty
+        if intersection.empty:
+            return None, 0
 
-        elif len(interval) == 1:
-            self.conditional_from_simple_interval(interval)
+        # if intersection is singleton
+        elif intersection.lower == intersection.upper:
+            return self.conditional_from_singleton(intersection)
 
-        return self.conditional_from_complex_interval(interval)
+        # if intersection is simple interval
+        elif len(intersection) == 1:
+            return self.conditional_from_simple_interval(intersection)
+
+        # if intersection is complex interval
+        return self.conditional_from_complex_interval(intersection)
 
 
 class DiscreteDistribution(UnivariateDistribution):
@@ -184,7 +200,6 @@ class DiscreteDistribution(UnivariateDistribution):
         maximum_weight = max(self.weights)
         mode = EncodedEvent(
             {self.variable: [index for index, weight in enumerate(self.weights) if weight == maximum_weight]})
-
         return [mode], maximum_weight
 
     def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
@@ -284,6 +299,12 @@ class IntegerDistribution(DiscreteDistribution, ContinuousDistribution):
         """
         return sum(self._pdf(value) for value in range(value))
 
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        order = order[self.variable]
+        center = center[self.variable]
+        result = sum([self.pdf(value) * (value - center) ** order for value in self.variable.domain])
+        return VariableMap({self.variable: result})
+
     def plot(self) -> List[Union[go.Bar, go.Scatter]]:
         traces = super().plot()
         _, likelihood = self.mode()
@@ -365,8 +386,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
     def __eq__(self, other):
         return (isinstance(other, self.__class__) and
                 self.location == other.location and
-                self.density_cap == other.density_cap and
-                super().__eq__(other))
+                self.density_cap == other.density_cap)
 
     @property
     def representation(self):
@@ -380,3 +400,6 @@ class DiracDeltaDistribution(ContinuousDistribution):
                 "location": self.location,
                 "density_cap": self.density_cap,
                 "type": random_events.utils.get_full_class_name(self.__class__)}
+
+    def __repr__(self):
+        return f"DiracDeltaDistribution({self.variable}, {self.location}, {self.density_cap})"

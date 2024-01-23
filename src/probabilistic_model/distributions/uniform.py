@@ -1,15 +1,14 @@
 import random
-from typing_extensions import Self, List, Tuple, Optional, Union, Dict, Any
-
-from random_events.events import Event, EncodedEvent, VariableMap
-from random_events.variables import Continuous
+from typing import Tuple, Optional
 
 import portion
-
 from plotly import graph_objects as go
+from random_events.events import Event, EncodedEvent, VariableMap
+from random_events.variables import Continuous
+from typing_extensions import List, Dict, Any, Self
 
-from .distributions import ContinuousDistribution
 from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
+from .distributions import ContinuousDistribution
 
 
 class UniformDistribution(ContinuousDistribution):
@@ -113,14 +112,17 @@ class UniformDistribution(ContinuousDistribution):
     def __copy__(self):
         return self.__class__(self.variable, self.interval)
 
+    def conditional_from_simple_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
+        return UniformDistribution(self.variable, interval), self.cdf(interval.upper) - self.cdf(interval.lower)
+
     def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "interval": portion.to_data(self.interval)}
+        return {"variable": self.variable.to_json(), "interval": portion.to_data(self.interval)}
 
     def plot(self) -> List:
         domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
         x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None,
-             self.domain[self.variable].lower, self.domain[self.variable].upper, None,
-             self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05]
+             self.domain[self.variable].lower, self.domain[self.variable].upper, None, self.domain[self.variable].upper,
+             self.domain[self.variable].upper + domain_size * 0.05]
 
         pdf_values = [0, 0, None, self.pdf_value(), self.pdf_value(), None, 0, 0]
         pdf_trace = go.Scatter(x=x, y=pdf_values, mode='lines', name="Probability Density Function")
@@ -135,8 +137,9 @@ class UniformDistribution(ContinuousDistribution):
         mode_trace = (go.Scatter(x=[mode.lower, mode.lower, mode.upper, mode.upper, ],
                                  y=[0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0], mode='lines+markers',
                                  name="Mode", fill="toself"))
-        expectation_trace = (go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05],
-                                        mode='lines+markers', name="Expectation"))
+        expectation_trace = (
+            go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05], mode='lines+markers',
+                       name="Expectation"))
         return [pdf_trace, cdf_trace, mode_trace, expectation_trace]
 
     def __hash__(self):

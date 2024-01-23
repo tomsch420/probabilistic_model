@@ -233,12 +233,6 @@ class IntegerDistribution(PMIntegerDistribution, UnivariateDiscreteDistribution)
     distributions.
     """
 
-    def moment(self, order: OrderType, center: CenterType) -> MomentType:
-        order = order[self.variable]
-        center = center[self.variable]
-        result = sum([self.pdf(value) * (value - center) ** order for value in self.variable.domain])
-        return VariableMap({self.variable: result})
-
 
 class DiracDeltaDistribution(PMDiracDeltaDistribution, ContinuousDistribution):
 
