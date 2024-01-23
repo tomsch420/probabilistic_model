@@ -109,6 +109,25 @@ class SmoothSumUnit(Component):
 
         return result
 
+    @cache_inference_result
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+        total_probability = 0
+
+        for edge in self.edges_to_sub_circuits():
+            conditional, local_probability = edge.target._conditional(event)
+
+            if local_probability == 0:
+                for node in nx.descendants(self.probabilistic_circuit, edge.target):
+                    self.probabilistic_circuit.remove_node(node)
+                continue
+
+            total_probability += edge.weight * local_probability
+
+        if total_probability == 0:
+            return None, 0
+        else:
+            return self, total_probability
+
 
 class DeterministicSumUnit(SmoothSumUnit):
     """
@@ -135,6 +154,7 @@ class DeterministicSumUnit(SmoothSumUnit):
 
         return [mode]
 
+    @cache_inference_result
     def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
 
         modes = []
@@ -199,6 +219,7 @@ class DecomposableProductUnit(Component):
 
         return result
 
+    @cache_inference_result
     def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
 
         modes = []
@@ -224,6 +245,26 @@ class DecomposableProductUnit(Component):
             result.append(mode)
 
         return result, resulting_likelihood
+
+    @cache_inference_result
+    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
+
+        # initialize probability
+        probability = 1.
+
+        for edge in self.edges_to_sub_circuits():
+
+            # get conditional child and probability in pre-order
+            conditional_child, conditional_probability = edge.target._conditional(event)
+
+            # if any is 0, the whole probability is 0
+            if conditional_probability == 0:
+                return None, 0
+
+            # update probability and children
+            probability *= conditional_probability
+
+        return self, probability
 
 
 class Edge:
@@ -280,6 +321,11 @@ class LeafComponent(ProbabilisticCircuitMixin, ProbabilisticModelWrapper):
     @property
     def variables(self):
         return self.model.variables
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+        result, likelihood = self.model._conditional(event)
+        self.model = result
+        return self, likelihood
 
 
 class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
@@ -376,7 +422,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
         ...
 
     def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
-        ...
+        root = self.root
+        result = self.root._conditional(event)
+        root.reset_result_of_current_query()
+        return result
 
     def sample(self, amount: int) -> Iterable:
         ...

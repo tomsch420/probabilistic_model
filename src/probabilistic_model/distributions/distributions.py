@@ -1,13 +1,15 @@
 import random
+from typing import Optional
 
 import portion
-from random_events.events import EncodedEvent, Event
+import random_events.utils
+from random_events.events import EncodedEvent, Event, VariableMap
 from random_events.variables import Variable, Continuous, Discrete, Symbolic, Integer
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 import plotly.graph_objects as go
 
 
-from ..probabilistic_model import ProbabilisticModel
+from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
 
 
 class UnivariateDistribution(ProbabilisticModel):
@@ -93,6 +95,51 @@ class ContinuousDistribution(UnivariateDistribution):
             probability += self.cdf(interval_.upper) - self.cdf(interval_.lower)
 
         return probability
+
+    def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[Optional['DiracDeltaDistribution'], float]:
+        """
+        Create a conditional distribution from a singleton interval.
+
+        :return: A DiracDelta distribution at the point described by the singleton. The density cap is set
+        to the pdf value of this distribution at the point.
+        """
+        if singleton.lower != singleton.upper:
+            raise ValueError("This method can only be used with singletons.")
+
+        likelihood = self.pdf(singleton.lower)
+
+        if likelihood == 0:
+            return None, 0
+
+        else:
+            return DiracDeltaDistribution(self.variable, singleton.lower, density_cap=likelihood), likelihood
+
+    def conditional_from_simple_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
+        """
+        Create a conditional distribution from an interval that has length one and is not singleton.
+
+        This is the method that should be overloaded by subclasses.
+        The _conditional method will call this method if the interval is not singleton and has length one.
+
+        :param interval: The interval to condition on
+        :return: A conditional distribution and the probability.
+        """
+        raise NotImplementedError()
+
+    def conditional_from_complex_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
+        raise NotImplementedError()
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+
+        interval: portion.Interval = event[self.variable]
+
+        if interval.lower == interval.upper:
+            return self.conditional_from_singleton(interval)
+
+        elif len(interval) == 1:
+            self.conditional_from_simple_interval(interval)
+
+        return self.conditional_from_complex_interval(interval)
 
 
 class DiscreteDistribution(UnivariateDistribution):
@@ -244,3 +291,92 @@ class IntegerDistribution(DiscreteDistribution, ContinuousDistribution):
         traces.append(go.Scatter(x=[expectation, expectation], y=[0, likelihood * 1.05], mode="lines+markers",
                                  name="Expectation"))
         return traces
+
+
+class DiracDeltaDistribution(ContinuousDistribution):
+    """
+    Class for Dirac delta distributions.
+    The Dirac measure is used whenever evidence is given as a singleton instance.
+    """
+
+    location: float
+    """
+    The location of the Dirac delta distribution.
+    """
+
+    density_cap: float
+    """
+    The density cap of the Dirac delta distribution.
+    This value will be used to replace infinity in likelihood.
+    """
+
+    def __init__(self, variable: Continuous, location: float, density_cap: float = float("inf")):
+        super().__init__(variable)
+        self.location = location
+        self.density_cap = density_cap
+
+    @property
+    def domain(self) -> Event:
+        return Event({self.variable: portion.singleton(self.location)})
+
+    def _pdf(self, value: float) -> float:
+        if value == self.location:
+            return self.density_cap
+        else:
+            return 0
+
+    def _cdf(self, value: float) -> float:
+        if value < self.location:
+            return 0
+        else:
+            return 1
+
+    def _probability(self, event: EncodedEvent) -> float:
+        if self.location in event[self.variable]:
+            return 1
+        else:
+            return 0
+
+    def _mode(self):
+        return [self.domain.encode()], self.density_cap
+
+    def sample(self, amount: int) -> List[List[float]]:
+        return [[self.location] for _ in range(amount)]
+
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+        if self.location in event[self.variable]:
+            return self.__copy__(), 1
+        else:
+            return None, 0
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        order = order[self.variable]
+        center = center[self.variable]
+
+        if order == 0:
+            moment = 1.
+        elif order == 1:
+            moment = self.location - center
+        else:
+            moment = 0.
+
+        return VariableMap({self.variable: moment})
+
+    def __eq__(self, other):
+        return (isinstance(other, self.__class__) and
+                self.location == other.location and
+                self.density_cap == other.density_cap and
+                super().__eq__(other))
+
+    @property
+    def representation(self):
+        return f"DiracDelta({self.location}, {self.density_cap})"
+
+    def __copy__(self):
+        return self.__class__(self.variable, self.location, self.density_cap)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {"variable": self.variable.to_json(),
+                "location": self.location,
+                "density_cap": self.density_cap,
+                "type": random_events.utils.get_full_class_name(self.__class__)}

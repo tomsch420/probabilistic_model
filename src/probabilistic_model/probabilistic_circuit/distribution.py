@@ -15,7 +15,8 @@ from ..distributions.distributions import (UnivariateDistribution as PMUnivariat
                                            ContinuousDistribution as PMContinuousDistribution,
                                            DiscreteDistribution as PMDiscreteDistribution,
                                            SymbolicDistribution as PMSymbolicDistribution,
-                                           IntegerDistribution as PMIntegerDistribution)
+                                           IntegerDistribution as PMIntegerDistribution,
+                                           DiracDeltaDistribution as PMDiracDeltaDistribution)
 
 
 class UnivariateDistribution(Unit, PMUnivariateDistribution):
@@ -61,36 +62,14 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution):
     Abstract base class for continuous distributions.
     """
 
-    def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[
-        Optional['DiracDeltaDistribution'], float]:
-        """
-        Create a dirac impulse from a singleton interval. The density is capped at the likelihood of the given value.
+    def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[Optional['DiracDeltaDistribution'], float]:
+        conditional, likelihood = super().conditional_from_singleton(singleton)
 
-        :param singleton: The singleton interval from an encoded event.
-        :return: A dirac impulse and the likelihood.
-        """
-        if singleton.lower != singleton.upper:
-            raise ValueError("This method can only be used with singletons.")
+        if conditional is None:
+            return conditional, likelihood
 
-        likelihood = self.pdf(singleton.lower)
-
-        if likelihood == 0:
-            return None, 0
-
-        else:
-            return DiracDeltaDistribution(self.variable, singleton.lower, density_cap=likelihood), likelihood
-
-    def conditional_from_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
-        """
-        Create a conditional distribution from an interval that is not singleton.
-
-        This is the method that should be overloaded by subclasses.
-        The _conditional method will call this method if the interval is not singleton.
-
-        :param interval: The interval from an encoded event.
-        :return: A conditional distribution and the probability.
-        """
-        raise NotImplementedError
+        result = DiracDeltaDistribution(self.variable, conditional.location, conditional.density_cap)
+        return result, likelihood
 
     def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
 
@@ -105,7 +84,7 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution):
 
             # handle the non-singleton case
             else:
-                distribution, probability = self.conditional_from_interval(interval)
+                distribution, probability = self.conditional_from_simple_interval(interval)
 
             if probability > 0:
                 resulting_distributions.append(distribution)
@@ -261,87 +240,14 @@ class IntegerDistribution(PMIntegerDistribution, UnivariateDiscreteDistribution)
         return VariableMap({self.variable: result})
 
 
-class DiracDeltaDistribution(ContinuousDistribution):
-    """
-    Class for Dirac delta distributions.
-    The Dirac measure is used whenever evidence is given as a singleton instance.
-    """
-
-    location: float
-    """
-    The location of the Dirac delta distribution.
-    """
-
-    density_cap: float
-    """
-    The density cap of the Dirac delta distribution.
-    This value will be used to replace infinity in likelihood.
-    """
+class DiracDeltaDistribution(PMDiracDeltaDistribution, ContinuousDistribution):
 
     def __init__(self, variable: Continuous, location: float, density_cap: float = float("inf"), parent=None):
-        super().__init__(variable, parent)
-        self.location = location
-        self.density_cap = density_cap
-
-    @property
-    def domain(self) -> Event:
-        return Event({self.variable: portion.singleton(self.location)})
-
-    def _pdf(self, value: float) -> float:
-        if value == self.location:
-            return self.density_cap
-        else:
-            return 0
-
-    def _cdf(self, value: float) -> float:
-        if value < self.location:
-            return 0
-        else:
-            return 1
-
-    def _probability(self, event: EncodedEvent) -> float:
-        if self.location in event[self.variable]:
-            return 1
-        else:
-            return 0
-
-    def _mode(self):
-        return [self.domain.encode()], self.density_cap
-
-    def sample(self, amount: int) -> List[List[float]]:
-        return [[self.location] for _ in range(amount)]
-
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
-        if self.location in event[self.variable]:
-            return self.__copy__(), 1
-        else:
-            return None, 0
-
-    def moment(self, order: OrderType, center: CenterType) -> MomentType:
-        order = order[self.variable]
-        center = center[self.variable]
-
-        if order == 1:
-            return VariableMap({self.variable: self.location - center})
-        elif order == 2:
-            return VariableMap({self.variable: (self.location - center) ** 2})
-        else:
-            return VariableMap({self.variable: 0})
-
-    def __eq__(self, other):
-        return (isinstance(other,
-                           self.__class__) and self.location == other.location and self.density_cap == other.density_cap and super().__eq__(
-            other))
-
-    @property
-    def representation(self):
-        return f"DiracDelta({self.location}, {self.density_cap})"
-
-    def __copy__(self):
-        return self.__class__(self.variable, self.location, self.density_cap)
+        super().__init__(variable, location, density_cap)
+        ContinuousDistribution.__init__(self, variable, parent)
 
     def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "location": self.location, "density_cap": self.density_cap}
+        return {**ContinuousDistribution.to_json(self), "location": self.location, "density_cap": self.density_cap}
 
     @classmethod
     def from_json_with_variables_and_children(cls, data: Dict[str, Any], variables: List[Variable],

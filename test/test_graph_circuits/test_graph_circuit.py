@@ -149,6 +149,11 @@ class MinimalGraphCircuitTestCase(unittest.TestCase):
         self.assertEqual(mode, [Event({self.real: portion.closed(0, 1),
                                        self.real2: portion.closed(2, 3)})])
 
+    @unittest.skip("Not implemented yet")
+    def test_conditional(self):
+        event = Event()
+        self.model.conditional(event)
+
 
 if __name__ == '__main__':
     unittest.main()

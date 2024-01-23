@@ -25,7 +25,7 @@ class GaussianDistribution(PMGaussianDistribution, ContinuousDistribution):
         super().__init__(variable, mean, variance)
         ContinuousDistribution.__init__(self, variable, parent)
 
-    def conditional_from_interval(self, interval: portion.Interval) \
+    def conditional_from_simple_interval(self, interval: portion.Interval) \
             -> Tuple[Optional['TruncatedGaussianDistribution'], float]:
 
         # calculate the probability of the interval
@@ -60,7 +60,7 @@ class TruncatedGaussianDistribution(PMTruncatedGaussianDistribution, GaussianDis
         super().__init__(variable, interval, mean, variance)
         GaussianDistribution.__init__(self, variable, mean, variance, parent)
 
-    def conditional_from_interval(self, interval: portion.Interval) \
+    def conditional_from_simple_interval(self, interval: portion.Interval) \
             -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
 
         # calculate the probability of the interval
