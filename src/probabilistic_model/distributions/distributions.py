@@ -157,6 +157,57 @@ class ContinuousDistribution(UnivariateDistribution):
         # if intersection is complex interval
         return self.conditional_from_complex_interval(intersection)
 
+    def plot(self) -> List:
+        """
+        Generate a list of traces that can be used to plot the distribution in plotly figures.
+        """
+
+        traces = []
+        samples = [sample[0] for sample in self.sample(1000)]
+        samples.sort()
+
+        minimal_value = self.domain[self.variable].lower
+        if minimal_value <= -float("inf"):
+            minimal_value = samples[0]
+
+        maximal_value = self.domain[self.variable].upper
+        if maximal_value >= float("inf"):
+            maximal_value = samples[-1]
+
+        sample_range = maximal_value - minimal_value
+        minimal_value -= 0.05 * sample_range
+        maximal_value += 0.05 * sample_range
+
+        samples_with_padding = [minimal_value, samples[0]] + samples + [samples[-1], maximal_value]
+
+        pdf_values = [0, 0] + [self.pdf(sample) for sample in samples] + [0, 0]
+        traces.append(go.Scatter(x=samples_with_padding, y=pdf_values, mode="lines", name="PDF"))
+
+        cdf_values = [0, 0] + [self.cdf(sample) for sample in samples] + [1, 1]
+
+        traces.append(go.Scatter(x=samples_with_padding, y=cdf_values, mode="lines", name="CDF"))
+        mean = self.expectation([self.variable])[self.variable]
+
+        try:
+            modes, maximum_likelihood = self.mode()
+        except NotImplementedError:
+            modes = []
+            maximum_likelihood = max(pdf_values)
+
+        mean_trace = go.Scatter(x=[mean, mean], y=[0, maximum_likelihood * 1.05], mode="lines+markers",
+                                name="Expectation")
+        traces.append(mean_trace)
+
+        xs = []
+        ys = []
+        for mode in modes:
+            mode = mode[self.variable]
+            xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
+            ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
+        mode_trace = go.Scatter(x=xs, y=ys, mode="lines+markers", name="Mode", fill="toself")
+        traces.append(mode_trace)
+
+        return traces
 
 class DiscreteDistribution(UnivariateDistribution):
     """

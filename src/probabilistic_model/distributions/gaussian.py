@@ -118,6 +118,24 @@ class GaussianDistribution(ContinuousDistribution):
 
         return VariableMap({self.variable: moment})
 
+    def conditional_from_simple_interval(self, interval: portion.Interval) \
+            -> Tuple[Optional['TruncatedGaussianDistribution'], float]:
+
+        # calculate the probability of the interval
+        probability = self._probability(EncodedEvent({self.variable: interval}))
+
+        # if the probability is 0, return None
+        if probability == 0:
+            return None, 0
+
+        # else, form the intersection of the interval and the domain
+        intersection = interval
+        resulting_distribution = TruncatedGaussianDistribution(self.variable,
+                                                               interval=intersection,
+                                                               mean=self.mean,
+                                                               variance=self.variance)
+        return resulting_distribution, probability
+
     def __eq__(self, other):
         return self.mean == other.mean and self.variance == other.variance and super().__eq__(other)
 

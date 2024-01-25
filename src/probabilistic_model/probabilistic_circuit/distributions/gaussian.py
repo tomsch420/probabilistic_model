@@ -25,22 +25,6 @@ class GaussianDistribution(PMGaussianDistribution, ContinuousDistribution):
         super().__init__(variable, mean, variance)
         ContinuousDistribution.__init__(self, variable, parent)
 
-    def conditional_from_simple_interval(self, interval: portion.Interval) \
-            -> Tuple[Optional['TruncatedGaussianDistribution'], float]:
-
-        # calculate the probability of the interval
-        probability = self._probability(EncodedEvent({self.variable: interval}))
-
-        # if the probability is 0, return None
-        if probability == 0:
-            return None, 0
-
-        # else, form the intersection of the interval and the domain
-        intersection = interval
-        resulting_distribution = TruncatedGaussianDistribution(self.variable, interval=intersection,
-                                                               mean= self.mean, variance=self.variance)
-        return resulting_distribution, probability
-
     def to_json(self) -> Dict[str, Any]:
         return {**ContinuousDistribution.to_json(self), "mean": self.mean, "variance": self.variance}
 
@@ -49,6 +33,17 @@ class GaussianDistribution(PMGaussianDistribution, ContinuousDistribution):
                                               children: List['Unit']) -> Self:
         variable = random_events.variables.Variable.from_json(data["variable"])
         return cls(variable, data["mean"], data["variance"])
+
+    def conditional_from_simple_interval(self, interval: portion.Interval) \
+            -> Tuple[Optional[Union[DeterministicSumUnit, Self]], float]:
+
+        conditional, probability = super().conditional_from_simple_interval(interval)
+        if conditional is None:
+            return None, probability
+
+        resulting_distribution = TruncatedGaussianDistribution(self.variable, interval, conditional.mean,
+                                                               conditional.variance)
+        return resulting_distribution, probability
 
 
 class TruncatedGaussianDistribution(PMTruncatedGaussianDistribution, GaussianDistribution):
