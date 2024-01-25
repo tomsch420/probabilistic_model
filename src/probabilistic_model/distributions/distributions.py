@@ -137,7 +137,7 @@ class ContinuousDistribution(UnivariateDistribution):
     def conditional_from_complex_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
         raise NotImplementedError()
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+    def _conditional(self, event: EncodedEvent) -> Tuple[Optional['ContinuousDistribution'], float]:
 
         # form intersection of event and domain
         intersection: portion.Interval = event[self.variable].intersection(self.domain[self.variable])
@@ -436,8 +436,12 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     def __eq__(self, other):
         return (isinstance(other, self.__class__) and
+                self.variable == other.variable and
                 self.location == other.location and
                 self.density_cap == other.density_cap)
+
+    def __hash__(self):
+        return hash((self.variable, self.location, self.density_cap))
 
     @property
     def representation(self):

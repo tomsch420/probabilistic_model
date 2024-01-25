@@ -113,7 +113,7 @@ class UniformDistribution(ContinuousDistribution):
         return self.__class__(self.variable, self.interval)
 
     def conditional_from_simple_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
-        return UniformDistribution(self.variable, interval), self.cdf(interval.upper) - self.cdf(interval.lower)
+        return self.__class__(self.variable, interval), self.cdf(interval.upper) - self.cdf(interval.lower)
 
     def to_json(self) -> Dict[str, Any]:
         return {"variable": self.variable.to_json(), "interval": portion.to_data(self.interval)}
