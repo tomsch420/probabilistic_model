@@ -107,7 +107,7 @@ class UniformDistribution(ContinuousDistribution):
 
     @property
     def representation(self):
-        return f"\N{MATHEMATICAL SCRIPT CAPITAL U}{self.interval}"
+        return f"U({self.interval})"
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval)

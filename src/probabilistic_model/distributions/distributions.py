@@ -21,6 +21,13 @@ class UnivariateDistribution(ProbabilisticModel):
         super().__init__([variable])
 
     @property
+    def representation(self) -> str:
+        """
+        The symbol used to represent this distribution.
+        """
+        return self.__class__.__name__
+
+    @property
     def variable(self) -> Variable:
         """
         The variable of this distribution.
@@ -215,6 +222,7 @@ class ContinuousDistribution(UnivariateDistribution):
         traces.append(mode_trace)
 
         return traces
+
 
 class DiscreteDistribution(UnivariateDistribution):
     """
@@ -452,7 +460,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     @property
     def representation(self):
-        return f"DiracDelta({self.location}, {self.density_cap})"
+        return f"δ({self.location}, {self.density_cap})"
 
     def __copy__(self):
         return self.__class__(self.variable, self.location, self.density_cap)

@@ -23,7 +23,6 @@ class UniformDistribution(PMUniformDistribution, ContinuousDistribution):
         super().__init__(variable, interval)
         ContinuousDistribution.__init__(self, variable, parent=parent)
 
-
     def conditional_from_simple_interval(self, interval: portion.Interval) -> Tuple[
         Optional[Union[DeterministicSumUnit, Self]], float]:
 

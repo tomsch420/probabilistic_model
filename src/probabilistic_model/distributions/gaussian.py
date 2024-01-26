@@ -141,7 +141,7 @@ class GaussianDistribution(ContinuousDistribution):
 
     @property
     def representation(self):
-        return f"\N{MATHEMATICAL SCRIPT CAPITAL N}(\u03BC={self.mean},\u03C3\u00b2={self.variance})"
+        return f"N({self.mean}, {self.variance})"
 
     def __copy__(self):
         return self.__class__(self.variable, self.mean, self.variance)
@@ -281,7 +281,7 @@ class TruncatedGaussianDistribution(GaussianDistribution):
 
     @property
     def representation(self):
-        return f"\N{MATHEMATICAL SCRIPT CAPITAL N}(\u03BC={self.mean},\u03C3\u00b2={self.variance}|{self.interval})"
+        return f"N({self.mean},{self.variance} | {self.interval})"
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval, self.mean, self.variance)
