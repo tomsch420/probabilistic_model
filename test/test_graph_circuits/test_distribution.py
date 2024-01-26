@@ -42,6 +42,13 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(probability, 1.)
         self.assertEqual(conditional.location, 0.3)
 
+    def test_conditional_from_complex_event(self):
+        interval = portion.closed(0., 0.2) | portion.closed(0.5, 1.) | portion.singleton(0.3)
+        event = Event({self.variable: interval})
+        self.model.conditional(event)
+        self.assertEqual(len(list(self.model.probabilistic_circuit.nodes)), 4)
+        self.assertIsInstance(self.model.probabilistic_circuit.root, DeterministicSumUnit)
+
 
 
 

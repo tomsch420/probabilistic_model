@@ -1,18 +1,18 @@
-from typing import Tuple, Optional
-
 from random_events.events import EncodedEvent
-from typing_extensions import Self
+from typing_extensions import Union, Tuple, Optional
 
 import portion
 
 from ...distributions.distributions import (ContinuousDistribution as PMContinuousDistribution,
                                             DiracDeltaDistribution as PMDiracDeltaDistribution)
-from ..probabilistic_circuit import DeterministicSumUnit, ProbabilisticCircuitMixin, LeafComponent, DirectedWeightedEdge
+from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin, LeafComponent,
+                                     DirectedWeightedEdge, cache_inference_result)
 
 
 class ContinuousDistribution(PMContinuousDistribution, ProbabilisticCircuitMixin):
 
-    def conditional_from_complex_interval(self, interval: portion.Interval) -> Tuple[DeterministicSumUnit, float]:
+    def conditional_from_complex_interval(self, interval: portion.Interval) -> \
+            Tuple[Optional[DeterministicSumUnit], float]:
 
         resulting_distributions = []
         resulting_probabilities = []
@@ -43,7 +43,9 @@ class ContinuousDistribution(PMContinuousDistribution, ProbabilisticCircuitMixin
         conditional, probability = super().conditional_from_singleton(singleton)
         return DiracDeltaDistribution(conditional.variable, conditional.location, conditional.density_cap), probability
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional['ContinuousDistribution'], float]:
+    @cache_inference_result
+    def _conditional(self, event: EncodedEvent) -> \
+            Tuple[Optional[Union['ContinuousDistribution', 'DiracDeltaDistribution', DeterministicSumUnit]], float]:
         conditional, probability = super()._conditional(event)
 
         if conditional is None:
