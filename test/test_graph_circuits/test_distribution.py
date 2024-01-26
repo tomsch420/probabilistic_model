@@ -49,6 +49,11 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(len(list(self.model.probabilistic_circuit.nodes)), 4)
         self.assertIsInstance(self.model.probabilistic_circuit.root, DeterministicSumUnit)
 
+    def test_conditional_with_none(self):
+        event = Event({self.variable: 2})
+        conditional, probability = self.model.conditional(event)
+        self.assertEqual(len(list(self.model.probabilistic_circuit.nodes)), 0)
+        self.assertEqual(conditional, None)
 
 
 

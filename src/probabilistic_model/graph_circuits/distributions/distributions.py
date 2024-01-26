@@ -1,15 +1,22 @@
+from typing import Iterable
+
 from random_events.events import EncodedEvent
-from typing_extensions import Union, Tuple, Optional
+from random_events.variables import Variable
+from typing_extensions import Union, Tuple, Optional, Self
 
 import portion
 
 from ...distributions.distributions import (ContinuousDistribution as PMContinuousDistribution,
                                             DiracDeltaDistribution as PMDiracDeltaDistribution)
-from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin, LeafComponent,
+from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin,
                                      DirectedWeightedEdge, cache_inference_result)
 
 
 class ContinuousDistribution(PMContinuousDistribution, ProbabilisticCircuitMixin):
+
+    @property
+    def variables(self) -> Tuple[Variable]:
+        return self._variables
 
     def conditional_from_complex_interval(self, interval: portion.Interval) -> \
             Tuple[Optional[DeterministicSumUnit], float]:
@@ -32,8 +39,7 @@ class ContinuousDistribution(PMContinuousDistribution, ProbabilisticCircuitMixin
         self.probabilistic_circuit.add_node(conditional)
 
         for distribution, probability in zip(resulting_distributions, normalized_probabilities):
-            node = LeafComponent(distribution)
-            edge = DirectedWeightedEdge(conditional, node, probability)
+            edge = DirectedWeightedEdge(conditional, distribution, probability)
             conditional.probabilistic_circuit.add_edge(edge)
 
         return conditional, total_probability
@@ -52,11 +58,18 @@ class ContinuousDistribution(PMContinuousDistribution, ProbabilisticCircuitMixin
             self.probabilistic_circuit.remove_node(self)
             return None, 0
 
-        self.probabilistic_circuit.remove_node(self)
         self.probabilistic_circuit.add_node(conditional)
 
+        new_edges = [edge.__copy__() for edge in self.incoming_edges()]
+        for edge in new_edges:
+            edge.target = conditional
+
+        self.probabilistic_circuit.remove_node(self)
+        self.probabilistic_circuit.add_edges_from(new_edges)
         return conditional, probability
 
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        return ProbabilisticCircuitMixin.marginal(self, variables)
 
 class DiracDeltaDistribution(ContinuousDistribution, PMDiracDeltaDistribution):
     ...

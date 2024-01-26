@@ -55,6 +55,12 @@ class UnivariateDistribution(ProbabilisticModel):
         """
         raise NotImplementedError
 
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        if self.variable in variables:
+            return self
+        else:
+            return None
+
 
 class ContinuousDistribution(UnivariateDistribution):
     """
