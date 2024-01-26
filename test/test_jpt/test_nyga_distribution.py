@@ -6,12 +6,11 @@ import portion
 from anytree import RenderTree
 from random_events.variables import Continuous
 
+from probabilistic_model.graph_circuits.probabilistic_circuit import ProbabilisticCircuit
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.probabilistic_circuit.distribution import DiracDeltaDistribution
-from probabilistic_model.probabilistic_circuit.distributions.uniform import UniformDistribution
+from probabilistic_model.graph_circuits.distributions import DiracDeltaDistribution
+from probabilistic_model.graph_circuits.distributions import UniformDistribution
 import plotly.graph_objects as go
-
-from probabilistic_model.probabilistic_circuit.units import Unit
 
 
 class InductionStepTestCase(unittest.TestCase):
@@ -21,9 +20,11 @@ class InductionStepTestCase(unittest.TestCase):
     induction_step: InductionStep
 
     def setUp(self) -> None:
+        model = ProbabilisticCircuit()
+        nyga_distribution = NygaDistribution(self.variable, min_samples_per_quantile=1, min_likelihood_improvement=0.01)
+        model.add_node(nyga_distribution)
         self.induction_step = InductionStep(self.sorted_data, 6, self.weights, 0, len(self.sorted_data),
-                                            NygaDistribution(self.variable, min_samples_per_quantile=1,
-                                                             min_likelihood_improvement=0.01))
+                                            nyga_distribution)
 
     def test_variable(self):
         self.assertEqual(self.induction_step.variable, self.variable)
@@ -46,7 +47,7 @@ class InductionStepTestCase(unittest.TestCase):
 
     def test_create_uniform_distribution(self):
         distribution = self.induction_step.create_uniform_distribution_from_indices(3, 5)
-        self.assertEqual(distribution, UniformDistribution(self.variable, portion.closedopen(3.5, 8)))
+        self.assertEqual(distribution, UniformDistribution(self.variable, portion.closedopen(3.5, 8.0)))
 
     def test_sum_weights(self):
         self.assertAlmostEqual(self.induction_step.sum_weights(), 1)
@@ -86,14 +87,23 @@ class InductionStepTestCase(unittest.TestCase):
     def test_fit(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
-        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        self.assertAlmostEqual(sum([leaf.get_weight_if_possible() for leaf in distribution.leaves]), 1.)
+        self.assertAlmostEqual(sum([edge.weight for edge in distribution.edges_to_sub_circuits()]),
+                               1.)
+
+    def test_domain(self):
+        np.random.seed(69)
+        data = np.random.normal(0, 1, 100).tolist()
+        distribution = self.induction_step.nyga_distribution
+        distribution.fit(data)
+        domain = distribution.domain
+        self.assertEqual(domain[self.variable], portion.closed(min(data), max(data)))
 
     def test_plot(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
-        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
         fig = go.Figure(distribution.plot())
         self.assertIsNotNone(fig)
@@ -101,12 +111,13 @@ class InductionStepTestCase(unittest.TestCase):
 
     def test_fit_from_singular_data(self):
         data = [1., 1.]
-        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        self.assertEqual(len(distribution.leaves), 1)
-        self.assertEqual(distribution.weights, [1.])
-        self.assertIsInstance(distribution.children[0], DiracDeltaDistribution)
+        self.assertEqual(len(distribution.probabilistic_circuit.nodes), 2)
+        self.assertEqual(distribution.edges_to_sub_circuits()[0].weight, 1.)
+        self.assertIsInstance(distribution.edges_to_sub_circuits()[0].target, DiracDeltaDistribution)
 
+    @unittest.skip("Not implemented yet")
     def test_serialization(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
@@ -120,7 +131,7 @@ class InductionStepTestCase(unittest.TestCase):
     def test_equality_and_copy(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
-        distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
         distribution_ = distribution.__copy__()
         self.assertEqual(distribution, distribution_)

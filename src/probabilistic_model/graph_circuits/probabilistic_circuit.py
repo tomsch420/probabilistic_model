@@ -3,7 +3,7 @@ import random
 from typing import Tuple, Iterable
 
 import networkx as nx
-from random_events.events import EncodedEvent, VariableMap
+from random_events.events import EncodedEvent, VariableMap, Event
 from random_events.variables import Variable
 from typing_extensions import List, Optional, Union, Any, Self, Dict
 
@@ -55,6 +55,19 @@ class ProbabilisticCircuitMixin(ProbabilisticModel):
 
     def __repr__(self):
         return self.representation
+
+    @property
+    def domain(self) -> Event:
+        """
+        The domain of the model. The domain describes all events that have :math:`P(event) > 0`.
+
+        :return: An event describing the domain of the model.
+        """
+        domain = Event()
+        for edge in self.edges_to_sub_circuits():
+            target_domain = edge.target.domain
+            domain = domain | target_domain
+        return domain
 
     def filter_variable_map_by_self(self, variable_map: VariableMap):
         """
@@ -239,7 +252,6 @@ class DeterministicSumUnit(SmoothSumUnit):
 
     @cache_inference_result
     def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
-
         modes = []
         likelihoods = []
 
@@ -553,3 +565,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
     def edge_objects(self) -> List[Union[Edge, DirectedWeightedEdge]]:
         edges = super().edges()
         return [self[source][target]["edge"] for source, target in edges]
+
+    @property
+    def domain(self) -> Event:
+        root = self.root
+        result = self.root.domain
+        root.reset_result_of_current_query()
+        return result

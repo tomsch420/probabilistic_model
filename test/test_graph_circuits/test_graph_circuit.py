@@ -7,8 +7,7 @@ from random_events.variables import Integer, Symbolic, Continuous
 
 from probabilistic_model.graph_circuits.probabilistic_circuit import *
 
-from probabilistic_model.graph_circuits.distributions.uniform import UniformDistribution
-from probabilistic_model.graph_circuits.distributions.distributions import ContinuousDistribution
+from probabilistic_model.graph_circuits.distributions.distributions import ContinuousDistribution, UniformDistribution
 
 
 class ShowMixin:
@@ -54,7 +53,6 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
 
     def test_marginal_with_intersecting_variables(self):
         marginal = self.model.marginal([self.x])
-        self.show()
         self.assertEqual(len(self.model.nodes()), 2)
         self.assertEqual(self.model.variables, (self.x, ))
 
@@ -72,6 +70,11 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         expectation = self.model.expectation(self.model.variables)
         self.assertEqual(expectation[self.x], 0.5)
         self.assertEqual(expectation[self.y], 3.5)
+
+    def test_domain(self):
+        domain = self.model.domain
+        self.assertEqual(domain[self.x], portion.closed(0, 1))
+        self.assertEqual(domain[self.y], portion.closed(3, 4))
 
 
 class SumUnitTestCase(unittest.TestCase, ShowMixin):

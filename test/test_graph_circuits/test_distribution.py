@@ -7,7 +7,7 @@ from random_events.variables import Integer, Symbolic, Continuous
 
 from probabilistic_model.graph_circuits.probabilistic_circuit import *
 
-from probabilistic_model.graph_circuits.distributions.uniform import UniformDistribution
+from probabilistic_model.graph_circuits.distributions.distributions import UniformDistribution
 
 
 class UniformDistributionTestCase(unittest.TestCase):

@@ -1,6 +1,6 @@
 from typing import Iterable
 
-from random_events.events import EncodedEvent
+from random_events.events import EncodedEvent, Event
 from random_events.variables import Variable
 from typing_extensions import Union, Tuple, Optional, Self
 
@@ -10,6 +10,9 @@ from ...distributions.distributions import (ContinuousDistribution as PMContinuo
                                             DiracDeltaDistribution as PMDiracDeltaDistribution)
 from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin,
                                      DirectedWeightedEdge, cache_inference_result)
+from ...distributions.uniform import UniformDistribution as PMUniformDistribution
+from ...distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
+                                       TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
 
 
 class ContinuousDistribution(PMContinuousDistribution, ProbabilisticCircuitMixin):
@@ -71,5 +74,19 @@ class ContinuousDistribution(PMContinuousDistribution, ProbabilisticCircuitMixin
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         return ProbabilisticCircuitMixin.marginal(self, variables)
 
+
 class DiracDeltaDistribution(ContinuousDistribution, PMDiracDeltaDistribution):
     ...
+
+
+class UniformDistribution(ContinuousDistribution, PMUniformDistribution):
+    ...
+
+
+class GaussianDistribution(ContinuousDistribution, PMGaussianDistribution):
+    ...
+
+
+class TruncatedGaussianDistribution(ContinuousDistribution, PMTruncatedGaussianDistribution):
+    ...
+

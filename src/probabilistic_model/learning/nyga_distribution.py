@@ -8,9 +8,10 @@ from random_events.events import Event
 from random_events.variables import Continuous, Variable
 from typing_extensions import Self
 
-from ..probabilistic_circuit.distribution import ContinuousDistribution, DiracDeltaDistribution
-from ..probabilistic_circuit.distributions.uniform import UniformDistribution
-from ..probabilistic_circuit.units import DeterministicSumUnit, Unit, SmoothSumUnit
+from ..graph_circuits.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
+from ..graph_circuits.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit,
+                                                    cache_inference_result, DirectedWeightedEdge,
+                                                    ProbabilisticCircuitMixin)
 
 
 @dataclasses.dataclass
@@ -223,8 +224,8 @@ class InductionStep:
         else:
             # mount a uniform distribution
             distribution = self.create_uniform_distribution()
-            self.nyga_distribution.weights += [self.sum_weights()]
-            distribution.parent = self.nyga_distribution
+            edge = DirectedWeightedEdge(self.nyga_distribution, distribution, self.sum_weights())
+            self.nyga_distribution.probabilistic_circuit.add_edge(edge)
             return []
 
 
@@ -243,20 +244,22 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     The minimal number of samples per quantile.
     """
 
-    weights: List[float]
-
     def __init__(self, variable: Continuous, min_samples_per_quantile: Optional[int] = 1,
-                 min_likelihood_improvement: Optional[float] = 1.1, parent: 'Unit' = None):
-        DeterministicSumUnit.__init__(self, [variable], [], parent)
-        ContinuousDistribution.__init__(self, variable, parent)
+                 min_likelihood_improvement: Optional[float] = 1.1):
+        DeterministicSumUnit.__init__(self)
+        ContinuousDistribution.__init__(self, variable)
         self.min_samples_per_quantile = min_samples_per_quantile
         self.min_likelihood_improvement = min_likelihood_improvement
 
+    @property
+    def domain(self) -> Event:
+        return ProbabilisticCircuitMixin.domain.fget(self)
+
     def _pdf(self, value: Union[float, int]) -> float:
-        return sum([child._pdf(value) * weight for child, weight in zip(self.children, self.weights)])
+        return sum([edge.weight * edge.target._pdf(value) for edge in self.edges_to_sub_circuits()])
 
     def _cdf(self, value: Union[float, int]) -> float:
-        return sum([child._cdf(value) * weight for child, weight in zip(self.children, self.weights)])
+        return sum([edge.weight * edge.target._cdf(value) for edge in self.edges_to_sub_circuits()])
 
     def fit(self, data: List[float]):
         return self._fit(list(self.variable.encode_many(data)))
@@ -274,8 +277,9 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         sorted_data = sorted(set(data))
 
         if len(sorted_data) == 1:
-            self.weights.append(1.)
-            distribution = DiracDeltaDistribution(self.variable, sorted_data[0], parent=self)
+            distribution = DiracDeltaDistribution(self.variable, sorted_data[0])
+            edge = DirectedWeightedEdge(self, distribution, 1)
+            self.probabilistic_circuit.add_edge(edge)
             return self
 
         weights = [data.count(value) / len(data) for value in sorted_data]
@@ -301,10 +305,11 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
         x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None]
         y = [0, 0, None]
-        for uniform in self.leaves:
+        for edge in self.edges_to_sub_circuits():
+            uniform: UniformDistribution = edge.target
             lower_value = uniform.interval.lower
             upper_value = uniform.interval.upper
-            pdf_value = uniform.pdf_value() * uniform.get_weight_if_possible()
+            pdf_value = uniform.pdf_value() * edge.weight
             x += [lower_value, upper_value, None]
             y += [pdf_value, pdf_value, None]
 
@@ -319,7 +324,8 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
         x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None]
         y = [0, 0, None]
-        for uniform in self.leaves:
+        for edge in self.edges_to_sub_circuits():
+            uniform: UniformDistribution = edge.target
             lower_value = uniform.interval.lower
             upper_value = uniform.interval.upper
             x += [lower_value, upper_value, None]
@@ -334,7 +340,6 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         Plot the distribution with PDF, CDF, Expectation and Mode.
         """
         traces = [self.pdf_trace(), self.cdf_trace()]
-
         mode, maximum_likelihood = self.mode()
         mode = mode[0][self.variable]
 
@@ -347,10 +352,19 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
         return traces
 
+    def parameters(self):
+        return {"variable": self.variable,
+                "min_samples_per_quantile": self.min_samples_per_quantile,
+                "min_likelihood_improvement": self.min_likelihood_improvement}
+
     def __eq__(self, other: Self):
         return (isinstance(other, NygaDistribution) and
                 self.min_likelihood_improvement == other.min_likelihood_improvement and
-                self.min_samples_per_quantile == other.min_samples_per_quantile and super().__eq__(other))
+                self.min_samples_per_quantile == other.min_samples_per_quantile and
+                self.edges_to_sub_circuits() == other.edges_to_sub_circuits())
+
+    def __hash__(self):
+        return hash((self.variable.name, self.min_samples_per_quantile, self.min_likelihood_improvement,))
 
     def __copy__(self) -> Self:
         """

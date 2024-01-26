@@ -103,7 +103,8 @@ class UniformDistribution(ContinuousDistribution):
         return VariableMap({self.variable: result})
 
     def __eq__(self, other):
-        return isinstance(other, UniformDistribution) and self.interval == other.interval and super().__eq__(other)
+        return (isinstance(other, UniformDistribution) and self.interval == other.interval
+                and self.variable == other.variable)
 
     @property
     def representation(self):
@@ -144,3 +145,6 @@ class UniformDistribution(ContinuousDistribution):
 
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))
+
+    def parameters(self):
+        return {"variable": self.variable, "interval": self.interval}
