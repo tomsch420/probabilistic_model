@@ -9,6 +9,7 @@ from scipy.stats import gamma
 import portion
 from random_events.events import Event, EncodedEvent, VariableMap
 from random_events.variables import Continuous
+from typing_extensions import Self
 
 from ..probabilistic_model import OrderType, CenterType, MomentType
 from .distributions import ContinuousDistribution
@@ -147,7 +148,14 @@ class GaussianDistribution(ContinuousDistribution):
         return self.__class__(self.variable, self.mean, self.variance)
 
     def to_json(self) -> Dict[str, Any]:
-        return {"variable": self.variable.to_json(), "mean": self.mean, "variance": self.variance}
+        return {**super().to_json(),
+                "mean": self.mean,
+                "variance": self.variance}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variable = Continuous.from_json(data["variable"])
+        return cls(variable, data["mean"], data["variance"])
 
 
 class TruncatedGaussianDistribution(GaussianDistribution):
@@ -288,3 +296,9 @@ class TruncatedGaussianDistribution(GaussianDistribution):
 
     def to_json(self) -> Dict[str, Any]:
         return {**super().to_json(), "interval": portion.to_data(self.interval)}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variable = Continuous.from_json(data["variable"])
+        interval = portion.from_data(data["interval"])
+        return cls(variable, interval, data["mean"], data["variance"])

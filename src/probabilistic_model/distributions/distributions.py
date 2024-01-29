@@ -11,9 +11,10 @@ import plotly.graph_objects as go
 
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
+from ..utils import SubclassJSONSerializer
 
 
-class UnivariateDistribution(ProbabilisticModel):
+class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """
     Abstract Base class for Univariate distributions.
     """
@@ -68,6 +69,15 @@ class UnivariateDistribution(ProbabilisticModel):
             return self
         else:
             return None
+
+    def __eq__(self, other: Self):
+        return self.variables == other.variables
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            **super().to_json(),
+            "variable": self.variable.to_json()
+        }
 
 
 class ContinuousDistribution(UnivariateDistribution):
@@ -326,6 +336,18 @@ class DiscreteDistribution(UnivariateDistribution):
         traces.append(go.Bar(x=mode, y=[likelihood] * len(mode), name="Mode"))
         return traces
 
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            **super().to_json(),
+            "weights": self.weights
+        }
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> 'SubclassJSONSerializer':
+        variable = Variable.from_json(data["variable"])
+        weights = data["weights"]
+        return cls(variable, weights)
+
 
 class SymbolicDistribution(DiscreteDistribution):
     """
@@ -452,7 +474,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     def __eq__(self, other):
         return (isinstance(other, self.__class__) and
-                self.variable == other.variable and
+                super().__eq__(other) and
                 self.location == other.location and
                 self.density_cap == other.density_cap)
 
@@ -467,10 +489,17 @@ class DiracDeltaDistribution(ContinuousDistribution):
         return self.__class__(self.variable, self.location, self.density_cap)
 
     def to_json(self) -> Dict[str, Any]:
-        return {"variable": self.variable.to_json(),
-                "location": self.location,
-                "density_cap": self.density_cap,
-                "type": random_events.utils.get_full_class_name(self.__class__)}
+        return {
+            **super().to_json(),
+            "location": self.location,
+            "density_cap": self.density_cap}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> 'SubclassJSONSerializer':
+        variable = Variable.from_json(data["variable"])
+        location = data["location"]
+        density_cap = data["density_cap"]
+        return cls(variable, location, density_cap)
 
     def __repr__(self):
         return f"DiracDeltaDistribution({self.variable}, {self.location}, {self.density_cap})"

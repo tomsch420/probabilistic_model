@@ -8,6 +8,7 @@ from random_events.variables import Continuous, Integer, Discrete
 from probabilistic_model.distributions.distributions import (UnivariateDistribution, ContinuousDistribution,
                                                              DiscreteDistribution, IntegerDistribution,
                                                              DiracDeltaDistribution)
+from probabilistic_model.utils import SubclassJSONSerializer
 
 
 class UnivariateDistributionTestCase(unittest.TestCase):
@@ -70,7 +71,6 @@ class DiscreteTestCase(unittest.TestCase):
         self.assertIsNone(conditional)
         self.assertEqual(probability, 0)
 
-
     def test_sample(self):
         samples = self.model.sample(10)
         for sample in samples:
@@ -99,6 +99,12 @@ class DiscreteTestCase(unittest.TestCase):
     def test_plot(self):
         fig = go.Figure(self.model.plot())  # fig.show()
 
+    def test_serialization(self):
+        serialized = self.model.to_json()
+        deserialized = SubclassJSONSerializer.from_json(serialized)
+        self.assertIsInstance(deserialized, DiscreteDistribution)
+        self.assertEqual(deserialized, self.model)
+
 
 class IntegerDistributionTestCase(unittest.TestCase):
     variable = Integer("x", (1, 2, 4))
@@ -117,6 +123,12 @@ class IntegerDistributionTestCase(unittest.TestCase):
     def test_plot(self):
         fig = go.Figure(self.model.plot())
         # fig.show()
+
+    def test_serialization(self):
+        serialized = self.model.to_json()
+        deserialized = SubclassJSONSerializer.from_json(serialized)
+        self.assertIsInstance(deserialized, IntegerDistribution)
+        self.assertEqual(deserialized, self.model)
 
 
 class DiracDeltaDistributionTestCase(unittest.TestCase):
@@ -180,6 +192,11 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
         order = VariableMap({self.variable: 3})
         self.assertEqual(self.model.moment(order, center)[self.variable], 0)
 
+    def test_serialization(self):
+        serialized = self.model.to_json()
+        deserialized = SubclassJSONSerializer.from_json(serialized)
+        self.assertIsInstance(deserialized, DiracDeltaDistribution)
+        self.assertEqual(deserialized, self.model)
 
 if __name__ == '__main__':
     unittest.main()

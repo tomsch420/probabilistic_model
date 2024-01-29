@@ -117,7 +117,13 @@ class UniformDistribution(ContinuousDistribution):
         return self.__class__(self.variable, interval), self.cdf(interval.upper) - self.cdf(interval.lower)
 
     def to_json(self) -> Dict[str, Any]:
-        return {"variable": self.variable.to_json(), "interval": portion.to_data(self.interval)}
+        return {**super().to_json(), "interval": portion.to_data(self.interval)}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variable = Continuous.from_json(data["variable"])
+        interval = portion.from_data(data["interval"])
+        return cls(variable, interval)
 
     def plot(self) -> List:
         domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
@@ -148,3 +154,4 @@ class UniformDistribution(ContinuousDistribution):
 
     def parameters(self):
         return {"variable": self.variable, "interval": self.interval}
+

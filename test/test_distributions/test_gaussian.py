@@ -7,6 +7,7 @@ from random_events.events import Event, VariableMap
 from random_events.variables import Continuous
 
 from probabilistic_model.distributions.gaussian import GaussianDistribution, TruncatedGaussianDistribution
+from probabilistic_model.utils import SubclassJSONSerializer
 
 
 class GaussianDistributionTestCase(unittest.TestCase):
@@ -89,6 +90,12 @@ class GaussianDistributionTestCase(unittest.TestCase):
         fig = go.Figure(data=self.distribution.plot())
         self.assertIsNotNone(fig)  # fig.show()
 
+    def test_serialization(self):
+        serialized = self.distribution.to_json()
+        deserialized = SubclassJSONSerializer.from_json(serialized)
+        self.assertEqual(self.distribution, deserialized)
+        self.assertIsInstance(deserialized, GaussianDistribution)
+
 
 class TruncatedGaussianDistributionTestCase(unittest.TestCase):
     distribution: TruncatedGaussianDistribution
@@ -170,6 +177,13 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
     def test_plot(self):
         fig = go.Figure(data=self.distribution.plot())
         self.assertIsNotNone(fig)  # fig.show()
+
+    def test_serialization(self):
+        serialized = self.distribution.to_json()
+        deserialized = SubclassJSONSerializer.from_json(serialized)
+        self.assertEqual(self.distribution, deserialized)
+        self.assertIsInstance(deserialized, GaussianDistribution)
+
 
 
 class TruncatedGaussianDistributionJapaneseManTestCase(unittest.TestCase):

@@ -572,3 +572,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
         result = self.root.domain
         root.reset_result_of_current_query()
         return result
+
+    def leaves(self) -> List[ProbabilisticModelWrapper]:
+        return [node for node in self.nodes if self.out_degree(node) == 0]

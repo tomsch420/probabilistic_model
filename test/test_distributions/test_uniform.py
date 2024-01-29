@@ -7,6 +7,7 @@ from random_events.variables import Continuous
 
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.distributions.distributions import DiracDeltaDistribution
+from probabilistic_model.utils import SubclassJSONSerializer
 
 
 class UniformDistributionTestCase(unittest.TestCase):
@@ -89,3 +90,9 @@ class UniformDistributionTestCase(unittest.TestCase):
         fig = go.Figure(data=self.distribution.plot())
         self.assertIsNotNone(fig)
         # fig.show()
+
+    def test_serialization(self):
+        serialized = self.distribution.to_json()
+        deserialized = SubclassJSONSerializer.from_json(serialized)
+        self.assertEqual(self.distribution, deserialized)
+        self.assertIsInstance(deserialized, UniformDistribution)
