@@ -8,6 +8,7 @@ from random_events.variables import Variable
 from typing_extensions import List, Optional, Union, Any, Self, Dict
 
 from ..probabilistic_model import ProbabilisticModel, ProbabilisticModelWrapper, OrderType, CenterType, MomentType
+from ..utils import SubclassJSONSerializer
 
 
 def cache_inference_result(func):
@@ -24,7 +25,7 @@ def cache_inference_result(func):
     return wrapper
 
 
-class ProbabilisticCircuitMixin(ProbabilisticModel):
+class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     """
     Mixin class for all components of a probabilistic circuit.
     """
@@ -89,10 +90,10 @@ class ProbabilisticCircuitMixin(ProbabilisticModel):
 
     @property
     def variables(self) -> Tuple[Variable]:
-        variables = set([variable for distribution in self.leaf_nodes() for variable in distribution.variables])
+        variables = set([variable for distribution in self.leaves() for variable in distribution.variables])
         return tuple(sorted(variables))
 
-    def leaf_nodes(self) -> List[ProbabilisticModel]:
+    def leaves(self) -> List[ProbabilisticModel]:
         return [node for node in nx.descendants(self.probabilistic_circuit, self) if
                 self.probabilistic_circuit.out_degree(node) == 0]
 
@@ -130,6 +131,33 @@ class ProbabilisticCircuitMixin(ProbabilisticModel):
         for edge in self.edges_to_sub_circuits():
             edge.target.marginal(variables)
         return self
+
+    def to_json(self):
+        return {
+            **super().to_json(),
+            "edges": [edge.to_json() for edge in self.edges_to_sub_circuits()]
+        }
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+
+        # create result
+        result = cls()
+        result.probabilistic_circuit = ProbabilisticCircuit()
+
+        # deserialize outgoing edges
+        edges = [Edge.from_json(edge_data) for edge_data in data["edges"]]
+        for edge in edges:
+            edge.source = result
+            result.probabilistic_circuit.add_edge(edge)
+        return result
+
+    def __eq__(self, other: 'ProbabilisticCircuitMixin'):
+        return (isinstance(other, self.__class__) and
+                set(self.edges_to_sub_circuits()) == set(other.edges_to_sub_circuits()))
+
+    def __hash__(self):
+        return self.id
 
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
@@ -392,7 +420,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         return result
 
 
-class Edge:
+class Edge(SubclassJSONSerializer):
     """
     Class representing a directed edge in a probabilistic circuit.
     """
@@ -420,6 +448,28 @@ class Edge:
     def __copy__(self):
         return self.__class__(**self.parameters())
 
+    def __eq__(self, other: 'Edge'):
+        return (isinstance(other, self.__class__) and
+                self.target == other.target)
+
+    def __hash__(self):
+        return hash((self.source, self.target))
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            **super().to_json(),
+            "target": self.target.to_json()
+        }
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        """
+        Creates an edge towards the target of the edge from a json dict. The source will not
+        be read from the data.
+        """
+        target = ProbabilisticCircuitMixin.from_json(data["target"])
+        return cls(None, target)
+
 
 class DirectedWeightedEdge(Edge):
     """
@@ -443,6 +493,24 @@ class DirectedWeightedEdge(Edge):
             **super().parameters(),
             "weight": self.weight
         }
+
+    def __eq__(self, other: 'DirectedWeightedEdge'):
+        return (super().__eq__(other) and
+                self.weight == other.weight)
+
+    def __hash__(self):
+        return hash((self.source, self.target))
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            **super().to_json(),
+            "weight": self.weight
+        }
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        target =  ProbabilisticCircuitMixin.from_json(data["target"])
+        return cls(None, target, data["weight"])
 
 
 class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
@@ -474,7 +542,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
         return nx.is_directed_acyclic_graph(self) and nx.is_weakly_connected(self)
 
     def add_node(self, node: ProbabilisticCircuitMixin, **attr):
-        if node in self.nodes:
+        if node.id is not None:
             return
         node.probabilistic_circuit = self
         node.id = max(node.id for node in self.nodes) + 1 if len(self.nodes) > 0 else 0
@@ -575,3 +643,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
 
     def leaves(self) -> List[ProbabilisticModelWrapper]:
         return [node for node in self.nodes if self.out_degree(node) == 0]
+
+    def __eq__(self, other: 'ProbabilisticCircuit'):
+        return nx.is_isomorphic(self, other)

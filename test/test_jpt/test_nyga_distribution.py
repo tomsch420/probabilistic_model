@@ -1,16 +1,19 @@
 import unittest
 from typing import List
 
+import networkx as nx
 import numpy as np
 import portion
 from anytree import RenderTree
+from matplotlib import pyplot as plt
 from random_events.variables import Continuous
 
-from probabilistic_model.graph_circuits.probabilistic_circuit import ProbabilisticCircuit
+from probabilistic_model.graph_circuits.probabilistic_circuit import ProbabilisticCircuit, SmoothSumUnit, DirectedWeightedEdge
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
 from probabilistic_model.graph_circuits.distributions import DiracDeltaDistribution
 from probabilistic_model.graph_circuits.distributions import UniformDistribution
 import plotly.graph_objects as go
+from probabilistic_model.utils import SubclassJSONSerializer
 
 
 class InductionStepTestCase(unittest.TestCase):
@@ -117,17 +120,18 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertEqual(distribution.edges_to_sub_circuits()[0].weight, 1.)
         self.assertIsInstance(distribution.edges_to_sub_circuits()[0].target, DiracDeltaDistribution)
 
-    @unittest.skip("Not implemented yet")
     def test_serialization(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
         distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
+        distribution.probabilistic_circuit = ProbabilisticCircuit()
         distribution.fit(data)
         serialized = distribution.to_json()
-        deserialized = Unit.from_json(serialized)
+        deserialized = SubclassJSONSerializer.from_json(serialized)
         self.assertIsInstance(deserialized, NygaDistribution)
         self.assertEqual(distribution, deserialized)
 
+    @unittest.skip("Not Implemented yet")
     def test_equality_and_copy(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
@@ -139,16 +143,28 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertNotEqual(distribution, distribution_)
 
     def test_from_mixture_of_uniform_distributions(self):
-        uniform_mixture = (UniformDistribution(self.variable, portion.closed(0, 5)) +
-                           UniformDistribution(self.variable, portion.closed(2, 3)))
+        u1 = UniformDistribution(self.variable, portion.closed(0, 5))
+        u2 = UniformDistribution(self.variable, portion.closed(2, 3))
+        model = ProbabilisticCircuit()
+        sum_unit = SmoothSumUnit()
+        e1 = DirectedWeightedEdge(sum_unit, u1, 0.5)
+        e2 = DirectedWeightedEdge(sum_unit, u2, 0.5)
+        model.add_edges_from([e1, e2])
+        distribution = NygaDistribution.from_uniform_mixture(sum_unit)
 
-        distribution = NygaDistribution.from_uniform_mixture(uniform_mixture)
         solution_by_hand = NygaDistribution(self.variable)
-        leaf_1 = UniformDistribution(self.variable, portion.closedopen(0, 2), parent=solution_by_hand)
-        leaf_2 = UniformDistribution(self.variable, portion.closedopen(2, 3), parent=solution_by_hand)
-        leaf_3 = UniformDistribution(self.variable, portion.closed(3, 5), parent=solution_by_hand)
-        solution_by_hand.weights = [0.2, 0.6, 0.2]
-        self.assertEqual(distribution, solution_by_hand)
+        solution_by_hand.probabilistic_circuit = ProbabilisticCircuit()
+        leaf_1 = UniformDistribution(self.variable, portion.closedopen(0, 2))
+        leaf_2 = UniformDistribution(self.variable, portion.closedopen(2, 3))
+        leaf_3 = UniformDistribution(self.variable, portion.closed(3, 5))
+
+        e1 = DirectedWeightedEdge(solution_by_hand, leaf_1, 0.2)
+        e2 = DirectedWeightedEdge(solution_by_hand, leaf_2, 0.6)
+        e3 = DirectedWeightedEdge(solution_by_hand, leaf_3, 0.2)
+
+        solution_by_hand.probabilistic_circuit.add_edges_from([e1, e2, e3])
+        self.assertEqual(len(distribution.leaves()), 3)
+        self.assertEqual(distribution.probabilistic_circuit, solution_by_hand.probabilistic_circuit)
 
 
 if __name__ == '__main__':

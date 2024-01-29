@@ -1,4 +1,4 @@
-from typing_extensions import Dict, Any
+from typing_extensions import Dict, Any, Self
 from random_events.utils import get_full_class_name, recursive_subclasses
 
 
@@ -13,7 +13,7 @@ class SubclassJSONSerializer:
         return {"type": get_full_class_name(self.__class__)}
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> 'SubclassJSONSerializer':
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
         """
         Create a variable from a json dict.
         This method is called from the from_json method after the correct subclass is determined and should be
@@ -25,7 +25,7 @@ class SubclassJSONSerializer:
         raise NotImplementedError()
 
     @classmethod
-    def from_json(cls, data: Dict[str, Any]) -> 'SubclassJSONSerializer':
+    def from_json(cls, data: Dict[str, Any]) -> Self:
         """
         Create the correct instanceof the subclass from a json dict.
 

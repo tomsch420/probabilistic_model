@@ -8,6 +8,7 @@ from random_events.variables import Integer, Symbolic, Continuous
 from probabilistic_model.graph_circuits.probabilistic_circuit import *
 
 from probabilistic_model.graph_circuits.distributions.distributions import ContinuousDistribution, UniformDistribution
+from probabilistic_model.utils import SubclassJSONSerializer
 
 
 class ShowMixin:
@@ -76,6 +77,11 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(domain[self.x], portion.closed(0, 1))
         self.assertEqual(domain[self.y], portion.closed(3, 4))
 
+    def test_serialization(self):
+        serialized = self.model.root.to_json()
+        deserialized = DecomposableProductUnit.from_json(serialized)
+        self.assertEqual(self.model.root, deserialized)
+
 
 class SumUnitTestCase(unittest.TestCase, ShowMixin):
 
@@ -118,6 +124,11 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
     def test_moment(self):
         expectation = self.model.expectation(self.model.variables)
         self.assertEqual(expectation[self.x], 0.5 * 0.6 + 0.4 * 3.5)
+
+    def test_serialization(self):
+        serialized = self.model.root.to_json()
+        deserialized = SmoothSumUnit.from_json(serialized)
+        self.assertEqual(self.model.root, deserialized)
 
 
 class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):

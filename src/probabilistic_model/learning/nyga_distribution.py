@@ -11,7 +11,7 @@ from typing_extensions import Self
 from ..graph_circuits.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
 from ..graph_circuits.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit,
                                                     cache_inference_result, DirectedWeightedEdge,
-                                                    ProbabilisticCircuitMixin)
+                                                    ProbabilisticCircuitMixin, ProbabilisticCircuit)
 
 
 @dataclasses.dataclass
@@ -255,9 +255,11 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     def domain(self) -> Event:
         return ProbabilisticCircuitMixin.domain.fget(self)
 
+    @cache_inference_result
     def _pdf(self, value: Union[float, int]) -> float:
         return sum([edge.weight * edge.target._pdf(value) for edge in self.edges_to_sub_circuits()])
 
+    @cache_inference_result
     def _cdf(self, value: Union[float, int]) -> float:
         return sum([edge.weight * edge.target._cdf(value) for edge in self.edges_to_sub_circuits()])
 
@@ -298,6 +300,74 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
         return self
 
+    def __eq__(self, other: Self):
+        return (ProbabilisticCircuitMixin.__eq__(self, other)
+                and self.min_samples_per_quantile == other.min_samples_per_quantile
+                and self.min_likelihood_improvement == other.min_likelihood_improvement)
+
+    def __hash__(self):
+        return hash((ProbabilisticCircuitMixin.__hash__(self), self.min_samples_per_quantile,
+                     self.min_likelihood_improvement))
+
+    def parameters(self):
+        return {"variable": self.variable,
+                "min_samples_per_quantile": self.min_samples_per_quantile,
+                "min_likelihood_improvement": self.min_likelihood_improvement}
+
+    def to_json(self) -> Dict[str, Any]:
+        """
+        Create a json representation of the distribution.
+        """
+        result = super().to_json()
+        result["min_samples_per_quantile"] = self.min_samples_per_quantile
+        result["min_likelihood_improvement"] = self.min_likelihood_improvement
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        smooth_sum_unit = DeterministicSumUnit()._from_json(data)
+        result = cls(smooth_sum_unit.variables[0],
+                     min_samples_per_quantile=data["min_samples_per_quantile"],
+                     min_likelihood_improvement=data["min_likelihood_improvement"])
+        result.probabilistic_circuit = ProbabilisticCircuit()
+        for edge in smooth_sum_unit.edges_to_sub_circuits():
+            edge.source = result
+            result.probabilistic_circuit.add_edge(edge)
+        return result
+
+    @classmethod
+    def from_uniform_mixture(cls, mixture: SmoothSumUnit) -> Self:
+        """
+        Construct a Nyga Distribution from a mixture of uniform distributions.
+        The mixture does not have to be deterministic.
+        :param mixture: An arbitrary, univariate mixture of uniform distributions
+        :return: A Nyga Distribution describing the same function.
+        """
+        variable: Continuous = mixture.variables[0]
+        result = cls(variable)
+        result.probabilistic_circuit = ProbabilisticCircuit()
+        result.probabilistic_circuit.add_node(result)
+
+        all_mixture_points = set()
+        for leaf in mixture.leaves():
+            leaf: UniformDistribution
+            all_mixture_points.add(leaf.interval.lower)
+            all_mixture_points.add(leaf.interval.upper)
+
+        all_mixture_points = sorted(list(all_mixture_points))
+
+        for index, (lower, upper) in enumerate(zip(all_mixture_points[:-1], all_mixture_points[1:])):
+            if index == len(all_mixture_points) - 2:
+                interval = portion.closed(lower, upper)
+            else:
+                interval = portion.closedopen(lower, upper)
+            leaf = UniformDistribution(variable, interval)
+            weight = mixture.probability(Event({variable: interval}))
+            edge = DirectedWeightedEdge(result, leaf, weight)
+            result.probabilistic_circuit.add_edge(edge)
+
+        return result
+
     def pdf_trace(self) -> go.Scatter:
         """
         Create a plotly trace for the probability density function.
@@ -330,6 +400,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
             upper_value = uniform.interval.upper
             x += [lower_value, upper_value, None]
             y += [self.cdf(lower_value), self.cdf(upper_value), None]
+            self.reset_result_of_current_query()
 
         x.extend([self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05])
         y.extend([1, 1])
@@ -341,9 +412,11 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         """
         traces = [self.pdf_trace(), self.cdf_trace()]
         mode, maximum_likelihood = self.mode()
+        self.reset_result_of_current_query()
         mode = mode[0][self.variable]
 
         expectation = self.expectation([self.variable])[self.variable]
+        self.reset_result_of_current_query()
         traces.append(go.Scatter(x=[mode.lower, mode.lower, mode.upper, mode.upper, ],
                                  y=[0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0], mode='lines+markers',
                                  name="Mode", fill="toself"))
@@ -351,81 +424,3 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
                                  name="Expectation"))
 
         return traces
-
-    def parameters(self):
-        return {"variable": self.variable,
-                "min_samples_per_quantile": self.min_samples_per_quantile,
-                "min_likelihood_improvement": self.min_likelihood_improvement}
-
-    def __eq__(self, other: Self):
-        return (isinstance(other, NygaDistribution) and
-                self.min_likelihood_improvement == other.min_likelihood_improvement and
-                self.min_samples_per_quantile == other.min_samples_per_quantile and
-                self.edges_to_sub_circuits() == other.edges_to_sub_circuits())
-
-    def __hash__(self):
-        return hash((self.variable.name, self.min_samples_per_quantile, self.min_likelihood_improvement,))
-
-    def __copy__(self) -> Self:
-        """
-        Create a copy of the distribution.
-        """
-        result = NygaDistribution(self.variable, self.min_samples_per_quantile, self.min_likelihood_improvement)
-        result.weights = self.weights.copy()
-        result.children = self._copy_children()
-        return result
-
-    def _parameter_copy(self):
-        result = NygaDistribution(variable=self.variable,
-                                  min_samples_per_quantile=self.min_samples_per_quantile,
-                                  min_likelihood_improvement=self.min_likelihood_improvement)
-        result.weights = self.weights
-        return result
-
-    def to_json(self) -> Dict[str, Any]:
-        """
-        Create a json representation of the distribution.
-        """
-        result = super().to_json()
-        result["min_samples_per_quantile"] = self.min_samples_per_quantile
-        result["min_likelihood_improvement"] = self.min_likelihood_improvement
-        return result
-
-    @classmethod
-    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
-                                              variables: List[Variable],
-                                              children: List['Unit']) -> Self:
-        result = cls(list(variables)[0], data["min_samples_per_quantile"], data["min_likelihood_improvement"])
-        result.weights = data["weights"]
-        result.children = children
-        return result
-
-    @classmethod
-    def from_uniform_mixture(cls, mixture: SmoothSumUnit) -> Self:
-        """
-        Construct a Nyga Distribution from a mixture of uniform distributions.
-        The mixture does not have to be deterministic.
-        :param mixture: An arbitrary, univariate mixture of uniform distributions
-        :return: A Nyga Distribution describing the same function.
-        """
-        variable: Continuous = mixture.variables[0]
-        result = cls(variable)
-
-        all_mixture_points = set()
-        for leaf in mixture.leaves:
-            leaf: UniformDistribution
-            all_mixture_points.add(leaf.interval.lower)
-            all_mixture_points.add(leaf.interval.upper)
-
-        all_mixture_points = sorted(list(all_mixture_points))
-
-        for index, (lower, upper) in enumerate(zip(all_mixture_points[:-1], all_mixture_points[1:])):
-            if index == len(all_mixture_points) - 2:
-                interval = portion.closed(lower, upper)
-            else:
-                interval = portion.closedopen(lower, upper)
-            leaf = UniformDistribution(variable, interval, parent=result)
-            weight = mixture.probability(Event({variable: interval}))
-            result.weights.append(weight)
-
-        return result
