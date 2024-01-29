@@ -40,6 +40,7 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
     def test_conditional(self):
         event = Event({self.x: portion.closed(0, 0.5)})
         result, probability = self.model.conditional(event)
+        self.show()
         self.assertEqual(probability, 0.5)
         self.assertEqual(len(self.model.nodes()), 3)
         self.assertIsInstance(result, DecomposableProductUnit)
@@ -237,6 +238,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
     def test_caching(self):
         event = Event({self.real: portion.closed(0, 5),
                        self.real2: portion.closed(2, 5)})
+        self.model.root.cache_result = True
         _ = self.model.root.probability(event)
 
         for node in self.model.nodes():

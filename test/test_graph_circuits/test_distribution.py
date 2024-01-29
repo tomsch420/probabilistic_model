@@ -7,7 +7,9 @@ from random_events.variables import Integer, Symbolic, Continuous
 
 from probabilistic_model.graph_circuits.probabilistic_circuit import *
 
-from probabilistic_model.graph_circuits.distributions.distributions import UniformDistribution
+from probabilistic_model.graph_circuits.distributions.distributions import (UniformDistribution,
+                                                                            SymbolicDistribution,
+                                                                            IntegerDistribution)
 
 
 class UniformDistributionTestCase(unittest.TestCase):
@@ -45,7 +47,7 @@ class UniformDistributionTestCase(unittest.TestCase):
     def test_conditional_from_complex_event(self):
         interval = portion.closed(0., 0.2) | portion.closed(0.5, 1.) | portion.singleton(0.3)
         event = Event({self.variable: interval})
-        self.model.conditional(event)
+        model, likelihood = self.model.conditional(event)
         self.assertEqual(len(list(self.model.probabilistic_circuit.nodes)), 4)
         self.assertIsInstance(self.model.probabilistic_circuit.root, DeterministicSumUnit)
 
@@ -56,6 +58,19 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(conditional, None)
 
 
+class DiscreteDistributionTestCase(unittest.TestCase):
 
-if __name__ == '__main__':
-    unittest.main()
+    symbol = Symbolic("animal", ["cat", "dog", "fish"])
+    integer = Integer("x", list(range(3)))
+
+    symbolic_distribution: SymbolicDistribution
+    integer_distribution: IntegerDistribution
+
+    def test_creation(self):
+        circuit = ProbabilisticCircuit()
+        self.symbolic_distribution = SymbolicDistribution(self.symbol, [0.1, 0.2, 0.7])
+        self.integer_distribution = IntegerDistribution(self.integer, [0.1, 0.2, 0.7])
+        circuit.add_node(self.symbolic_distribution)
+        circuit.add_node(self.integer_distribution)
+        self.assertEqual(len(list(circuit.nodes)), 2)
+

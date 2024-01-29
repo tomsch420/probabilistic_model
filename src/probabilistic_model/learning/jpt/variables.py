@@ -7,8 +7,8 @@ from typing_extensions import Self
 
 
 def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: bool = True,
-                                   min_likelihood_improvement: float = 0.1, min_samples_per_quantile: int = 10) -> List[
-    Variable]:
+                                   min_likelihood_improvement: float = 0.1, min_samples_per_quantile: int = 10) \
+        -> List[Variable]:
     """
     Infer the variables from a dataframe.
     The variables are inferred by the column names and types of the dataframe.
@@ -166,6 +166,7 @@ class Continuous(REContinuous):
     def __hash__(self):
         return hash((self.name, self.domain, self.mean, self.std, self.minimal_distance,
                      self.min_likelihood_improvement, self.min_samples_per_quantile))
+
 
 class ScaledContinuous(Continuous):
     """

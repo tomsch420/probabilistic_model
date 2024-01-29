@@ -1,6 +1,10 @@
 import math
 from collections import deque
+from datetime import datetime
 from typing import Tuple, Union, Optional, List, Iterable, Dict, Any
+
+import networkx as nx
+from matplotlib import pyplot as plt
 from typing_extensions import Self
 
 import numpy as np
@@ -12,9 +16,11 @@ from random_events.variables import Variable, Discrete
 
 from .variables import Continuous, Integer, Symbolic
 from ..nyga_distribution import NygaDistribution
-from ...probabilistic_circuit.distribution import (DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution,
-                                                   UnivariateDiscreteSumUnit)
-from ...probabilistic_circuit.units import DeterministicSumUnit, DecomposableProductUnit as DPU, Unit
+from ...graph_circuits.distributions.distributions import (DiracDeltaDistribution,
+                                                           SymbolicDistribution,
+                                                           IntegerDistribution)
+from ...graph_circuits.probabilistic_circuit import DeterministicSumUnit, DecomposableProductUnit as DPU, Edge, \
+    DirectedWeightedEdge
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -86,12 +92,18 @@ class JPT(DeterministicSumUnit):
     Rather to store the sample indices in the leaves or not.
     """
 
+    variables_from_init: Tuple[Variable]
+    """
+    The variables from initialization. Since variables will be overwritten as soon as the model is learned,
+    we need to store the variables from initialization here.
+    """
+
     def __init__(self, variables: Iterable[Variable], targets: Optional[Iterable[Variable]] = None,
                  features: Optional[Iterable[Variable]] = None, min_samples_leaf: Union[int, float] = 1,
                  min_impurity_improvement: float = 0.0, max_leaves: Union[int, float] = float("inf"),
                  max_depth: Union[int, float] = float("inf"), dependencies: Optional[VariableMap] = None, ):
-
-        super().__init__(variables, weights=[])
+        super().__init__()
+        self.variables_from_init = tuple(sorted(variables))
         self.set_targets_and_features(targets, features)
         self._min_samples_leaf = min_samples_leaf
         self.min_impurity_improvement = min_impurity_improvement
@@ -120,12 +132,12 @@ class JPT(DeterministicSumUnit):
 
             # and features are not specified
             if features is None:
-                self.targets = self.variables
-                self.features = self.variables
+                self.targets = self.variables_from_init
+                self.features = self.variables_from_init
 
             # and features are specified
             else:
-                self.targets = tuple(sorted(set(self.variables) - set(features)))
+                self.targets = tuple(sorted(set(self.variables_from_init) - set(features)))
                 self.features = tuple(sorted(features))
 
         # if targets are specified
@@ -133,22 +145,12 @@ class JPT(DeterministicSumUnit):
             # and features are not specified
             if features is None:
                 self.targets = tuple(sorted(set(targets)))
-                self.features = tuple(sorted(set(self.variables) - set(targets)))
+                self.features = tuple(sorted(set(self.variables_from_init) - set(targets)))
 
             # and features are specified
             else:
                 self.targets = tuple(sorted(set(targets)))
                 self.features = tuple(sorted(set(features)))
-
-    def __eq__(self, other):
-        return (isinstance(other, JPT) and
-                self.variables == other.variables and
-                self.targets == other.targets and
-                self.features == other.features and
-                self.weights == other.weights and
-                self.children == other.children and
-                self.min_impurity_improvement == other.min_impurity_improvement and
-                self.max_depth == other.max_depth)
 
     @property
     def min_samples_leaf(self):
@@ -162,7 +164,7 @@ class JPT(DeterministicSumUnit):
 
     @property
     def numeric_variables(self):
-        return [variable for variable in self.variables if isinstance(variable, (Continuous, Integer))]
+        return [variable for variable in self.variables_from_init if isinstance(variable, (Continuous, Integer))]
 
     @property
     def numeric_targets(self):
@@ -174,7 +176,7 @@ class JPT(DeterministicSumUnit):
 
     @property
     def symbolic_variables(self):
-        return [variable for variable in self.variables if isinstance(variable, Symbolic)]
+        return [variable for variable in self.variables_from_init if isinstance(variable, Symbolic)]
 
     @property
     def symbolic_targets(self):
@@ -194,7 +196,7 @@ class JPT(DeterministicSumUnit):
 
         result = np.zeros(data.shape)
 
-        for variable_index, variable in enumerate(self.variables):
+        for variable_index, variable in enumerate(self.variables_from_init):
             column = data[variable.name]
             if not isinstance(variable, Integer):
                 column = variable.encode_many(column)
@@ -249,7 +251,9 @@ class JPT(DeterministicSumUnit):
 
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
-            self.weights.append(number_of_samples/len(data))
+            weight = number_of_samples / len(data)
+            edge = DirectedWeightedEdge(self, leaf_node, weight)
+            self.probabilistic_circuit.add_edge(edge)
 
             if self.keep_sample_indices:
                 leaf_node.sample_indices = self.indices[start:end]
@@ -301,18 +305,18 @@ class JPT(DeterministicSumUnit):
         :param data: The preprocessed data to use for training
         :return: The leaf node.
         """
-        result = DecomposableProductUnit(self.variables)
+        result = DecomposableProductUnit()
         result.total_samples = len(data)
 
-        for index, variable in enumerate(self.variables):
+        for index, variable in enumerate(self.variables_from_init):
             if isinstance(variable, Continuous):
                 distribution = NygaDistribution(variable,
                                                 min_likelihood_improvement=variable.min_likelihood_improvement,
                                                 min_samples_per_quantile=variable.min_samples_per_quantile)
                 distribution._fit(data[:, index].tolist())
 
-                if isinstance(distribution.children[0], DiracDeltaDistribution):
-                    distribution.children[0].density_cap = 1/variable.minimal_distance
+                if isinstance(distribution.edges_to_sub_circuits()[0], DiracDeltaDistribution):
+                    distribution.edges_to_sub_circuits()[0].target.density_cap = 1/variable.minimal_distance
 
             elif isinstance(variable, Symbolic):
                 distribution = SymbolicDistribution(variable, weights=[1/len(variable.domain)]*len(variable.domain))
@@ -324,7 +328,8 @@ class JPT(DeterministicSumUnit):
             else:
                 raise ValueError(f"Variable {variable} is not supported.")
 
-            distribution.parent = result
+            edge = Edge(result, distribution)
+            result.probabilistic_circuit.add_edge(edge)
 
         return result
 
@@ -332,9 +337,11 @@ class JPT(DeterministicSumUnit):
         min_samples_leaf = self.min_samples_leaf
 
         numeric_vars = (
-            np.array([index for index, variable in enumerate(self.variables) if variable in self.numeric_targets], dtype=int))
+            np.array([index for index, variable in enumerate(self.variables_from_init)
+                      if variable in self.numeric_targets], dtype=int))
         symbolic_vars = np.array(
-            [index for index, variable in enumerate(self.variables) if variable in self.symbolic_targets], dtype=int)
+            [index for index, variable in enumerate(self.variables_from_init)
+             if variable in self.symbolic_targets], dtype=int)
 
         invert_impurity = np.array([0] * len(self.symbolic_targets), dtype=int)
 
@@ -342,9 +349,11 @@ class JPT(DeterministicSumUnit):
         n_num_vars_total = len(self.numeric_variables)
 
         numeric_features = np.array(
-            [index for index, variable in enumerate(self.variables) if variable in self.numeric_features], dtype=int)
+            [index for index, variable in enumerate(self.variables_from_init)
+             if variable in self.numeric_features], dtype=int)
         symbolic_features = np.array(
-            [index for index, variable in enumerate(self.variables) if variable in self.symbolic_features], dtype=int)
+            [index for index, variable in enumerate(self.variables_from_init)
+             if variable in self.symbolic_features], dtype=int)
 
         symbols = np.array([len(variable.domain) for variable in self.symbolic_variables])
         max_variances = np.array([variable.std ** 2 for variable in self.numeric_variables])
@@ -353,8 +362,8 @@ class JPT(DeterministicSumUnit):
 
         for variable, dep_vars in self.dependencies.items():
             # get the index version of the dependent variables and store them
-            idx_var = self.variables.index(variable)
-            idc_dep = [self.variables.index(var) for var in dep_vars]
+            idx_var = self.variables_from_init.index(variable)
+            idc_dep = [self.variables_from_init.index(var) for var in dep_vars]
             dependency_indices[idx_var] = idc_dep
 
         return Impurity(min_samples_leaf, numeric_vars, symbolic_vars, invert_impurity, n_sym_vars_total,
@@ -365,16 +374,17 @@ class JPT(DeterministicSumUnit):
         """
         Plot the model.
         """
-        subplot_titles = [distribution.__class__.__name__ for child in self.children for distribution in child.children]
-        figure = make_subplots(rows=len(self.children), cols=len(self.variables),
+        subplot_titles = [distribution.__class__.__name__ for child in self.sub_circuits
+                          for distribution in child.sub_circuits]
+        figure = make_subplots(rows=len(self.sub_circuits), cols=len(self.variables),
                                row_titles=[f"P(Leaf = {child_index}) = {weight}" for weight, child_index
-                                           in zip(self.weights, range(len(self.children)))],
+                                           in zip(self.weights, range(len(self.sub_circuits)))],
                                subplot_titles=subplot_titles)
 
-        for child_index, child in enumerate(self.children):
+        for child_index, child in enumerate(self.sub_circuits):
             child: DecomposableProductUnit
 
-            for distribution_index, distribution in enumerate(child.children):
+            for distribution_index, distribution in enumerate(child.sub_circuits):
                 traces: List[go.Scatter] = distribution.plot()
                 legend_group = child_index * len(self.variables) + distribution_index + 1
                 traces = [trace.update(legendgroup=legend_group)
@@ -384,7 +394,7 @@ class JPT(DeterministicSumUnit):
                                     row=child_index + 1,
                                     col=distribution_index + 1)
 
-        figure.update_layout(height=300*len(self.children), width=600*len(self.variables),
+        figure.update_layout(height=300*len(self.sub_circuits), width=600*len(self.variables),
                              title=f"Joint Probability Tree over {len(self.variables)} variables",)
 
         return figure
@@ -410,6 +420,7 @@ class JPT(DeterministicSumUnit):
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
+        result["variables_from_init"] = [variable.to_json() for variable in self.variables_from_init]
         result["targets"] = [variable.name for variable in self.targets]
         result["features"] = [variable.name for variable in self.features]
         result["_min_samples_leaf"] = self._min_samples_leaf
@@ -421,26 +432,22 @@ class JPT(DeterministicSumUnit):
         return result
 
     @classmethod
-    def from_json_with_variables_and_children(cls, data: Dict[str, Any],
-                                              variables: List[Variable],
-                                              children: List[Unit]) -> Self:
-        targets = [variable for variable in variables if variable.name in data["targets"]]
-        features = [variable for variable in variables if variable.name in data["features"]]
-        dependencies = VariableMap()
-        for variable in variables:
-            dependencies[variable] = [dep_var for dep_var in variables if dep_var.name
-                                      in data["dependencies"][variable.name]]
-        result = cls(variables=variables, targets=targets, features=features,
-                     min_samples_leaf=data["_min_samples_leaf"],
-                     min_impurity_improvement=data["min_impurity_improvement"], max_leaves=data["max_leaves"],
-                     max_depth=data["max_depth"], dependencies=dependencies)
-        result.total_samples = data["total_samples"]
-        result.children = children
-        result.weights = data["weights"]
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        sum_unit = DeterministicSumUnit._from_json(data)
+        variables = [Variable.from_json(variable) for variable in data["variables_from_init"]]
+        result = cls(variables, min_samples_leaf=data["_min_samples_leaf"],
+                     min_impurity_improvement=data["min_impurity_improvement"],
+                     max_leaves=data["max_leaves"], max_depth=data["max_depth"])
+        for edge in sum_unit.edges_to_sub_circuits():
+            edge.source = result
+            result.probabilistic_circuit.add_edge(edge)
         return result
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         result = super().marginal(variables)
+        nx.draw(result.probabilistic_circuit)
+        plt.show()
+
         if result is None or len(result.variables) > 1:
             return result
 

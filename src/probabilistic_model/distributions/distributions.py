@@ -300,6 +300,9 @@ class DiscreteDistribution(UnivariateDistribution):
         return (isinstance(other, DiscreteDistribution) and self.weights == other.weights and
                 super().__eq__(other))
 
+    def __hash__(self):
+        return hash((self.variable, tuple(self.weights)))
+
     def _fit(self, data: List[int]) -> Self:
         """
         Fit the distribution to a list of encoded values
@@ -502,4 +505,4 @@ class DiracDeltaDistribution(ContinuousDistribution):
         return cls(variable, location, density_cap)
 
     def __repr__(self):
-        return f"DiracDeltaDistribution({self.variable}, {self.location}, {self.density_cap})"
+        return f"δ({self.variable.name}, {self.location}, {self.density_cap})"
