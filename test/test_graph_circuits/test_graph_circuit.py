@@ -37,6 +37,33 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         self.model = ProbabilisticCircuit()
         self.model.add_edges_from([e1, e2])
 
+    def test_likelihood(self):
+        event = [0.5, 3.5]
+        result = self.model.likelihood(event)
+        self.assertEqual(result, 1)
+
+    def test_probability(self):
+        event = Event({self.x: portion.closed(0, 0.5),
+                       self.y: portion.closed(3, 3.5)})
+        result = self.model.probability(event)
+        self.assertEqual(result, 0.25)
+
+    def test_mode(self):
+        mode, likelihood = self.model.mode()
+        self.assertEqual(likelihood, 1)
+        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1),
+                                       self.y: portion.closed(3, 4)})])
+
+    def test_sample(self):
+        samples = self.model.sample(100)
+        for sample in samples:
+            self.assertGreater(self.model.likelihood(sample), 0)
+
+    def test_moment(self):
+        expectation = self.model.expectation(self.model.variables)
+        self.assertEqual(expectation[self.x], 0.5)
+        self.assertEqual(expectation[self.y], 3.5)
+
     def test_conditional(self):
         event = Event({self.x: portion.closed(0, 0.5)})
         result, probability = self.model.conditional(event)
@@ -62,16 +89,6 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         marginal = self.model.marginal([])
         self.assertEqual(len(self.model.nodes()), 0)
         self.assertEqual(self.model.variables, tuple())
-
-    def test_sample(self):
-        samples = self.model.sample(100)
-        for sample in samples:
-            self.assertGreater(self.model.likelihood(sample), 0)
-
-    def test_moment(self):
-        expectation = self.model.expectation(self.model.variables)
-        self.assertEqual(expectation[self.x], 0.5)
-        self.assertEqual(expectation[self.y], 3.5)
 
     def test_domain(self):
         domain = self.model.domain

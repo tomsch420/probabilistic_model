@@ -221,7 +221,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
                 self.edges_to_sub_circuits() == other.edges_to_sub_circuits())
 
     def __hash__(self):
-        return id(self)  # hash((self.id, id(self.probabilistic_circuit)))
+        return id(self)
 
     def __add__(self, other: 'ProbabilisticCircuitMixin') -> 'SmoothSumUnit':
         """
