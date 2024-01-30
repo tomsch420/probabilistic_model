@@ -18,9 +18,7 @@ class UniformDistributionTestCase(unittest.TestCase):
     model: UniformDistribution
 
     def setUp(self):
-        circuit = ProbabilisticCircuit()
         self.model = UniformDistribution(self.variable, portion.closed(0, 1))
-        circuit.add_node(self.model)
 
     def show(self):
         nx.draw(self.model.probabilistic_circuit, with_labels=True)
@@ -29,18 +27,14 @@ class UniformDistributionTestCase(unittest.TestCase):
     def test_conditional_from_simple_event(self):
         event = Event({self.variable: portion.closed(0.5, 2)})
         conditional, probability = self.model.conditional(event)
-        self.assertEqual(len(list(self.model.probabilistic_circuit.nodes)), 1)
-        conditional_from_circuit = list(self.model.probabilistic_circuit.nodes)[0]
-        self.assertEqual(conditional, conditional_from_circuit)
+        self.assertEqual(len(list(conditional.probabilistic_circuit.nodes)), 1)
         self.assertEqual(probability, 0.5)
         self.assertEqual(conditional.interval, portion.closed(0.5, 1))
 
     def test_conditional_from_singleton_event(self):
         event = Event({self.variable: portion.singleton(0.3)})
         conditional, probability = self.model.conditional(event)
-        self.assertEqual(len(list(self.model.probabilistic_circuit.nodes)), 1)
-        conditional_from_circuit = list(self.model.probabilistic_circuit.nodes)[0]
-        self.assertEqual(conditional, conditional_from_circuit)
+        self.assertEqual(len(conditional.probabilistic_circuit.nodes), 1)
         self.assertEqual(probability, 1.)
         self.assertEqual(conditional.location, 0.3)
 
@@ -48,13 +42,12 @@ class UniformDistributionTestCase(unittest.TestCase):
         interval = portion.closed(0., 0.2) | portion.closed(0.5, 1.) | portion.singleton(0.3)
         event = Event({self.variable: interval})
         model, likelihood = self.model.conditional(event)
-        self.assertEqual(len(list(self.model.probabilistic_circuit.nodes)), 4)
-        self.assertIsInstance(self.model.probabilistic_circuit.root, DeterministicSumUnit)
+        self.assertEqual(len(list(model.probabilistic_circuit.nodes)), 4)
+        self.assertIsInstance(model.probabilistic_circuit.root, DeterministicSumUnit)
 
     def test_conditional_with_none(self):
         event = Event({self.variable: 2})
         conditional, probability = self.model.conditional(event)
-        self.assertEqual(len(list(self.model.probabilistic_circuit.nodes)), 0)
         self.assertEqual(conditional, None)
 
 

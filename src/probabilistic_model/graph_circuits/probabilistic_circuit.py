@@ -50,7 +50,6 @@ def graph_inference_caching_wrapper(func):
 
         # if the result is None, the root has been destroyed
         if result is None:
-            print(root)
             return None
 
         # reset result
@@ -72,11 +71,6 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     The circuit this component is part of. 
     """
 
-    id: Optional[int] = None
-    """
-    The id of this node in the circuit.
-    """
-
     representation: str = None
     """
     The string representing this component.
@@ -96,9 +90,17 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     def __init__(self, variables: Optional[Iterable[Variable]] = None):
         super().__init__(variables)
         self.probabilistic_circuit = ProbabilisticCircuit()
+        self.probabilistic_circuit.add_node(self)
 
     def __repr__(self):
         return self.representation
+
+    @property
+    def subcircuits(self) -> List['ProbabilisticCircuitMixin']:
+        """
+        :return: The subcircuits of this unit.
+        """
+        return list(self.probabilistic_circuit.successors(self))
 
     @property
     def domain(self) -> Event:
@@ -108,10 +110,19 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         :return: An event describing the domain of the model.
         """
         domain = Event()
-        for edge in self.edges_to_sub_circuits():
-            target_domain = edge.target.domain
+        for subcircuit in self.subcircuits:
+            target_domain = subcircuit.domain
             domain = domain | target_domain
         return domain
+
+    def mount(self, other: 'ProbabilisticCircuitMixin'):
+        """
+        Mount another unit including its descendants. There will be no edge from `self` to `other`.
+        :param other: The other circuit or unit to mount.
+        """
+        subgraph = other.probabilistic_circuit.subgraph(nx.descendants(other.probabilistic_circuit, other))
+        self.probabilistic_circuit.add_nodes_from(subgraph.nodes())
+        self.probabilistic_circuit.add_edges_from(subgraph.edges())
 
     @property
     def cache_result(self) -> bool:
@@ -125,9 +136,9 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         :param value: The value to set the flag to.
         """
         self._cache_result = value
-        for edge in self.edges_to_sub_circuits():
-            if edge.target.cache_result != value:
-                edge.target.cache_result = value
+        for subcircuit in self.subcircuits:
+            if subcircuit.cache_result != value:
+                subcircuit.cache_result = value
 
     def filter_variable_map_by_self(self, variable_map: VariableMap):
         """
@@ -140,23 +151,13 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return variable_map.__class__(
             {variable: value for variable, value in variable_map.items() if variable in variables})
 
-    def edges_to_sub_circuits(self) -> List[Union['Edge', 'DirectedWeightedEdge']]:
-        """
-        Return a list of targets to the children of this component.
-        """
-        return [self.probabilistic_circuit[source][target]["edge"] for source, target in
-                self.probabilistic_circuit.out_edges(self)]
-
     @property
-    def sub_circuits(self):
-        return [edge.target for edge in self.edges_to_sub_circuits()]
-
-    @property
-    def variables(self) -> Tuple[Variable]:
-        variables = set([variable for distribution in self.leaves() for variable in distribution.variables])
+    def variables(self) -> tuple[Variable, ...]:
+        variables = set([variable for distribution in self.leaves for variable in distribution.variables])
         return tuple(sorted(variables))
 
-    def leaves(self) -> List[ProbabilisticModel]:
+    @property
+    def leaves(self) -> List['ProbabilisticCircuitMixin']:
         return [node for node in nx.descendants(self.probabilistic_circuit, self) if
                 self.probabilistic_circuit.out_degree(node) == 0]
 
@@ -166,16 +167,9 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         If a sub-circuit has the result already reset, it will not recurse in that sub-circuit.
         """
         self.result_of_current_query = None
-        for edge in self.edges_to_sub_circuits():
-            if edge.target.result_of_current_query is not None:
-                edge.target.reset_result_of_current_query()
-
-    def incoming_edges(self) -> Union[List['Edge'], List['DirectedWeightedEdge']]:
-        """
-        :return: All incoming edges as Edge objects.
-        """
-        return [self.probabilistic_circuit[source][target]["edge"] for source, target in
-                self.probabilistic_circuit.in_edges(self)]
+        for subcircuit in self.subcircuits:
+            if subcircuit.result_of_current_query is not None:
+                subcircuit.reset_result_of_current_query()
 
     def remove_entire_subgraph(self):
         """
@@ -183,18 +177,6 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         for node in nx.descendants(self.probabilistic_circuit, self):
             self.probabilistic_circuit.remove_node(node)
-
-    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
-        # if this node has no variables that are required in the marginal, remove it.
-        if set(self.variables).intersection(set(variables)) == set():
-            self.remove_entire_subgraph()
-            self.probabilistic_circuit.remove_node(self)
-            return None
-
-        # propagate to sub-circuits
-        for edge in self.edges_to_sub_circuits():
-            edge.target.marginal(variables)
-        return self
 
     def to_json(self):
         return {
@@ -216,59 +198,32 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             result.probabilistic_circuit.add_edge(edge)
         return result
 
-    def __eq__(self, other: 'ProbabilisticCircuitMixin'):
-        return (isinstance(other, self.__class__) and
-                self.edges_to_sub_circuits() == other.edges_to_sub_circuits())
-
     def __hash__(self):
         return id(self)
 
-    def __add__(self, other: 'ProbabilisticCircuitMixin') -> 'SmoothSumUnit':
-        """
-        Add this probabilistic circuit with another one.
-        :param other: The other circuit
-        :return: A new circuit containing the sum of this and the other circuit with equal weight.
-        """
-        if not isinstance(other, ProbabilisticCircuitMixin):
-            raise ValueError(f"Cannot add a Probabilistic Circuit with {type(other)}.")
-
-        result = SmoothSumUnit()
-        e1 = DirectedWeightedEdge(result, self, 0.5)
-        e2 = DirectedWeightedEdge(result, other, 0.5)
-        result.probabilistic_circuit.add_edges_from([e1, e2])
-        return result
-
-    def __mul__(self, other: 'ProbabilisticCircuitMixin') -> 'DecomposableProductUnit':
-        """
-        Multiply this probabilistic circuit with another one.
-        :param other: The other circuit
-        :return: A new circuit containing the product of this and the other circuit.
-        """
-        if not isinstance(other, ProbabilisticCircuitMixin):
-            raise ValueError(f"Cannot multiply a Probabilistic Circuit with {type(other)}.")
-
-        result = DecomposableProductUnit()
-        e1 = Edge(self, result)
-        e2 = Edge(self, result)
-        result.probabilistic_circuit.add_edges_from([e1, e2])
-
-        return result
+    def __eq__(self, other):
+        return (isinstance(other, self.__class__)
+                and self.subcircuits == other.subcircuits)
 
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
     representation = "+"
 
     @property
-    def weights(self):
-        return [edge.weight for edge in self.edges_to_sub_circuits()]
+    def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
+        """
+        :return: The weighted subcircuits of this unit.
+        """
+        return [(self.probabilistic_circuit.edges[self, subcircuit]["weight"], subcircuit)
+                for subcircuit in self.subcircuits]
 
     @cache_inference_result
     def _likelihood(self, event: Iterable) -> float:
 
         result = 0.
 
-        for edge in self.edges_to_sub_circuits():
-            result += edge.weight * edge.target._likelihood(event)
+        for weight, subcircuit in self.weighted_subcircuits:
+            result += weight * subcircuit._likelihood(event)
 
         return result
 
@@ -277,41 +232,43 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
 
         result = 0.
 
-        for edge in self.edges_to_sub_circuits():
-            result += edge.weight * edge.target._probability(event)
+        for weight, subcircuit in self.weighted_subcircuits:
+            result += weight * subcircuit._probability(event)
 
         return result
 
     @cache_inference_result
     def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
 
-        edge_probabilities = []
+        subcircuit_probabilities = []
+        conditional_subcircuits = []
         total_probability = 0
 
-        for edge in self.edges_to_sub_circuits():
-            conditional, local_probability = edge.target._conditional(event)
+        result = self.__class__()
 
-            if local_probability == 0:
-                # for node in nx.descendants(self.probabilistic_circuit, edge.target):
-                #     self.probabilistic_circuit.remove_node(node)
+        for weight, subcircuit in self.weighted_subcircuits:
+            conditional, subcircuit_probability = subcircuit._conditional(event)
+
+            if subcircuit_probability == 0:
                 continue
 
-            local_probability = edge.weight * local_probability
-            total_probability += local_probability
-            edge_probabilities.append(local_probability)
+            subcircuit_probability *= weight
+            total_probability += subcircuit_probability
+            subcircuit_probabilities.append(subcircuit_probability)
+            conditional_subcircuits.append(conditional)
 
         if total_probability == 0:
-            self.probabilistic_circuit.remove_node(self)
             return None, 0
 
         # normalize probabilities
-        edge_probabilities = [p/total_probability for p in edge_probabilities]
+        normalized_probabilities = [p/total_probability for p in subcircuit_probabilities]
 
-        # update weights
-        for edge, probability in zip(self.edges_to_sub_circuits(), edge_probabilities):
-            edge.weight = probability
+        # add edges and subcircuits
+        for weight, subcircuit in zip(normalized_probabilities, conditional_subcircuits):
+            result.mount(subcircuit)
+            result.probabilistic_circuit.add_edge(result, subcircuit, weight=weight)
 
-        return self, total_probability
+        return result, total_probability
 
     @cache_inference_result
     def sample(self, amount: int) -> Iterable:
@@ -319,14 +276,15 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         Sample from the sum node using the latent variable interpretation.
         """
 
-        weights = [edge.weight for edge in self.edges_to_sub_circuits()]
+        weights, subcircuits = zip(*self.weighted_subcircuits)
+
         # sample the latent variable
         states = random.choices(list(range(len(weights))), weights=weights, k=amount)
 
         # sample from the children
         result = []
-        for index, edge in enumerate(self.edges_to_sub_circuits()):
-            result.extend(edge.target.sample(states.count(index)))
+        for index, subcircuit in enumerate(self.subcircuits):
+            result.extend(subcircuit.sample(states.count(index)))
         return result
 
     @cache_inference_result
@@ -339,17 +297,42 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         result = VariableMap({variable: 0 for variable in order_of_self})
 
         # for every weighted child
-        for edge in self.edges_to_sub_circuits():
+        for weight, subcircuit in self.weighted_subcircuits:
 
             # calculate the moment of the child
-            sub_circuit_moment = edge.target.moment(order_of_self, center_of_self)
+            sub_circuit_moment = subcircuit.moment(order_of_self, center_of_self)
 
             # add up the linear combination of the child moments
             for variable, moment in sub_circuit_moment.items():
-                result[variable] += edge.weight * moment
+                result[variable] += weight * moment
 
         return result
 
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+
+        # if this node has no variables that are required in the marginal, remove it.
+        if set(self.variables).intersection(set(variables)) == set():
+            return None
+
+        result = self.__class__()
+
+        # propagate to sub-circuits
+        for weight, subcircuit in self.weighted_subcircuits:
+            marginal = subcircuit.marginal(variables)
+
+            if marginal is None:
+                continue
+
+            result.mount(marginal)
+            result.probabilistic_circuit.add_edge(result, marginal, weight=weight)
+        return result
+
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, other):
+        return (isinstance(other, self.__class__)
+                and self.weighted_subcircuits == other.weighted_subcircuits)
 
 class DeterministicSumUnit(SmoothSumUnit):
     """
@@ -415,9 +398,8 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
         result = 1.
 
-        for edge in self.edges_to_sub_circuits():
-            subcircuit = edge.target
-            subcircuit_variables = edge.target.variables
+        for subcircuit in self.subcircuits:
+            subcircuit_variables = subcircuit.variables
             partial_event = [event[variables.index(variable)] for variable in subcircuit_variables]
             result *= subcircuit._likelihood(partial_event)
 
@@ -428,13 +410,15 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
         result = 1.
 
-        for edge in self.edges_to_sub_circuits():
-            subcircuit = edge.target
-            subcircuit_variables = edge.target.variables
+        for subcircuit in self.subcircuits:
 
-            subcircuit_event = EncodedEvent({variable: event[variable] for variable in subcircuit_variables})
+            # load variables of this subcircuit
+            subcircuit_variables = subcircuit.variables
 
             # construct partial event for child
+            subcircuit_event = EncodedEvent({variable: event[variable] for variable in subcircuit_variables})
+
+            # multiply results
             result *= subcircuit._probability(subcircuit_event)
 
         return result
@@ -446,8 +430,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         resulting_likelihood = 1.
 
         # gather all modes from the children
-        for edge in self.edges_to_sub_circuits():
-            subcircuit = edge.target
+        for subcircuit in self.subcircuits:
             mode, likelihood = subcircuit._mode()
             modes.append(mode)
             resulting_likelihood *= likelihood
@@ -468,24 +451,28 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
     @cache_inference_result
     def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
-
         # initialize probability
         probability = 1.
 
-        for edge in self.edges_to_sub_circuits():
+        # create new node with new circuit attached to it
+        resulting_node = self.__class__()
+
+        for subcircuit in self.subcircuits:
+
             # get conditional child and probability in pre-order
-            conditional_child, conditional_probability = edge.target._conditional(event)
+            conditional_subcircuit, conditional_probability = subcircuit._conditional(event)
 
             # if any is 0, the whole probability is 0
             if conditional_probability == 0:
-                self.remove_entire_subgraph()
-                self.probabilistic_circuit.remove_node(self)
                 return None, 0
 
+            resulting_node.probabilistic_circuit.add_nodes_from(conditional_subcircuit.probabilistic_circuit)
+            resulting_node.probabilistic_circuit.add_edges_from(conditional_subcircuit.probabilistic_circuit.edges())
+            resulting_node.probabilistic_circuit.add_edge(resulting_node, conditional_subcircuit)
             # update probability and children
             probability *= conditional_probability
 
-        return self, probability
+        return resulting_node, probability
 
     @cache_inference_result
     def sample(self, amount: int) -> List[List[Any]]:
@@ -494,11 +481,11 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         # list for the samples content in the same order as self.variables
         rearranged_sample = [[None] * len(variables)] * amount
 
-        for edge in self.edges_to_sub_circuits():
-            sample_subset = edge.target.sample(amount)
+        for subcircuit in self.subcircuits:
+            sample_subset = subcircuit.sample(amount)
 
             for sample_index in range(amount):
-                for child_variable_index, variable in enumerate(edge.target.variables):
+                for child_variable_index, variable in enumerate(subcircuit.variables):
                     rearranged_sample[sample_index][variables.index(variable)] = sample_subset[sample_index][
                         child_variable_index]
 
@@ -510,109 +497,31 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         # initialize result
         result = VariableMap()
 
-        for edge in self.edges_to_sub_circuits():
+        for subcircuit in self.subcircuits:
             # calculate the moment of the child
-            child_moment = edge.target.moment(order, center)
+            child_moment = subcircuit.moment(order, center)
 
             result = VariableMap({**result, **child_moment})
 
         return result
 
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        # if this node has no variables that are required in the marginal, remove it.
+        if set(self.variables).intersection(set(variables)) == set():
+            return None
 
-class Edge(SubclassJSONSerializer):
-    """
-    Class representing a directed edge in a probabilistic circuit.
-    """
+        result = self.__class__()
 
-    source: ProbabilisticCircuitMixin
-    """
-    The source of the edge.
-    """
+        # propagate to sub-circuits
+        for subcircuit in self.subcircuits:
+            marginal = subcircuit.marginal(variables)
 
-    target: ProbabilisticCircuitMixin
-    """
-    The target of the edge.
-    """
+            if marginal is None:
+                continue
 
-    def __init__(self, source: ProbabilisticCircuitMixin, target: ProbabilisticCircuitMixin):
-        self.source = source
-        self.target = target
-
-    def parameters(self) -> Dict[str, Any]:
-        return {
-            "source": self.source.id,
-            "target": self.target.id
-        }
-
-    def __copy__(self):
-        return self.__class__(self.target, self.source)
-
-    def __eq__(self, other: 'Edge'):
-        return (isinstance(other, self.__class__) and
-                self.target == other.target)
-
-    def __hash__(self):
-        return hash((self.source, self.target))
-
-    def to_json(self) -> Dict[str, Any]:
-        return {
-            **super().to_json(),
-            "target": self.target.to_json()
-        }
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
-        """
-        Creates an edge towards the target of the edge from a json dict. The source will not
-        be read from the data.
-        """
-        target = ProbabilisticCircuitMixin.from_json(data["target"])
-        return cls(None, target)
-
-
-class DirectedWeightedEdge(Edge):
-    """
-    Class representing a directed weighted edge in a probabilistic circuit.
-    """
-
-    weight: float
-    """
-    The weight of the edge.
-    """
-
-    source: SmoothSumUnit
-    target: SmoothSumUnit
-
-    def __init__(self, source: ProbabilisticCircuitMixin, target: ProbabilisticCircuitMixin, weight: float):
-        super().__init__(source, target)
-        self.weight = weight
-
-    def parameters(self) -> Dict[str, Any]:
-        return {
-            **super().parameters(),
-            "weight": self.weight
-        }
-
-    def __eq__(self, other: 'DirectedWeightedEdge'):
-        return (super().__eq__(other) and
-                self.weight == other.weight)
-
-    def __copy__(self):
-        return self.__class__(self.target, self.source, self.weight)
-
-    def __hash__(self):
-        return hash((hash(self.source), hash(self.target)))
-
-    def to_json(self) -> Dict[str, Any]:
-        return {
-            **super().to_json(),
-            "weight": self.weight
-        }
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
-        target = ProbabilisticCircuitMixin.from_json(data["target"])
-        return cls(None, target, data["weight"])
+            result.mount(marginal)
+            result.probabilistic_circuit.add_edge(result, marginal)
+        return result
 
 
 class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
@@ -625,12 +534,12 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
         nx.DiGraph.__init__(self)
 
     @property
-    def variables(self) -> Tuple[Variable]:
-        variables = set([variable for distribution in self.leaf_nodes() for variable in distribution.variables])
-        return tuple(sorted(variables))
+    def variables(self) -> tuple[Variable, ...]:
+        return self.root.variables
 
-    def leaf_nodes(self) -> List[ProbabilisticModel]:
-        return [node for node in self.nodes() if self.out_degree(node) == 0]
+    @property
+    def leaves(self) -> List[ProbabilisticCircuitMixin]:
+        return self.root.leaves
 
     def is_valid(self) -> bool:
         """
@@ -645,37 +554,11 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
 
     def add_node(self, node: ProbabilisticCircuitMixin, **attr):
 
-        # if the node is in this circuit
-        if id(node.probabilistic_circuit) == id(self):
-
-            # do not proceed
-            return
-
-        # write this as the nodes circuit
+        # write self as the nodes circuit
         node.probabilistic_circuit = self
-
-        # assign new id
-        node.id = id(node) # max(node.id for node in self.nodes) + 1 if len(self.nodes) > 0 else 0
 
         # call super
         super().add_node(node, **attr)
-
-    def add_edge(self, edge: Edge, **kwargs):
-
-        # check if edge from a sum unit is weighted.
-        if isinstance(edge.source, SmoothSumUnit) and not isinstance(edge, DirectedWeightedEdge):
-            raise ValueError(f"Sum units can only have weighted edges. Got {type(edge)} instead.")
-
-        # check if edge from a product unit is unweighted
-        if isinstance(edge.source, DecomposableProductUnit) and isinstance(edge, DirectedWeightedEdge):
-            raise ValueError(f"Product units can only have un-weighted edges. Got {type(edge)} instead.")
-
-        self.add_nodes_from([edge.source, edge.target])
-        super().add_edge(edge.source, edge.target, edge=edge, **kwargs)
-
-    def add_edges_from(self, edges: Iterable[Edge], **kwargs):
-        for edge in edges:
-            self.add_edge(edge, **kwargs)
 
     def add_nodes_from(self, nodes_for_adding, **attr):
         for node in nodes_for_adding:
@@ -728,19 +611,11 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph):
         return self.root.moment(order, center)
 
     @property
-    def edge_objects(self) -> List[Union[Edge, DirectedWeightedEdge]]:
-        edges = super().edges()
-        return [self[source][target]["edge"] for source, target in edges]
-
-    @property
     def domain(self) -> Event:
         root = self.root
         result = self.root.domain
         root.reset_result_of_current_query()
         return result
-
-    def leaves(self) -> List[ProbabilisticModelWrapper]:
-        return [node for node in self.nodes if self.out_degree(node) == 0]
 
     def __eq__(self, other: 'ProbabilisticCircuit'):
         return nx.is_isomorphic(self, other)

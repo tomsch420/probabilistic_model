@@ -375,7 +375,7 @@ class JPT(DeterministicSumUnit):
         Plot the model.
         """
         subplot_titles = [distribution.__class__.__name__ for child in self.sub_circuits
-                          for distribution in child.sub_circuits]
+                          for distribution in child.subcircuits]
         figure = make_subplots(rows=len(self.sub_circuits), cols=len(self.variables),
                                row_titles=[f"P(Leaf = {child_index}) = {weight}" for weight, child_index
                                            in zip(self.weights, range(len(self.sub_circuits)))],
@@ -384,7 +384,7 @@ class JPT(DeterministicSumUnit):
         for child_index, child in enumerate(self.sub_circuits):
             child: DecomposableProductUnit
 
-            for distribution_index, distribution in enumerate(child.sub_circuits):
+            for distribution_index, distribution in enumerate(child.subcircuits):
                 traces: List[go.Scatter] = distribution.plot()
                 legend_group = child_index * len(self.variables) + distribution_index + 1
                 traces = [trace.update(legendgroup=legend_group)

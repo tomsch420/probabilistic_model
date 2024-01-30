@@ -12,8 +12,7 @@ from ...distributions.distributions import (ContinuousDistribution as PMContinuo
                                             IntegerDistribution as PMIntegerDistribution,
                                             DiscreteDistribution as PMDiscreteDistribution,
                                             UnivariateDistribution as PMUnivariateDistribution)
-from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin,
-                                     DirectedWeightedEdge, cache_inference_result)
+from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin, cache_inference_result)
 from ...distributions.uniform import UniformDistribution as PMUniformDistribution
 from ...distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
                                        TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
@@ -24,6 +23,9 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
     @property
     def variables(self) -> Tuple[Variable]:
         return self._variables
+
+    def __hash__(self):
+        return ProbabilisticCircuitMixin.__hash__(self)
 
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin):
@@ -57,50 +59,27 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, P
 
         # create and add the deterministic mixture as result
         conditional = DeterministicSumUnit()
-        self.probabilistic_circuit.add_node(conditional)
 
         # for every distribution and its normalized probability
-        for distribution, probability in zip(resulting_distributions, normalized_probabilities):
-
-            # create an edge from the mixture to the distribution
-            edge = DirectedWeightedEdge(conditional, distribution, probability)
-            conditional.probabilistic_circuit.add_edge(edge)
+        for probability, distribution in zip(normalized_probabilities, resulting_distributions):
+            conditional.mount(distribution)
+            conditional.probabilistic_circuit.add_edge(conditional, distribution, weight=probability)
 
         return conditional, total_probability
 
     def conditional_from_singleton(self, singleton: portion.Interval) -> \
-            Tuple[Optional['DiracDeltaDistribution'], float]:
+            Tuple['DiracDeltaDistribution', float]:
         conditional, probability = super().conditional_from_singleton(singleton)
         return DiracDeltaDistribution(conditional.variable, conditional.location, conditional.density_cap), probability
 
     @cache_inference_result
     def _conditional(self, event: EncodedEvent) -> \
             Tuple[Optional[Union['ContinuousDistribution', 'DiracDeltaDistribution', DeterministicSumUnit]], float]:
+        return super()._conditional(event)
 
-        # get the conditional from the superclass
-        conditional, probability = super()._conditional(event)
-
-        # if the conditional is None
-        if conditional is None:
-
-            # remove self from the circuit
-            self.probabilistic_circuit.remove_node(self)
-            return None, 0
-
-        # add the conditional node
-        self.probabilistic_circuit.add_node(conditional)
-
-        # get the edges
-        new_edges = [edge.__copy__() for edge in self.incoming_edges()]
-        for edge in new_edges:
-            edge.target = conditional
-
-        self.probabilistic_circuit.remove_node(self)
-        self.probabilistic_circuit.add_edges_from(new_edges)
-        return conditional, probability
-
+    @cache_inference_result
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
-        return ProbabilisticCircuitMixin.marginal(self, variables)
+        return PMContinuousDistribution.marginal(self, variables)
 
 
 class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, ProbabilisticCircuitMixin):

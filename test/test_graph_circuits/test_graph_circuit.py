@@ -13,10 +13,17 @@ from probabilistic_model.utils import SubclassJSONSerializer
 
 class ShowMixin:
 
-    model: ProbabilisticCircuit
+    model: Union[ProbabilisticCircuit, ProbabilisticCircuitMixin]
 
-    def show(self):
-        nx.draw(self.model, with_labels=True)
+    def show(self, model: Optional[Union[ProbabilisticCircuit, ProbabilisticCircuitMixin]] = None):
+
+        if model is None:
+            model = self.model
+
+        if isinstance(model, ProbabilisticCircuit):
+            nx.draw(model, with_labels=True)
+        elif isinstance(model, ProbabilisticCircuitMixin):
+            nx.draw(model.probabilistic_circuit, with_labels=True)
         plt.show()
 
 
@@ -24,18 +31,26 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
 
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
-    model: ProbabilisticCircuit
+    model: DecomposableProductUnit
 
     def setUp(self):
         u1 = UniformDistribution(self.x, portion.closed(0, 1))
         u2 = UniformDistribution(self.y, portion.closed(3, 4))
 
-        product_unit1 = DecomposableProductUnit()
-        e1 = Edge(product_unit1, u1)
-        e2 = Edge(product_unit1, u2)
+        product_unit = DecomposableProductUnit()
+        product_unit.probabilistic_circuit.add_nodes_from([product_unit, u1, u2])
+        product_unit.probabilistic_circuit.add_edges_from([(product_unit, u1), (product_unit, u2)])
+        self.model = product_unit
 
-        self.model = ProbabilisticCircuit()
-        self.model.add_edges_from([e1, e2])
+    def test_setup(self):
+        self.assertEqual(len(self.model.probabilistic_circuit.nodes()), 3)
+        self.assertEqual(len(self.model.probabilistic_circuit.edges()), 2)
+
+    def test_variables(self):
+        self.assertEqual(self.model.variables, (self.x, self.y))
+
+    def test_leaves(self):
+        self.assertEqual(len(self.model.leaves), 2)
 
     def test_likelihood(self):
         event = [0.5, 3.5]
@@ -67,28 +82,26 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
     def test_conditional(self):
         event = Event({self.x: portion.closed(0, 0.5)})
         result, probability = self.model.conditional(event)
-        self.show()
         self.assertEqual(probability, 0.5)
-        self.assertEqual(len(self.model.nodes()), 3)
+        self.assertEqual(len(result.probabilistic_circuit.nodes()), 3)
         self.assertIsInstance(result, DecomposableProductUnit)
-        self.assertIsInstance(self.model.root, DecomposableProductUnit)
+        self.assertIsInstance(result.probabilistic_circuit.root, DecomposableProductUnit)
 
     def test_conditional_with_0_evidence(self):
         event = Event({self.x: portion.closed(1.5, 2)})
         result, probability = self.model.conditional(event)
         self.assertEqual(probability, 0)
-        self.assertEqual(len(self.model.nodes()), 0)
         self.assertEqual(result, None)
 
     def test_marginal_with_intersecting_variables(self):
         marginal = self.model.marginal([self.x])
-        self.assertEqual(len(self.model.nodes()), 2)
-        self.assertEqual(self.model.variables, (self.x, ))
+        self.show(marginal)
+        self.assertEqual(len(marginal.probabilistic_circuit.nodes()), 2)
+        self.assertEqual(marginal.probabilistic_circuit.variables, (self.x, ))
 
     def test_marginal_without_intersecting_variables(self):
         marginal = self.model.marginal([])
-        self.assertEqual(len(self.model.nodes()), 0)
-        self.assertEqual(self.model.variables, tuple())
+        self.assertIsNone(marginal)
 
     def test_domain(self):
         domain = self.model.domain
@@ -104,34 +117,60 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
 class SumUnitTestCase(unittest.TestCase, ShowMixin):
 
     x: Continuous = Continuous("x")
-    model: ProbabilisticCircuit
+    model: DeterministicSumUnit
 
     def setUp(self):
         u1 = UniformDistribution(self.x, portion.closed(0, 1))
         u2 = UniformDistribution(self.x, portion.closed(3, 4))
 
         sum_unit = DeterministicSumUnit()
-        e1 = DirectedWeightedEdge(sum_unit, u1, 0.6)
-        e2 = DirectedWeightedEdge(sum_unit, u2, 0.4)
+        e1 = (sum_unit, u1, 0.6)
+        e2 = (sum_unit, u2, 0.4)
 
-        self.model = ProbabilisticCircuit()
-        self.model.add_edges_from([e1, e2])
+        sum_unit.probabilistic_circuit.add_weighted_edges_from([e1, e2])
+        self.model = sum_unit
+
+    def test_setup(self):
+        self.assertEqual(len(self.model.probabilistic_circuit.nodes()), 3)
+        self.assertEqual(len(self.model.probabilistic_circuit.edges()), 2)
+        self.show()
+
+    def test_variables(self):
+        self.assertEqual(self.model.variables, (self.x, ))
+
+    def test_domain(self):
+        domain = self.model.domain
+        self.assertEqual(domain[self.x], portion.closed(0, 1) | portion.closed(3, 4))
+
+    def test_weighted_subcircuits(self):
+        weighted_subcircuits = self.model.weighted_subcircuits
+        self.assertEqual(len(weighted_subcircuits), 2)
+        self.assertEqual([weighted_subcircuit[0] for weighted_subcircuit in weighted_subcircuits], [0.6, 0.4])
+
+    def test_likelihood(self):
+        event = [0.5]
+        result = self.model.likelihood(event)
+        self.assertEqual(result, 0.6)
+
+    def test_probability(self):
+        event = Event({self.x: portion.closed(0, 3.5)})
+        result = self.model.probability(event)
+        self.assertEqual(result, 0.8)
 
     def test_conditional(self):
         event = Event({self.x: portion.closed(0, 0.5)})
         result, probability = self.model.conditional(event)
         self.assertEqual(probability, 0.3)
-        self.assertEqual(len(self.model.nodes()), 2)
+        self.assertEqual(len(result.probabilistic_circuit.nodes()), 2)
         self.assertIsInstance(result, DeterministicSumUnit)
-        self.assertIsInstance(self.model.root, DeterministicSumUnit)
-        edge = list(self.model.edge_objects)[0]
-        self.assertEqual(edge.weight, 1)
+        self.assertIsInstance(result.probabilistic_circuit.root, DeterministicSumUnit)
+        self.assertEqual(len(result.weighted_subcircuits), 1)
+        self.assertEqual(result.weighted_subcircuits[0][0], 1)
 
     def test_conditional_impossible(self):
         event = Event({self.x: portion.closed(5, 6)})
         result, probability = self.model.conditional(event)
         self.assertEqual(probability, 0.)
-        self.assertEqual(len(self.model.nodes()), 0)
         self.assertIsNone(result)
 
     def test_sample(self):
@@ -142,6 +181,10 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
     def test_moment(self):
         expectation = self.model.expectation(self.model.variables)
         self.assertEqual(expectation[self.x], 0.5 * 0.6 + 0.4 * 3.5)
+
+    def test_marginal(self):
+        marginal = self.model.marginal([self.x])
+        self.assertEqual(self.model, marginal)
 
     def test_serialization(self):
         serialized = self.model.root.to_json()
