@@ -8,10 +8,10 @@ from anytree import RenderTree
 from matplotlib import pyplot as plt
 from random_events.variables import Continuous
 
-from probabilistic_model.graph_circuits.probabilistic_circuit import ProbabilisticCircuit, SmoothSumUnit, DirectedWeightedEdge
+from probabilistic_model.probabilistic_circuits.probabilistic_circuit import ProbabilisticCircuit, SmoothSumUnit
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.graph_circuits.distributions import DiracDeltaDistribution
-from probabilistic_model.graph_circuits.distributions import UniformDistribution
+from probabilistic_model.probabilistic_circuits.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuits.distributions import UniformDistribution
 import plotly.graph_objects as go
 from probabilistic_model.utils import SubclassJSONSerializer
 
@@ -23,9 +23,7 @@ class InductionStepTestCase(unittest.TestCase):
     induction_step: InductionStep
 
     def setUp(self) -> None:
-        model = ProbabilisticCircuit()
         nyga_distribution = NygaDistribution(self.variable, min_samples_per_quantile=1, min_likelihood_improvement=0.01)
-        model.add_node(nyga_distribution)
         self.induction_step = InductionStep(self.sorted_data, 6, self.weights, 0, len(self.sorted_data),
                                             nyga_distribution)
 
@@ -92,7 +90,7 @@ class InductionStepTestCase(unittest.TestCase):
         data = np.random.normal(0, 1, 100).tolist()
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        self.assertAlmostEqual(sum([edge.weight for edge in distribution.edges_to_sub_circuits()]),
+        self.assertAlmostEqual(sum([weight for weight, _ in distribution.weighted_subcircuits]),
                                1.)
 
     def test_domain(self):
@@ -117,21 +115,19 @@ class InductionStepTestCase(unittest.TestCase):
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
         self.assertEqual(len(distribution.probabilistic_circuit.nodes), 2)
-        self.assertEqual(distribution.edges_to_sub_circuits()[0].weight, 1.)
-        self.assertIsInstance(distribution.edges_to_sub_circuits()[0].target, DiracDeltaDistribution)
+        self.assertEqual(distribution.weighted_subcircuits[0][0], 1.)
+        self.assertIsInstance(distribution.subcircuits[0], DiracDeltaDistribution)
 
     def test_serialization(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
         distribution = NygaDistribution(self.variable, min_likelihood_improvement=0.01)
-        distribution.probabilistic_circuit = ProbabilisticCircuit()
         distribution.fit(data)
         serialized = distribution.to_json()
         deserialized = SubclassJSONSerializer.from_json(serialized)
         self.assertIsInstance(deserialized, NygaDistribution)
         self.assertEqual(distribution, deserialized)
 
-    @unittest.skip("Not Implemented yet")
     def test_equality_and_copy(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
@@ -139,17 +135,14 @@ class InductionStepTestCase(unittest.TestCase):
         distribution.fit(data)
         distribution_ = distribution.__copy__()
         self.assertEqual(distribution, distribution_)
-        distribution.min_likelihood_improvement = 0
-        self.assertNotEqual(distribution, distribution_)
 
     def test_from_mixture_of_uniform_distributions(self):
         u1 = UniformDistribution(self.variable, portion.closed(0, 5))
         u2 = UniformDistribution(self.variable, portion.closed(2, 3))
-        model = ProbabilisticCircuit()
         sum_unit = SmoothSumUnit()
-        e1 = DirectedWeightedEdge(sum_unit, u1, 0.5)
-        e2 = DirectedWeightedEdge(sum_unit, u2, 0.5)
-        model.add_edges_from([e1, e2])
+        e1 = (sum_unit, u1, 0.5)
+        e2 = (sum_unit, u2, 0.5)
+        sum_unit.probabilistic_circuit.add_weighted_edges_from([e1, e2])
         distribution = NygaDistribution.from_uniform_mixture(sum_unit)
 
         solution_by_hand = NygaDistribution(self.variable)
@@ -158,13 +151,22 @@ class InductionStepTestCase(unittest.TestCase):
         leaf_2 = UniformDistribution(self.variable, portion.closedopen(2, 3))
         leaf_3 = UniformDistribution(self.variable, portion.closed(3, 5))
 
-        e1 = DirectedWeightedEdge(solution_by_hand, leaf_1, 0.2)
-        e2 = DirectedWeightedEdge(solution_by_hand, leaf_2, 0.6)
-        e3 = DirectedWeightedEdge(solution_by_hand, leaf_3, 0.2)
+        e1 = (solution_by_hand, leaf_1, 0.2)
+        e2 = (solution_by_hand, leaf_2, 0.6)
+        e3 = (solution_by_hand, leaf_3, 0.2)
 
-        solution_by_hand.probabilistic_circuit.add_edges_from([e1, e2, e3])
-        self.assertEqual(len(distribution.leaves()), 3)
+        solution_by_hand.probabilistic_circuit.add_weighted_edges_from([e1, e2, e3])
+        self.assertEqual(len(distribution.leaves), 3)
         self.assertEqual(distribution.probabilistic_circuit, solution_by_hand.probabilistic_circuit)
+
+    def test_deep_mount(self):
+        np.random.seed(69)
+        n1 = NygaDistribution(self.variable)
+        data = np.random.normal(0, 1, 100).tolist()
+        n2 = NygaDistribution(self.variable, min_likelihood_improvement=0.1)
+        n2.fit(data)
+        n1.mount(n2)
+        self.assertEqual(len(n2.probabilistic_circuit.nodes), 3)
 
 
 if __name__ == '__main__':

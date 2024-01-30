@@ -5,9 +5,9 @@ from matplotlib import pyplot as plt
 from random_events.events import Event
 from random_events.variables import Integer, Symbolic, Continuous
 
-from probabilistic_model.graph_circuits.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuits.probabilistic_circuit import *
 
-from probabilistic_model.graph_circuits.distributions.distributions import ContinuousDistribution, UniformDistribution
+from probabilistic_model.probabilistic_circuits.distributions.distributions import ContinuousDistribution, UniformDistribution
 from probabilistic_model.utils import SubclassJSONSerializer
 
 
@@ -95,7 +95,6 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
 
     def test_marginal_with_intersecting_variables(self):
         marginal = self.model.marginal([self.x])
-        self.show(marginal)
         self.assertEqual(len(marginal.probabilistic_circuit.nodes()), 2)
         self.assertEqual(marginal.probabilistic_circuit.variables, (self.x, ))
 
@@ -109,9 +108,14 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(domain[self.y], portion.closed(3, 4))
 
     def test_serialization(self):
-        serialized = self.model.root.to_json()
+        serialized = self.model.to_json()
         deserialized = DecomposableProductUnit.from_json(serialized)
-        self.assertEqual(self.model.root, deserialized)
+        self.assertEqual(self.model, deserialized)
+
+    def test_copy(self):
+        copy = self.model.__copy__()
+        self.assertEqual(self.model, copy)
+        self.assertNotEqual(id(copy), id(self.model))
 
 
 class SumUnitTestCase(unittest.TestCase, ShowMixin):
@@ -133,7 +137,6 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
     def test_setup(self):
         self.assertEqual(len(self.model.probabilistic_circuit.nodes()), 3)
         self.assertEqual(len(self.model.probabilistic_circuit.edges()), 2)
-        self.show()
 
     def test_variables(self):
         self.assertEqual(self.model.variables, (self.x, ))
@@ -186,10 +189,36 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         marginal = self.model.marginal([self.x])
         self.assertEqual(self.model, marginal)
 
+    def test_mode(self):
+        mode, likelihood = self.model.mode()
+        self.assertEqual(likelihood, 0.6)
+        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1)})])
+
     def test_serialization(self):
-        serialized = self.model.root.to_json()
+        serialized = self.model.to_json()
         deserialized = SmoothSumUnit.from_json(serialized)
-        self.assertEqual(self.model.root, deserialized)
+        self.assertEqual(self.model, deserialized)
+
+    def test_copy(self):
+        copy = self.model.__copy__()
+        self.assertEqual(self.model, copy)
+        self.assertNotEqual(id(copy), id(self.model))
+
+    def test_conditional_inference(self):
+        event = Event({self.x: portion.closed(0, 0.5)})
+        result, probability = self.model.conditional(event)
+        self.assertEqual(result.probability(event), 1)
+
+    def test_deep_mount(self):
+        s1 = SmoothSumUnit()
+        s2 = SmoothSumUnit()
+        s3 = SmoothSumUnit()
+        u1 = UniformDistribution(self.x, portion.closed(0, 1))
+        s2.probabilistic_circuit.add_nodes_from([s2, s3, u1])
+        s2.probabilistic_circuit.add_weighted_edges_from(
+            [(s2, s3, 1.), (s3, u1, 1.)])
+        s1.mount(s2)
+        self.assertEqual(len(s1.probabilistic_circuit.nodes()), 4)
 
 
 class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
@@ -202,6 +231,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
 
     def setUp(self):
         model = ProbabilisticCircuit()
+
         u1 = UniformDistribution(self.real, portion.closed(0, 1))
         u2 = UniformDistribution(self.real, portion.closed(3, 5))
         model.add_node(u1)
@@ -211,44 +241,30 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
 
         model.add_node(sum_unit_1)
 
-        e1 = DirectedWeightedEdge(sum_unit_1, u1, 0.5)
-        e2 = DirectedWeightedEdge(sum_unit_1, u2, 0.5)
-
-        model.add_edge(e1)
-        model.add_edge(e2)
+        model.add_edge(sum_unit_1, u1, weight=0.5)
+        model.add_edge(sum_unit_1, u2, weight=0.5)
 
         u3 = UniformDistribution(self.real2, portion.closed(2, 2.25))
         u4 = UniformDistribution(self.real2, portion.closed(2, 5))
         sum_unit_2 = SmoothSumUnit()
-
         model.add_nodes_from([u3, u4, sum_unit_2])
 
-        e3 = DirectedWeightedEdge(sum_unit_2, u3, 0.7)
-        e4 = DirectedWeightedEdge(sum_unit_2, u4, 0.3)
-
-        model.add_edges_from([e3, e4])
+        e3 = (sum_unit_2, u3, 0.7)
+        e4 = (sum_unit_2, u4, 0.3)
+        model.add_weighted_edges_from([e3, e4])
 
         product_1 = DecomposableProductUnit()
         model.add_node(product_1)
 
-        e5 = Edge(product_1, sum_unit_1)
-        e6 = Edge(product_1, sum_unit_2)
+        e5 = (product_1, sum_unit_1)
+        e6 = (product_1, sum_unit_2)
         model.add_edges_from([e5, e6])
 
         self.model = model
 
     def test_setup(self):
-        node_ids = set()
-        for node in self.model.nodes():
-            self.assertIsNotNone(node.id)
-            self.assertTrue(node.id not in node_ids)
-            node_ids.add(node.id)
-            self.assertIsNotNone(node.probabilistic_circuit)
-
-    def test_edges(self):
-        self.assertEqual(len(self.model.edge_objects), 6)
-        for edge in self.model.edge_objects:
-            self.assertIsInstance(edge, Edge)
+        self.assertEqual(len(self.model.nodes()), 7)
+        self.assertEqual(len(self.model.edges()), 6)
 
     def test_variables(self):
         self.assertEqual(self.model.variables, (self.real, self.real2))
@@ -257,7 +273,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         self.assertTrue(self.model.is_valid())
 
     def test_root(self):
-        self.assertEqual(self.model.root.id, 6)
+        self.assertIsInstance(self.model.root, DecomposableProductUnit)
 
     def test_variables_of_component(self):
         self.assertEqual(self.model.root.variables, (self.real, self.real2))
@@ -294,6 +310,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
 
         for node in self.model.nodes():
             self.assertIsNone(node.result_of_current_query)
+            self.assertFalse(node.cache_result)
 
     def test_caching(self):
         event = Event({self.real: portion.closed(0, 5),
@@ -306,7 +323,8 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
                 self.assertIsNotNone(node.result_of_current_query)
 
     def test_mode(self):
-        mode, likelihood = list(self.model.nodes)[2].mode()
+        marginal = self.model.marginal([self.real])
+        mode, likelihood = marginal.mode()
         self.assertEqual(likelihood, 0.5)
         self.assertEqual(mode, [Event({self.real: portion.closed(0, 1)})])
 
@@ -314,34 +332,23 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         with self.assertRaises(NotImplementedError):
             _ = self.model.mode()
 
-    def test_mode_with_product(self):
-        non_deterministic_node = [node for node in self.model.nodes() if node.id == 5][0]
-
-        for descendant in nx.descendants(self.model, non_deterministic_node):
-            self.model.remove_node(descendant)
-
-        self.model.remove_node(non_deterministic_node)
-        new_node = UniformDistribution(self.real2, portion.closed(2, 3))
-
-        new_edge = Edge(self.model.root, new_node)
-        self.model.add_edge(new_edge)
-
-        self.assertTrue(new_node in self.model.nodes())
-
-        mode, likelihood = self.model.mode()
-        self.assertEqual(likelihood, 0.5)
-        self.assertEqual(mode, [Event({self.real: portion.closed(0, 1),
-                                       self.real2: portion.closed(2, 3)})])
-
     def test_conditional(self):
         event = Event({self.real: portion.closed(0, 1)})
         result, probability = self.model.conditional(event)
-        self.assertEqual(len(self.model.nodes()), 6)
+        self.assertEqual(len(result.nodes()), 6)
 
     def test_sample(self):
         samples = self.model.sample(100)
         for sample in samples:
             self.assertGreater(self.model.likelihood(sample), 0)
+
+    def test_serialization(self):
+        serialized = self.model.to_json()
+        deserialized = ProbabilisticCircuit.from_json(serialized)
+        self.assertEqual(self.model, deserialized)
+
+
+
 
 
 if __name__ == '__main__':

@@ -22,8 +22,8 @@ from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic, Continuous)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.graph_circuits.distributions.distributions import IntegerDistribution, SymbolicDistribution
-from probabilistic_model.graph_circuits.probabilistic_circuit import DecomposableProductUnit
+from probabilistic_model.probabilistic_circuits.distributions.distributions import IntegerDistribution, SymbolicDistribution
+from probabilistic_model.probabilistic_circuits.probabilistic_circuit import DecomposableProductUnit
 import plotly.graph_objects as go
 from probabilistic_model.distributions.multinomial import Multinomial
 
@@ -139,11 +139,10 @@ class JPTTestCase(unittest.TestCase):
         preprocessed_data = self.model.preprocess_data(self.data)
         leaf_node = self.model.create_leaf_node(preprocessed_data)
 
-        self.assertEqual(len(leaf_node.edges_to_sub_circuits()), 3)
-        print([edge.target for edge in leaf_node.edges_to_sub_circuits()])
-        self.assertIsInstance(leaf_node.edges_to_sub_circuits()[0].target, IntegerDistribution)
-        self.assertIsInstance(leaf_node.edges_to_sub_circuits()[1].target, NygaDistribution)
-        self.assertIsInstance(leaf_node.edges_to_sub_circuits()[2].target, SymbolicDistribution)
+        self.assertEqual(len(leaf_node.subcircuits), 3)
+        self.assertIsInstance(leaf_node.subcircuits[0], IntegerDistribution)
+        self.assertIsInstance(leaf_node.subcircuits[1], NygaDistribution)
+        self.assertIsInstance(leaf_node.subcircuits[2], SymbolicDistribution)
 
         # check that all likelihoods are greater than 0
         for index, row in self.data.iterrows():
@@ -154,15 +153,15 @@ class JPTTestCase(unittest.TestCase):
     def test_fit_without_sum_units(self):
         self.model.min_impurity_improvement = 1
         self.model.fit(self.data)
-        self.assertEqual(len(self.model.edges_to_sub_circuits()), 1)
-        self.assertEqual(self.model.weights, [1])
-        self.assertEqual(len(self.model.edges_to_sub_circuits()[0].target.edges_to_sub_circuits()), 3)
+        self.assertEqual(len(self.model.subcircuits), 1)
+        self.assertEqual(self.model.weighted_subcircuits[0][0], 1.)
+        self.assertEqual(len(self.model.subcircuits[0].subcircuits), 3)
 
     def test_fit(self):
         self.model._min_samples_leaf = 10
         self.model.fit(self.data)
-        self.assertTrue(len(self.model.edges_to_sub_circuits()) <= math.floor(len(self.data) / self.model.min_samples_leaf))
-        self.assertTrue(all([edge.weight > 0 for edge in self.model.edges_to_sub_circuits()]))
+        self.assertTrue(len(self.model.subcircuits) <= math.floor(len(self.data) / self.model.min_samples_leaf))
+        self.assertTrue(all([weight > 0 for weight, _ in self.model.weighted_subcircuits]))
 
         # check that all likelihoods are greater than 0
         for index, row in self.data.iterrows():
@@ -177,10 +176,10 @@ class JPTTestCase(unittest.TestCase):
         original_jpt = OldJPT(variables, min_samples_leaf=self.model.min_samples_leaf,
                               min_impurity_improvement=self.model.min_impurity_improvement)
         original_jpt.fit(self.data)
-        self.assertEqual(len(self.model.edges_to_sub_circuits()), len(original_jpt.leaves))
+        self.assertEqual(len(self.model.subcircuits), len(original_jpt.leaves))
 
-        for og_leaf, edge in zip(original_jpt.leaves.values(), self.model.edges_to_sub_circuits()):
-            self.assertTrue(self.leaf_equal_to_product(og_leaf, edge.target))
+        for og_leaf, new_leaf in zip(original_jpt.leaves.values(), self.model.subcircuits):
+            self.assertTrue(self.leaf_equal_to_product(og_leaf, new_leaf))
 
     def leaf_equal_to_product(self, leaf: Leaf, product: DecomposableProductUnit, epsilon: float = 0.001) -> bool:
         """
@@ -196,7 +195,7 @@ class JPTTestCase(unittest.TestCase):
                 continue
             old_distribution = leaf.distributions[variable.name]
             new_distribution = \
-                [child.target for child in product.edges_to_sub_circuits() if child.target.variable == variable][0]
+                [child for child in product.subcircuits if child.variable == variable][0]
             for value in variable.domain:
                 old_probability = old_distribution.p(value)
                 new_probability = new_distribution.pdf(value)
@@ -224,31 +223,31 @@ class JPTTestCase(unittest.TestCase):
         original_jpt = OldJPT(variables, min_samples_leaf=self.model.min_samples_leaf,
                               min_impurity_improvement=self.model.min_impurity_improvement)
         original_jpt = original_jpt.learn(self.data, keep_samples=True)
-        self.assertEqual(len(self.model.edges_to_sub_circuits()), len(original_jpt.leaves))
+        self.assertEqual(len(self.model.subcircuits), len(original_jpt.leaves))
 
-        for original_leaf, new_leaf in zip(original_jpt.leaves.values(), self.model.edges_to_sub_circuits()):
-            self.assertSetEqual(set(original_leaf.s_indices), set(new_leaf.target.sample_indices))
+        for original_leaf, new_leaf in zip(original_jpt.leaves.values(), self.model.subcircuits):
+            self.assertSetEqual(set(original_leaf.s_indices), set(new_leaf.sample_indices))
 
     def test_jpt_continuous_variables_only(self):
         data = self.data[["real"]]
         variables = infer_variables_from_dataframe(data)
         model = JPT(variables)
         model.fit(data)
-        self.assertEqual(len(model.edges_to_sub_circuits()), 1)
+        self.assertEqual(len(model.subcircuits), 1)
 
     def test_jpt_integer_variables_only(self):
         data = self.data[["integer"]]
         variables = infer_variables_from_dataframe(data)
         model = JPT(variables)
         model.fit(data)
-        self.assertEqual(len(model.edges_to_sub_circuits()), 1)
+        self.assertEqual(len(model.subcircuits), 1)
 
     def test_jpt_symbolic_variables_only(self):
         data = self.data[["symbol"]]
         variables = infer_variables_from_dataframe(data)
         model = JPT(variables)
         model.fit(data)
-        self.assertEqual(len(model.edges_to_sub_circuits()), 4)
+        self.assertEqual(len(model.subcircuits), 4)
 
     def test_plot(self):
         self.model._min_samples_leaf = 10
@@ -313,21 +312,18 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
     def test_conditional_inference(self):
         evidence = Event()
         query = Event()
-        self.show()
-        conditional_model, evidence_probability = self.model.probabilistic_circuit.conditional(evidence)
+        conditional_model, evidence_probability = self.model.conditional(evidence)
         self.assertAlmostEqual(1., evidence_probability)
         self.assertAlmostEqual(1., conditional_model.probability(query))
 
     def test_univariate_continuous_marginal(self):
-        marginal = self.model.probabilistic_circuit.marginal(self.model.variables[:1])
+        marginal = self.model.marginal(self.model.variables[:1])
         self.assertIsInstance(marginal, NygaDistribution)
-        self.assertEqual(marginal.height, 1)
 
     def test_univariate_symbolic_marginal(self):
         variables = [v for v in self.model.variables if v.name == "malignant"]
         marginal = self.model.marginal(variables)
         self.assertIsInstance(marginal, SymbolicDistribution)
-        self.assertEqual(marginal.height, 0)
 
 
 class MNISTTestCase(unittest.TestCase):

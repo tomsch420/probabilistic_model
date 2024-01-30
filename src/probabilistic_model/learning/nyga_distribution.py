@@ -8,10 +8,10 @@ from random_events.events import Event
 from random_events.variables import Continuous, Variable
 from typing_extensions import Self
 
-from ..graph_circuits.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
-from ..graph_circuits.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit,
-                                                    cache_inference_result, DirectedWeightedEdge,
-                                                    ProbabilisticCircuitMixin, ProbabilisticCircuit)
+from ..probabilistic_circuits.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
+from ..probabilistic_circuits.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit,
+                                                            cache_inference_result, ProbabilisticCircuitMixin,
+                                                            ProbabilisticCircuit)
 
 
 @dataclasses.dataclass
@@ -224,8 +224,8 @@ class InductionStep:
         else:
             # mount a uniform distribution
             distribution = self.create_uniform_distribution()
-            edge = DirectedWeightedEdge(self.nyga_distribution, distribution, self.sum_weights())
-            self.nyga_distribution.probabilistic_circuit.add_edge(edge)
+            self.nyga_distribution.probabilistic_circuit.add_edge(self.nyga_distribution, distribution,
+                                                                  weight=self.sum_weights())
             return []
 
 
@@ -257,11 +257,11 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
     @cache_inference_result
     def _pdf(self, value: Union[float, int]) -> float:
-        return sum([edge.weight * edge.target._pdf(value) for edge in self.edges_to_sub_circuits()])
+        return sum([weight * subcircuit._pdf(value) for weight, subcircuit in self.weighted_subcircuits])
 
     @cache_inference_result
     def _cdf(self, value: Union[float, int]) -> float:
-        return sum([edge.weight * edge.target._cdf(value) for edge in self.edges_to_sub_circuits()])
+        return sum([weight * subcircuit._cdf(value) for weight, subcircuit in self.weighted_subcircuits])
 
     def fit(self, data: List[float]):
         return self._fit(list(self.variable.encode_many(data)))
@@ -280,8 +280,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
         if len(sorted_data) == 1:
             distribution = DiracDeltaDistribution(self.variable, sorted_data[0])
-            edge = DirectedWeightedEdge(self, distribution, 1)
-            self.probabilistic_circuit.add_edge(edge)
+            self.probabilistic_circuit.add_edge(self, distribution, weight=1)
             return self
 
         weights = [data.count(value) / len(data) for value in sorted_data]
@@ -300,19 +299,10 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
         return self
 
-    def __eq__(self, other: Self):
-        return (ProbabilisticCircuitMixin.__eq__(self, other)
-                and self.min_samples_per_quantile == other.min_samples_per_quantile
-                and self.min_likelihood_improvement == other.min_likelihood_improvement)
-
-    def __hash__(self):
-        return hash((ProbabilisticCircuitMixin.__hash__(self), self.min_samples_per_quantile,
-                     self.min_likelihood_improvement))
-
-    def parameters(self):
-        return {"variable": self.variable,
-                "min_samples_per_quantile": self.min_samples_per_quantile,
-                "min_likelihood_improvement": self.min_likelihood_improvement}
+    def empty_copy(self) -> Self:
+        return NygaDistribution(self.variable,
+                                min_samples_per_quantile=self.min_samples_per_quantile,
+                                min_likelihood_improvement=self.min_likelihood_improvement)
 
     def to_json(self) -> Dict[str, Any]:
         """
@@ -329,10 +319,9 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         result = cls(smooth_sum_unit.variables[0],
                      min_samples_per_quantile=data["min_samples_per_quantile"],
                      min_likelihood_improvement=data["min_likelihood_improvement"])
-        result.probabilistic_circuit = ProbabilisticCircuit()
-        for edge in smooth_sum_unit.edges_to_sub_circuits():
-            edge.source = result
-            result.probabilistic_circuit.add_edge(edge)
+        for weight, subcircuit in smooth_sum_unit.weighted_subcircuits:
+            result.mount(subcircuit)
+            result.probabilistic_circuit.add_edge(result, subcircuit, weight=weight)
         return result
 
     @classmethod
@@ -345,11 +334,9 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         """
         variable: Continuous = mixture.variables[0]
         result = cls(variable)
-        result.probabilistic_circuit = ProbabilisticCircuit()
-        result.probabilistic_circuit.add_node(result)
 
         all_mixture_points = set()
-        for leaf in mixture.leaves():
+        for leaf in mixture.leaves:
             leaf: UniformDistribution
             all_mixture_points.add(leaf.interval.lower)
             all_mixture_points.add(leaf.interval.upper)
@@ -363,8 +350,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
                 interval = portion.closedopen(lower, upper)
             leaf = UniformDistribution(variable, interval)
             weight = mixture.probability(Event({variable: interval}))
-            edge = DirectedWeightedEdge(result, leaf, weight)
-            result.probabilistic_circuit.add_edge(edge)
+            result.probabilistic_circuit.add_edge(result, leaf, weight=weight)
 
         return result
 
@@ -375,11 +361,11 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
         x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None]
         y = [0, 0, None]
-        for edge in self.edges_to_sub_circuits():
-            uniform: UniformDistribution = edge.target
+        for weight, subcircuit in self.weighted_subcircuits:
+            uniform: UniformDistribution = subcircuit
             lower_value = uniform.interval.lower
             upper_value = uniform.interval.upper
-            pdf_value = uniform.pdf_value() * edge.weight
+            pdf_value = uniform.pdf_value() * weight
             x += [lower_value, upper_value, None]
             y += [pdf_value, pdf_value, None]
 
@@ -394,8 +380,8 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
         x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None]
         y = [0, 0, None]
-        for edge in self.edges_to_sub_circuits():
-            uniform: UniformDistribution = edge.target
+        for subcircuit in self.subcircuits:
+            uniform: UniformDistribution = subcircuit
             lower_value = uniform.interval.lower
             upper_value = uniform.interval.upper
             x += [lower_value, upper_value, None]
@@ -422,5 +408,4 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
                                  name="Mode", fill="toself"))
         traces.append(go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05], mode='lines+markers',
                                  name="Expectation"))
-
         return traces

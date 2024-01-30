@@ -16,11 +16,10 @@ from random_events.variables import Variable, Discrete
 
 from .variables import Continuous, Integer, Symbolic
 from ..nyga_distribution import NygaDistribution
-from ...graph_circuits.distributions.distributions import (DiracDeltaDistribution,
-                                                           SymbolicDistribution,
-                                                           IntegerDistribution)
-from ...graph_circuits.probabilistic_circuit import DeterministicSumUnit, DecomposableProductUnit as DPU, Edge, \
-    DirectedWeightedEdge
+from ...probabilistic_circuits.distributions.distributions import (DiracDeltaDistribution,
+                                                                   SymbolicDistribution,
+                                                                   IntegerDistribution)
+from ...probabilistic_circuits.probabilistic_circuit import DeterministicSumUnit, DecomposableProductUnit as DPU
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -41,12 +40,12 @@ class DecomposableProductUnit(DPU):
 
 class JPT(DeterministicSumUnit):
 
-    targets: Tuple[Variable]
+    targets: Tuple[Variable, ...]
     """
     The variables to optimize for.
     """
 
-    features: Tuple[Variable]
+    features: Tuple[Variable, ...]
     """
     The variables that are used to craft criteria.
     """
@@ -92,7 +91,7 @@ class JPT(DeterministicSumUnit):
     Rather to store the sample indices in the leaves or not.
     """
 
-    variables_from_init: Tuple[Variable]
+    variables_from_init: Tuple[Variable, ...]
     """
     The variables from initialization. Since variables will be overwritten as soon as the model is learned,
     we need to store the variables from initialization here.
@@ -252,8 +251,7 @@ class JPT(DeterministicSumUnit):
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
             weight = number_of_samples / len(data)
-            edge = DirectedWeightedEdge(self, leaf_node, weight)
-            self.probabilistic_circuit.add_edge(edge)
+            self.probabilistic_circuit.add_edge(self, leaf_node, weight=weight)
 
             if self.keep_sample_indices:
                 leaf_node.sample_indices = self.indices[start:end]
@@ -315,8 +313,8 @@ class JPT(DeterministicSumUnit):
                                                 min_samples_per_quantile=variable.min_samples_per_quantile)
                 distribution._fit(data[:, index].tolist())
 
-                if isinstance(distribution.edges_to_sub_circuits()[0], DiracDeltaDistribution):
-                    distribution.edges_to_sub_circuits()[0].target.density_cap = 1/variable.minimal_distance
+                if isinstance(distribution.subcircuits[0], DiracDeltaDistribution):
+                    distribution.subcircuits[0].density_cap = 1/variable.minimal_distance
 
             elif isinstance(variable, Symbolic):
                 distribution = SymbolicDistribution(variable, weights=[1/len(variable.domain)]*len(variable.domain))
@@ -328,8 +326,7 @@ class JPT(DeterministicSumUnit):
             else:
                 raise ValueError(f"Variable {variable} is not supported.")
 
-            edge = Edge(result, distribution)
-            result.probabilistic_circuit.add_edge(edge)
+            result.probabilistic_circuit.add_edge(result, distribution)
 
         return result
 
@@ -374,14 +371,14 @@ class JPT(DeterministicSumUnit):
         """
         Plot the model.
         """
-        subplot_titles = [distribution.__class__.__name__ for child in self.sub_circuits
+        subplot_titles = [distribution.__class__.__name__ for child in self.subcircuits
                           for distribution in child.subcircuits]
-        figure = make_subplots(rows=len(self.sub_circuits), cols=len(self.variables),
+        figure = make_subplots(rows=len(self.subcircuits), cols=len(self.variables),
                                row_titles=[f"P(Leaf = {child_index}) = {weight}" for weight, child_index
-                                           in zip(self.weights, range(len(self.sub_circuits)))],
+                                           in zip(self.weights, range(len(self.subcircuits)))],
                                subplot_titles=subplot_titles)
 
-        for child_index, child in enumerate(self.sub_circuits):
+        for child_index, child in enumerate(self.subcircuits):
             child: DecomposableProductUnit
 
             for distribution_index, distribution in enumerate(child.subcircuits):
@@ -394,7 +391,7 @@ class JPT(DeterministicSumUnit):
                                     row=child_index + 1,
                                     col=distribution_index + 1)
 
-        figure.update_layout(height=300*len(self.sub_circuits), width=600*len(self.variables),
+        figure.update_layout(height=300*len(self.subcircuits), width=600*len(self.variables),
                              title=f"Joint Probability Tree over {len(self.variables)} variables",)
 
         return figure
@@ -407,15 +404,14 @@ class JPT(DeterministicSumUnit):
         return {variable.name: [dependency.name for dependency in dependencies]
                 for variable, dependencies in self.dependencies.items()}
 
-    def _parameter_copy(self):
-        result = self.__class__(variables=self.variables,
+    def empty_copy(self):
+        result = self.__class__(variables=self.variables_from_init,
                                 targets=self.targets,
                                 features=self.features,
                                 min_samples_leaf=self.min_samples_leaf,
                                 min_impurity_improvement=self.min_impurity_improvement,
                                 max_depth=self.max_depth,
                                 dependencies=self.dependencies)
-        result.weights = self.weights
         return result
 
     def to_json(self) -> Dict[str, Any]:
@@ -438,15 +434,13 @@ class JPT(DeterministicSumUnit):
         result = cls(variables, min_samples_leaf=data["_min_samples_leaf"],
                      min_impurity_improvement=data["min_impurity_improvement"],
                      max_leaves=data["max_leaves"], max_depth=data["max_depth"])
-        for edge in sum_unit.edges_to_sub_circuits():
-            edge.source = result
-            result.probabilistic_circuit.add_edge(edge)
+        for weight, subcircuit in sum_unit.weighted_subcircuits:
+            result.mount(subcircuit)
+            result.probabilistic_circuit.add_edge(result, subcircuit, weight=weight)
         return result
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         result = super().marginal(variables)
-        nx.draw(result.probabilistic_circuit)
-        plt.show()
 
         if result is None or len(result.variables) > 1:
             return result
@@ -457,10 +451,14 @@ class JPT(DeterministicSumUnit):
             distribution = NygaDistribution.from_uniform_mixture(result)
 
         elif isinstance(variable, Discrete):
-            distribution = UnivariateDiscreteSumUnit(variable, [])
-            distribution.weights = result.weights
-            distribution.children = result.children[0].children
-            distribution = distribution.simplify()
+
+            weights = [result.probability(Event({variable: value})) for value in variable.domain]
+            if isinstance(variable, Symbolic):
+                distribution = SymbolicDistribution(variable, weights=weights)
+            elif isinstance(variable, Integer):
+                distribution = IntegerDistribution(variable, weights=weights)
+            else:
+                raise NotImplementedError(f"Variable {variable} is not supported.")
         else:
             raise NotImplementedError(f"Variable {variable} not supported.")
 
