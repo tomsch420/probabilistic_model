@@ -8,10 +8,10 @@ from random_events.events import Event
 from random_events.variables import Continuous, Variable
 from typing_extensions import Self
 
-from ..probabilistic_circuits.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
-from ..probabilistic_circuits.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit,
-                                                            cache_inference_result, ProbabilisticCircuitMixin,
-                                                            ProbabilisticCircuit)
+from ..probabilistic_circuit.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
+from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit,
+                                                           cache_inference_result, ProbabilisticCircuitMixin,
+                                                           ProbabilisticCircuit)
 
 
 @dataclasses.dataclass

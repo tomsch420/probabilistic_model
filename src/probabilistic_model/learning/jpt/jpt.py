@@ -16,10 +16,10 @@ from random_events.variables import Variable, Discrete
 
 from .variables import Continuous, Integer, Symbolic
 from ..nyga_distribution import NygaDistribution
-from ...probabilistic_circuits.distributions.distributions import (DiracDeltaDistribution,
-                                                                   SymbolicDistribution,
-                                                                   IntegerDistribution)
-from ...probabilistic_circuits.probabilistic_circuit import DeterministicSumUnit, DecomposableProductUnit as DPU
+from ...probabilistic_circuit.distributions.distributions import (DiracDeltaDistribution,
+                                                                  SymbolicDistribution,
+                                                                  IntegerDistribution)
+from ...probabilistic_circuit.probabilistic_circuit import DeterministicSumUnit, DecomposableProductUnit as DPU
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -250,13 +250,12 @@ class JPT(DeterministicSumUnit):
 
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
+            self.mount(leaf_node)
             weight = number_of_samples / len(data)
             self.probabilistic_circuit.add_edge(self, leaf_node, weight=weight)
 
             if self.keep_sample_indices:
                 leaf_node.sample_indices = self.indices[start:end]
-
-            leaf_node.parent = self
 
             # terminate the induction
             return
@@ -326,6 +325,7 @@ class JPT(DeterministicSumUnit):
             else:
                 raise ValueError(f"Variable {variable} is not supported.")
 
+            result.mount(distribution)
             result.probabilistic_circuit.add_edge(result, distribution)
 
         return result

@@ -5,11 +5,11 @@ from matplotlib import pyplot as plt
 from random_events.events import Event
 from random_events.variables import Integer, Symbolic, Continuous
 
-from probabilistic_model.probabilistic_circuits.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
 
-from probabilistic_model.probabilistic_circuits.distributions.distributions import (UniformDistribution,
-                                                                                    SymbolicDistribution,
-                                                                                    IntegerDistribution)
+from probabilistic_model.probabilistic_circuit.distributions.distributions import (UniformDistribution,
+                                                                                   SymbolicDistribution,
+                                                                                   IntegerDistribution)
 
 
 class UniformDistributionTestCase(unittest.TestCase):

@@ -8,10 +8,10 @@ from anytree import RenderTree
 from matplotlib import pyplot as plt
 from random_events.variables import Continuous
 
-from probabilistic_model.probabilistic_circuits.probabilistic_circuit import ProbabilisticCircuit, SmoothSumUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SmoothSumUnit
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.probabilistic_circuits.distributions import DiracDeltaDistribution
-from probabilistic_model.probabilistic_circuits.distributions import UniformDistribution
+from probabilistic_model.probabilistic_circuit.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 import plotly.graph_objects as go
 from probabilistic_model.utils import SubclassJSONSerializer
 
