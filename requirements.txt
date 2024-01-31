@@ -1,4 +1,4 @@
 random-events>=1.2.5
-anytree>=2.9.0
-portion>=2.4.1
+networkx>=3.2.1
+portion==2.4.2
 plotly>=5.18.0

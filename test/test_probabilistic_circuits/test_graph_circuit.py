@@ -1,10 +1,12 @@
 import unittest
 
+import numpy as np
 import portion
 from matplotlib import pyplot as plt
 from random_events.events import Event
 from random_events.variables import Integer, Symbolic, Continuous
 
+from probabilistic_model.distributions.multinomial import Multinomial
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
 
 from probabilistic_model.probabilistic_circuit.distributions.distributions import ContinuousDistribution, UniformDistribution
@@ -140,6 +142,9 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
 
     def test_variables(self):
         self.assertEqual(self.model.variables, (self.x, ))
+
+    def test_latent_variable(self):
+        self.assertEqual(self.model.latent_variable.domain, (0, 1))
 
     def test_domain(self):
         domain = self.model.domain
@@ -348,7 +353,51 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(self.model, deserialized)
 
 
+class FactorizationTestCase(unittest.TestCase, ShowMixin):
 
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+    sum_unit_1: SmoothSumUnit
+    sum_unit_2: SmoothSumUnit
+    interaction_model: Multinomial
+
+    def setUp(self):
+        u1 = UniformDistribution(self.x, portion.closed(0, 1))
+        u2 = UniformDistribution(self.x, portion.closed(3, 4))
+        sum_unit_1 = SmoothSumUnit()
+        sum_unit_1.add_subcircuit(u1, 0.5)
+        sum_unit_1.add_subcircuit(u2, 0.5)
+        self.sum_unit_1 = sum_unit_1
+
+        u3 = UniformDistribution(self.y, portion.closed(0, 1))
+        u4 = UniformDistribution(self.y, portion.closed(5, 6))
+        sum_unit_2 = SmoothSumUnit()
+        sum_unit_2.add_subcircuit(u3, 0.5)
+        sum_unit_2.add_subcircuit(u4, 0.5)
+        self.sum_unit_2 = sum_unit_2
+
+        interaction_probabilities = np.array([[0, 0.5],
+                                              [0.3, 0.2]])
+
+        if self.sum_unit_1.latent_variable > self.sum_unit_2.latent_variable:
+            interaction_probabilities = interaction_probabilities.T
+
+        self.interaction_model = Multinomial([sum_unit_1.latent_variable, sum_unit_2.latent_variable],
+                                             interaction_probabilities)
+
+    def test_setup(self):
+        self.assertEqual(self.interaction_model.marginal([self.sum_unit_1.latent_variable]).probabilities.tolist(),
+                         [0.5, 0.5])
+        self.assertEqual(self.interaction_model.marginal([self.sum_unit_2.latent_variable]).probabilities.tolist(),
+                         [0.3, 0.7])
+        self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.nodes()), 3)
+        self.assertEqual(len(self.sum_unit_2.probabilistic_circuit.nodes()), 3)
+
+    def test_mount_with_interaction(self):
+        self.sum_unit_1.mount_with_interaction_terms(self.sum_unit_2, self.interaction_model)
+        self.show(self.sum_unit_1)
+        self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.nodes()), 9)
+        self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.edges()), 8)
 
 
 if __name__ == '__main__':

@@ -4,8 +4,10 @@ from typing import Tuple, Iterable
 
 import networkx as nx
 from random_events.events import EncodedEvent, VariableMap, Event
-from random_events.variables import Variable
+from random_events.variables import Variable, Symbolic
 from typing_extensions import List, Optional, Union, Any, Self, Dict
+
+import matplotlib.pyplot as plt
 
 from ..probabilistic_model import ProbabilisticModel, ProbabilisticModelWrapper, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
@@ -189,13 +191,6 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             if subcircuit.result_of_current_query is not None:
                 subcircuit.reset_result_of_current_query()
 
-    def remove_entire_subgraph(self):
-        """
-        Remove all descendants from this node.
-        """
-        for node in nx.descendants(self.probabilistic_circuit, self):
-            self.probabilistic_circuit.remove_node(node)
-
     def __hash__(self):
         return id(self)
 
@@ -227,6 +222,25 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         """
         return [(self.probabilistic_circuit.edges[self, subcircuit]["weight"], subcircuit)
                 for subcircuit in self.subcircuits]
+
+    @property
+    def latent_variable(self) -> Symbolic:
+        return Symbolic(f"{hash(self)}.latent", list(range(len(self.subcircuits))))
+
+    def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin, weight: float):
+        """
+        Add a subcircuit to the children of this unit.
+
+        .. note::
+
+            This method does not normalize the edges to the subcircuits.
+
+
+        :param subcircuit: The subcircuit to add.
+        :param weight: The weight of the subcircuit.
+        """
+        self.mount(subcircuit)
+        self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
 
     @property
     def weights(self) -> List[float]:
@@ -376,6 +390,69 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
             result.probabilistic_circuit.add_edge(result, copied_subcircuit, weight=weight)
         return result
 
+    def mount_with_interaction_terms(self, other: 'SmoothSumUnit', interaction_model: ProbabilisticModel):
+        """
+        Create a distribution that factorizes as follows:
+
+        .. math::
+            P(self.latent\_variable) \cdot P(self.variables | self.latent\_variable) \cdot
+            P(other.latent\_variable | self.latent\_variable) \cdot P(other.variables | other.latent\_variable)
+
+        where `self.latent_variable` and `other.latent_variable` are the results of the latent variable interpretation
+        of mixture models.
+
+        :param other: The other distribution to mount at this distribution children level.
+        :param interaction_model: The interaction probabilities between both latent variables
+        """
+        assert set(self.variables).intersection(set(other.variables)) == set()
+        assert set(interaction_model.variables) == {self.latent_variable, other.latent_variable}
+
+        own_latent_variable = self.latent_variable
+        other_latent_variable = other.latent_variable
+        own_subcircuits = self.subcircuits
+        other_subcircuits = other.subcircuits
+
+        for own_index, own_subcircuit in zip(own_latent_variable.domain, own_subcircuits):
+
+            # create denominator of weight
+            condition = Event({own_latent_variable: own_index})
+            p_condition = interaction_model.probability(condition)
+
+            # skip iterations that are impossible
+            if p_condition == 0:
+                continue
+
+            # create proxy nodes for mounting
+            proxy_product_node = DecomposableProductUnit()
+            proxy_sum_node = other.empty_copy()
+            self.probabilistic_circuit.add_nodes_from([proxy_product_node, proxy_sum_node])
+
+            # remove edge to old child and replace it by product proxy
+            self.probabilistic_circuit.remove_edge(self, own_subcircuit)
+            self.add_subcircuit(proxy_product_node, p_condition)
+
+            # mount current child on the product proxy
+            proxy_product_node.add_subcircuit(own_subcircuit)
+
+            # mount the proxy for the children from other in the product proxy
+            proxy_product_node.add_subcircuit(proxy_sum_node)
+
+            for other_index, other_subcircuit in zip(other_latent_variable.domain, other_subcircuits):
+
+                # create numerator of weight
+                query = Event({other_latent_variable: other_index}) & condition
+                p_query = interaction_model.probability(query)
+
+                # skip iterations that are impossible
+                if p_query == 0:
+                    continue
+
+                # calculate conditional probability
+                weight = p_query / p_condition
+
+                # create edge from proxy to subcircuit
+                proxy_sum_node.add_subcircuit(other_subcircuit, weight=weight)
+
 
 class DeterministicSumUnit(SmoothSumUnit):
     """
@@ -433,6 +510,15 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     """
 
     representation = "⊗"
+
+    def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin):
+        """
+        Add a subcircuit to the children of this unit.
+
+        :param subcircuit: The subcircuit to add.
+        """
+        self.mount(subcircuit)
+        self.probabilistic_circuit.add_edge(self, subcircuit)
 
     @cache_inference_result
     def _likelihood(self, event: Iterable) -> float:
@@ -498,7 +584,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         probability = 1.
 
         # create new node with new circuit attached to it
-        resulting_node =  self.empty_copy()
+        resulting_node = self.empty_copy()
 
         for subcircuit in self.subcircuits:
 
