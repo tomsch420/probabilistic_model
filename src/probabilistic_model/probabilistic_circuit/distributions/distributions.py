@@ -1,6 +1,6 @@
 from typing import Iterable
 
-from random_events.events import EncodedEvent, Event
+from random_events.events import EncodedEvent
 from random_events.variables import Variable
 from typing_extensions import Union, Tuple, Optional, Self
 

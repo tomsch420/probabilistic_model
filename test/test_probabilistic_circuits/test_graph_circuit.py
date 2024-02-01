@@ -1,10 +1,12 @@
 import unittest
 
+import networkx as nx
 import numpy as np
 import portion
 from matplotlib import pyplot as plt
 from random_events.events import Event
 from random_events.variables import Integer, Symbolic, Continuous
+from typing_extensions import Union
 
 from probabilistic_model.distributions.multinomial import Multinomial
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
@@ -22,10 +24,11 @@ class ShowMixin:
         if model is None:
             model = self.model
 
-        if isinstance(model, ProbabilisticCircuit):
-            nx.draw(model, with_labels=True)
-        elif isinstance(model, ProbabilisticCircuitMixin):
-            nx.draw(model.probabilistic_circuit, with_labels=True)
+        if isinstance(model, ProbabilisticCircuitMixin):
+            model = model.probabilistic_circuit
+
+        pos = nx.planar_layout(model)
+        nx.draw(model, pos=pos, with_labels=True)
         plt.show()
 
 
@@ -357,6 +360,7 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
 
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
+    z: Continuous = Continuous("z")
     sum_unit_1: SmoothSumUnit
     sum_unit_2: SmoothSumUnit
     interaction_model: Multinomial
@@ -364,14 +368,14 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
     def setUp(self):
         u1 = UniformDistribution(self.x, portion.closed(0, 1))
         u2 = UniformDistribution(self.x, portion.closed(3, 4))
-        sum_unit_1 = SmoothSumUnit()
+        sum_unit_1 = DeterministicSumUnit()
         sum_unit_1.add_subcircuit(u1, 0.5)
         sum_unit_1.add_subcircuit(u2, 0.5)
         self.sum_unit_1 = sum_unit_1
 
         u3 = UniformDistribution(self.y, portion.closed(0, 1))
         u4 = UniformDistribution(self.y, portion.closed(5, 6))
-        sum_unit_2 = SmoothSumUnit()
+        sum_unit_2 = DeterministicSumUnit()
         sum_unit_2.add_subcircuit(u3, 0.5)
         sum_unit_2.add_subcircuit(u4, 0.5)
         self.sum_unit_2 = sum_unit_2
@@ -396,8 +400,13 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
     def test_mount_with_interaction(self):
         self.sum_unit_1.mount_with_interaction_terms(self.sum_unit_2, self.interaction_model)
         self.show(self.sum_unit_1)
+        self.assertIsInstance(self.sum_unit_1.probabilistic_circuit.root, DeterministicSumUnit)
+
+        for subcircuit in self.sum_unit_1.subcircuits:
+            self.assertIsInstance(subcircuit, DecomposableProductUnit)
+
         self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.nodes()), 9)
-        self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.edges()), 8)
+        self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.edges()), 9)
 
 
 if __name__ == '__main__':

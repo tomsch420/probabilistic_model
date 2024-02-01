@@ -5,11 +5,9 @@ from typing import Tuple, Iterable
 import networkx as nx
 from random_events.events import EncodedEvent, VariableMap, Event
 from random_events.variables import Variable, Symbolic
-from typing_extensions import List, Optional, Union, Any, Self, Dict
+from typing_extensions import List, Optional, Any, Self, Dict
 
-import matplotlib.pyplot as plt
-
-from ..probabilistic_model import ProbabilisticModel, ProbabilisticModelWrapper, OrderType, CenterType, MomentType
+from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
 
 

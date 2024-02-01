@@ -5,13 +5,12 @@ from typing import Optional, List, Deque, Union, Tuple, Dict, Any
 import plotly.graph_objects as go
 import portion
 from random_events.events import Event
-from random_events.variables import Continuous, Variable
+from random_events.variables import Continuous
 from typing_extensions import Self
 
 from ..probabilistic_circuit.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
 from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit,
-                                                           cache_inference_result, ProbabilisticCircuitMixin,
-                                                           ProbabilisticCircuit)
+                                                           cache_inference_result, ProbabilisticCircuitMixin)
 
 
 @dataclasses.dataclass
