@@ -230,7 +230,6 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             samples.extend(self.sample(rejected_samples))
         return samples
 
-
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         r"""
                 Helper method to calculate the moment of a Truncated Gaussian distribution.
