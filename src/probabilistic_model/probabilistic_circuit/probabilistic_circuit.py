@@ -393,8 +393,8 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         Create a distribution that factorizes as follows:
 
         .. math::
-            P(self.latent\_variable) \cdot P(self.variables | self.latent\_variable) \cdot
-            P(other.latent\_variable | self.latent\_variable) \cdot P(other.variables | other.latent\_variable)
+            p(self.latent\_variable) \cdot p(self.variables | self.latent\_variable) \cdot
+            p(other.latent\_variable | self.latent\_variable) \cdot p(other.variables | other.latent\_variable)
 
         where `self.latent_variable` and `other.latent_variable` are the results of the latent variable interpretation
         of mixture models.

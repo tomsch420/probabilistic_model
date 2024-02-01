@@ -407,6 +407,7 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
 
         self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.nodes()), 9)
         self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.edges()), 9)
+        self.assertEqual(1, self.sum_unit_1.probability(Event()))
 
 
 if __name__ == '__main__':
