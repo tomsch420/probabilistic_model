@@ -52,7 +52,7 @@ extensions = [
 
 # -- AutoAPI configuration ---------------------------------------------------
 autoapi_dirs = ['../src']
-
+inheritance_graph_attrs = dict(rankdir="TB",)
 # -- Bibliography configuration ----------------------------------------------
 bibtex_bibfiles = ['references.bib']
 
@@ -82,7 +82,7 @@ exclude_patterns = ['build', 'Thumbs.db', '.DS_Store']
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = None
-
+add_module_names = False
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -117,6 +117,7 @@ html_static_path = ['_static']
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'probabilistic_modelsdoc'
+
 
 
 # -- Options for LaTeX output ------------------------------------------------

@@ -23,6 +23,14 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
         super().__init__([variable])
 
     @property
+    def domain(self) -> Event:
+        """
+        The domain of this distribution.
+        :return: The domain (support) of this distribution as event.
+        """
+        raise NotImplementedError
+
+    @property
     def representation(self) -> str:
         """
         The symbol used to represent this distribution.
@@ -90,14 +98,6 @@ class ContinuousDistribution(UnivariateDistribution):
     @property
     def variable(self) -> Continuous:
         return self.variables[0]
-
-    @property
-    def domain(self) -> Event:
-        """
-        The domain of this distribution.
-        :return: The domain (support) of this distribution as event.
-        """
-        raise NotImplementedError
 
     def _cdf(self, value: float) -> float:
         """

@@ -15,16 +15,15 @@ You can read more about the theory behind probabilistic models in these resource
    * Probabilistic Circuits :cite:p:`choi2020probabilistic`, :cite:p:`youtube2020probabilistic`
    * Normalizing Flows :cite:p:`papamakarios2021normalizing`
 
-.. nbgallery::
-   examples/nyga_distribution
-   examples/joint_probability_trees
-   examples/truncated_gaussians
-
 .. toctree::
    :maxdepth: 3
    :caption: Contents:
 
-
+   distributions
+   probabilistic_circuits
+   examples/nyga_distribution
+   examples/joint_probability_trees
+   examples/truncated_gaussians
 
 .. bibliography::
    :all:

@@ -1,22 +1,18 @@
 import unittest
 
-import networkx as nx
 import numpy as np
 import portion
 from matplotlib import pyplot as plt
-from random_events.events import Event
-from random_events.variables import Integer, Symbolic, Continuous
+from random_events.variables import Integer, Continuous
 from typing_extensions import Union
 
-from probabilistic_model.distributions.multinomial import Multinomial
+from probabilistic_model.distributions.multinomial import MultinomialDistribution
+from probabilistic_model.probabilistic_circuit.distributions.distributions import (ContinuousDistribution,
+                                                                                   UniformDistribution)
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
-
-from probabilistic_model.probabilistic_circuit.distributions.distributions import ContinuousDistribution, UniformDistribution
-from probabilistic_model.utils import SubclassJSONSerializer
 
 
 class ShowMixin:
-
     model: Union[ProbabilisticCircuit, ProbabilisticCircuitMixin]
 
     def show(self, model: Optional[Union[ProbabilisticCircuit, ProbabilisticCircuitMixin]] = None):
@@ -33,7 +29,6 @@ class ShowMixin:
 
 
 class ProductUnitTestCase(unittest.TestCase, ShowMixin):
-
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
     model: DecomposableProductUnit
@@ -63,16 +58,14 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(result, 1)
 
     def test_probability(self):
-        event = Event({self.x: portion.closed(0, 0.5),
-                       self.y: portion.closed(3, 3.5)})
+        event = Event({self.x: portion.closed(0, 0.5), self.y: portion.closed(3, 3.5)})
         result = self.model.probability(event)
         self.assertEqual(result, 0.25)
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 1)
-        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1),
-                                       self.y: portion.closed(3, 4)})])
+        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1), self.y: portion.closed(3, 4)})])
 
     def test_sample(self):
         samples = self.model.sample(100)
@@ -101,7 +94,7 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
     def test_marginal_with_intersecting_variables(self):
         marginal = self.model.marginal([self.x])
         self.assertEqual(len(marginal.probabilistic_circuit.nodes()), 2)
-        self.assertEqual(marginal.probabilistic_circuit.variables, (self.x, ))
+        self.assertEqual(marginal.probabilistic_circuit.variables, (self.x,))
 
     def test_marginal_without_intersecting_variables(self):
         marginal = self.model.marginal([])
@@ -124,7 +117,6 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
 
 
 class SumUnitTestCase(unittest.TestCase, ShowMixin):
-
     x: Continuous = Continuous("x")
     model: DeterministicSumUnit
 
@@ -144,7 +136,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(len(self.model.probabilistic_circuit.edges()), 2)
 
     def test_variables(self):
-        self.assertEqual(self.model.variables, (self.x, ))
+        self.assertEqual(self.model.variables, (self.x,))
 
     def test_latent_variable(self):
         self.assertEqual(self.model.latent_variable.domain, (0, 1))
@@ -223,8 +215,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         s3 = SmoothSumUnit()
         u1 = UniformDistribution(self.x, portion.closed(0, 1))
         s2.probabilistic_circuit.add_nodes_from([s2, s3, u1])
-        s2.probabilistic_circuit.add_weighted_edges_from(
-            [(s2, s3, 1.), (s3, u1, 1.)])
+        s2.probabilistic_circuit.add_weighted_edges_from([(s2, s3, 1.), (s3, u1, 1.)])
         s1.mount(s2)
         self.assertEqual(len(s1.probabilistic_circuit.nodes()), 4)
 
@@ -292,17 +283,15 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
     def test_likelihood(self):
         event = [1., 2.]
         result = self.model.likelihood(event)
-        self.assertEqual(result, 0.5 * ((4 * 0.7) + (1/3 * 0.3)))
+        self.assertEqual(result, 0.5 * ((4 * 0.7) + (1 / 3 * 0.3)))
 
     def test_probability_everywhere(self):
-        event = Event({self.real: portion.closed(0, 5),
-                       self.real2: portion.closed(2, 5)})
+        event = Event({self.real: portion.closed(0, 5), self.real2: portion.closed(2, 5)})
         result = self.model.probability(event)
         self.assertEqual(result, 1.)
 
     def test_probability_nowhere(self):
-        event = Event({self.real: portion.closed(0, 0.5),
-                       self.real2: portion.closed(0, 1)})
+        event = Event({self.real: portion.closed(0, 0.5), self.real2: portion.closed(0, 1)})
         result = self.model.probability(event)
         self.assertEqual(result, 0.)
 
@@ -312,8 +301,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         self.assertAlmostEqual(result, 0.8)
 
     def test_caching_reset(self):
-        event = Event({self.real: portion.closed(0, 5),
-                       self.real2: portion.closed(2, 5)})
+        event = Event({self.real: portion.closed(0, 5), self.real2: portion.closed(2, 5)})
         _ = self.model.probability(event)
 
         for node in self.model.nodes():
@@ -321,8 +309,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
             self.assertFalse(node.cache_result)
 
     def test_caching(self):
-        event = Event({self.real: portion.closed(0, 5),
-                       self.real2: portion.closed(2, 5)})
+        event = Event({self.real: portion.closed(0, 5), self.real2: portion.closed(2, 5)})
         self.model.root.cache_result = True
         _ = self.model.root.probability(event)
 
@@ -357,13 +344,12 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
 
 
 class FactorizationTestCase(unittest.TestCase, ShowMixin):
-
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
     z: Continuous = Continuous("z")
     sum_unit_1: SmoothSumUnit
     sum_unit_2: SmoothSumUnit
-    interaction_model: Multinomial
+    interaction_model: MultinomialDistribution
 
     def setUp(self):
         u1 = UniformDistribution(self.x, portion.closed(0, 1))
@@ -380,14 +366,13 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
         sum_unit_2.add_subcircuit(u4, 0.5)
         self.sum_unit_2 = sum_unit_2
 
-        interaction_probabilities = np.array([[0, 0.5],
-                                              [0.3, 0.2]])
+        interaction_probabilities = np.array([[0, 0.5], [0.3, 0.2]])
 
         if self.sum_unit_1.latent_variable > self.sum_unit_2.latent_variable:
             interaction_probabilities = interaction_probabilities.T
 
-        self.interaction_model = Multinomial([sum_unit_1.latent_variable, sum_unit_2.latent_variable],
-                                             interaction_probabilities)
+        self.interaction_model = MultinomialDistribution([sum_unit_1.latent_variable, sum_unit_2.latent_variable],
+                                                         interaction_probabilities)
 
     def test_setup(self):
         self.assertEqual(self.interaction_model.marginal([self.sum_unit_1.latent_variable]).probabilities.tolist(),
@@ -399,7 +384,6 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
 
     def test_mount_with_interaction(self):
         self.sum_unit_1.mount_with_interaction_terms(self.sum_unit_2, self.interaction_model)
-        self.show(self.sum_unit_1)
         self.assertIsInstance(self.sum_unit_1.probabilistic_circuit.root, DeterministicSumUnit)
 
         for subcircuit in self.sum_unit_1.subcircuits:

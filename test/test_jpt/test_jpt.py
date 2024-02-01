@@ -25,7 +25,7 @@ from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
 import plotly.graph_objects as go
-from probabilistic_model.distributions.multinomial import Multinomial
+from probabilistic_model.distributions.multinomial import MultinomialDistribution
 
 
 class ShowMixin:

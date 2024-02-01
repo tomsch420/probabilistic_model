@@ -10,7 +10,7 @@ from ..probabilistic_model import ProbabilisticModel
 from typing_extensions import Self
 
 
-class Multinomial(ProbabilisticModel):
+class MultinomialDistribution(ProbabilisticModel):
     """
     A multinomial distribution over discrete random variables.
     """
@@ -41,7 +41,7 @@ class Multinomial(ProbabilisticModel):
 
         self.probabilities = probabilities
 
-    def marginal(self, variables: Iterable[Discrete]) -> 'Multinomial':
+    def marginal(self, variables: Iterable[Discrete]) -> 'MultinomialDistribution':
 
         # calculate which variables to marginalize over as the difference between variables and self.variables
         axis = tuple(self.variables.index(variable) for variable in self.variables if variable not in variables)
@@ -49,7 +49,7 @@ class Multinomial(ProbabilisticModel):
         # marginalize the probabilities over the axis
         probabilities = np.sum(self.probabilities, axis=axis)
 
-        return Multinomial(variables, probabilities)
+        return MultinomialDistribution(variables, probabilities)
 
     def _mode(self) -> Tuple[List[EncodedEvent], float]:
         likelihood = np.max(self.probabilities)
@@ -57,13 +57,13 @@ class Multinomial(ProbabilisticModel):
         mode = [EncodedEvent(zip(self.variables, event)) for event in events.tolist()]
         return mode, likelihood
 
-    def __copy__(self) -> 'Multinomial':
+    def __copy__(self) -> 'MultinomialDistribution':
         """
         :return: a shallow copy of the distribution.
         """
-        return Multinomial(self.variables, self.probabilities)
+        return MultinomialDistribution(self.variables, self.probabilities)
 
-    def __eq__(self, other: 'Multinomial') -> bool:
+    def __eq__(self, other: 'MultinomialDistribution') -> bool:
         """Compare self with other and return the boolean result.
 
         Two discrete random variables are equal only if the probability mass
@@ -101,12 +101,12 @@ class Multinomial(ProbabilisticModel):
         indices = np.ix_(*indices)
         probabilities = np.zeros_like(self.probabilities)
         probabilities[indices] = self.probabilities[indices]
-        return Multinomial(self.variables, probabilities), self.probabilities[indices].sum()
+        return MultinomialDistribution(self.variables, probabilities), self.probabilities[indices].sum()
 
-    def normalize(self) -> 'Multinomial':
+    def normalize(self) -> 'MultinomialDistribution':
         """
         Normalize the distribution.
         :return: The normalized distribution
         """
         normalized_probabilities = self.probabilities / np.sum(self.probabilities)
-        return Multinomial(self.variables, normalized_probabilities)
+        return MultinomialDistribution(self.variables, normalized_probabilities)

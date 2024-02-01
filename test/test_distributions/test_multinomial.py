@@ -5,7 +5,7 @@ import numpy as np
 from random_events.events import Event
 from random_events.variables import Symbolic
 
-from probabilistic_model.distributions.multinomial import Multinomial
+from probabilistic_model.distributions.multinomial import MultinomialDistribution
 
 
 class MultinomialConstructionTestCase(unittest.TestCase):
@@ -21,36 +21,36 @@ class MultinomialConstructionTestCase(unittest.TestCase):
         cls.z = Symbolic("Z", range(5))
 
     def test_creation_with_probabilities(self):
-        distribution = Multinomial([self.x, self.y, self.z], np.random.rand(len(self.x.domain),
-                                                                            len(self.y.domain),
-                                                                            len(self.z.domain)))
+        distribution = MultinomialDistribution([self.x, self.y, self.z], np.random.rand(len(self.x.domain),
+                                                                                        len(self.y.domain),
+                                                                                        len(self.z.domain)))
         self.assertTrue(distribution)
 
     def test_creation_without_probabilities(self):
-        distribution = Multinomial([self.x])
+        distribution = MultinomialDistribution([self.x])
         self.assertTrue(np.allclose(1., distribution.probabilities))
 
     def test_creation_with_invalid_probabilities_shape(self):
         probabilities = np.array([[0.1, 0.1], [0.2, 0.2]])
         with self.assertRaises(ValueError):
-            distribution = Multinomial([self.x, self.y], probabilities)
+            distribution = MultinomialDistribution([self.x, self.y], probabilities)
 
     def test_copy(self):
-        distribution_1 = Multinomial([self.x, self.y], np.array([[0.1, 0.2, 0.3], [0.7, 0.4, 0.1]]))
+        distribution_1 = MultinomialDistribution([self.x, self.y], np.array([[0.1, 0.2, 0.3], [0.7, 0.4, 0.1]]))
         distribution_2 = distribution_1.__copy__()
         self.assertEqual(distribution_1, distribution_2)
         distribution_2.probabilities = np.zeros_like(distribution_2.probabilities)
         self.assertNotEqual(distribution_2, distribution_1)
 
     def test_to_tabulate(self):
-        distribution = Multinomial([self.x, self.y, self.z], np.random.rand(len(self.x.domain),
-                                                                            len(self.y.domain),
-                                                                            len(self.z.domain)))
+        distribution = MultinomialDistribution([self.x, self.y, self.z], np.random.rand(len(self.x.domain),
+                                                                                        len(self.y.domain),
+                                                                                        len(self.z.domain)))
         table = distribution.to_tabulate()
         self.assertTrue(table)
 
     def test_to_str(self):
-        distribution = Multinomial([self.x, self.y, self.z])
+        distribution = MultinomialDistribution([self.x, self.y, self.z])
         self.assertTrue(str(distribution))
 
 
@@ -58,9 +58,9 @@ class MultinomialInferenceTestCase(unittest.TestCase):
     x: Symbolic
     y: Symbolic
     z: Symbolic
-    random_distribution: Multinomial
+    random_distribution: MultinomialDistribution
     random_distribution_mass: float
-    crafted_distribution: Multinomial
+    crafted_distribution: MultinomialDistribution
     crafted_distribution_mass: float
 
     @classmethod
@@ -69,12 +69,12 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         cls.x = Symbolic("X", range(2))
         cls.y = Symbolic("Y", range(3))
         cls.z = Symbolic("Z", range(5))
-        cls.random_distribution = Multinomial([cls.x, cls.y, cls.z], np.random.rand(len(cls.x.domain),
-                                                                                    len(cls.y.domain),
-                                                                                    len(cls.z.domain)))
+        cls.random_distribution = MultinomialDistribution([cls.x, cls.y, cls.z], np.random.rand(len(cls.x.domain),
+                                                                                                len(cls.y.domain),
+                                                                                                len(cls.z.domain)))
         cls.random_distribution_mass = cls.random_distribution.probabilities.sum()
 
-        cls.crafted_distribution = Multinomial([cls.x, cls.y], np.array([[0.1, 0.2, 0.3], [0.7, 0.4, 0.1]]))
+        cls.crafted_distribution = MultinomialDistribution([cls.x, cls.y], np.array([[0.1, 0.2, 0.3], [0.7, 0.4, 0.1]]))
         cls.crafted_distribution_mass = cls.crafted_distribution.probabilities.sum()
 
     def test_normalize_random(self):
@@ -112,7 +112,7 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         self.assertEqual(mode["Y"], (0,))
 
     def test_multiple_modes(self):
-        distribution = Multinomial([self.x, self.y], np.array([[0.1, 0.7, 0.3], [0.7, 0.4, 0.1]]),)
+        distribution = MultinomialDistribution([self.x, self.y], np.array([[0.1, 0.7, 0.3], [0.7, 0.4, 0.1]]), )
         mode, likelihood = distribution.mode()
         self.assertEqual(likelihood, 0.7)
         self.assertEqual(len(mode), 2)
