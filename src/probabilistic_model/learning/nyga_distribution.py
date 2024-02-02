@@ -5,7 +5,7 @@ from typing import Optional, List, Deque, Union, Tuple, Dict, Any
 import plotly.graph_objects as go
 import portion
 from random_events.events import Event
-from random_events.variables import Continuous
+from random_events.variables import Continuous, Variable
 from typing_extensions import Self
 
 from ..probabilistic_circuit.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
@@ -251,6 +251,13 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         self.min_likelihood_improvement = min_likelihood_improvement
 
     @property
+    def variables(self) -> Tuple[Variable, ...]:
+        if len(self.subcircuits) > 0:
+            return DeterministicSumUnit.variables.fget(self)
+        else:
+            return self._variables
+
+    @property
     def domain(self) -> Event:
         return ProbabilisticCircuitMixin.domain.fget(self)
 
@@ -383,28 +390,36 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
             uniform: UniformDistribution = subcircuit
             lower_value = uniform.interval.lower
             upper_value = uniform.interval.upper
-            x += [lower_value, upper_value, None]
-            y += [self.cdf(lower_value), self.cdf(upper_value), None]
+            x += [lower_value, upper_value]
+            y += [self.cdf(lower_value), self.cdf(upper_value)]
             self.reset_result_of_current_query()
 
         x.extend([self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05])
         y.extend([1, 1])
         return go.Scatter(x=x, y=y, mode='lines', name="Cumulative Distribution Function")
 
+    def mode_trace(self) -> Tuple[go.Scatter, float]:
+        modes, maximum_likelihood = self.mode()
+        xs = []
+        ys = []
+        for mode in modes[0][self.variable]:
+            xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
+            ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
+
+        trace = go.Scatter(x=xs, y=ys, mode='lines+markers', name="Mode", fill="toself")
+        return trace, maximum_likelihood
+
     def plot(self) -> List[go.Scatter]:
         """
         Plot the distribution with PDF, CDF, Expectation and Mode.
         """
         traces = [self.pdf_trace(), self.cdf_trace()]
-        mode, maximum_likelihood = self.mode()
+        mode_trace, maximum_likelihood = self.mode_trace()
         self.reset_result_of_current_query()
-        mode = mode[0][self.variable]
 
         expectation = self.expectation([self.variable])[self.variable]
+        traces.append(mode_trace)
         self.reset_result_of_current_query()
-        traces.append(go.Scatter(x=[mode.lower, mode.lower, mode.upper, mode.upper, ],
-                                 y=[0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0], mode='lines+markers',
-                                 name="Mode", fill="toself"))
         traces.append(go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05], mode='lines+markers',
                                  name="Expectation"))
         return traces

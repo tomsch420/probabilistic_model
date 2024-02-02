@@ -169,5 +169,19 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertEqual(len(n2.probabilistic_circuit.nodes), 3)
 
 
+class NygaDistributionTestCase(unittest.TestCase):
+    x: Continuous = Continuous("x")
+    model: NygaDistribution
+
+    def setUp(self) -> None:
+        self.model = NygaDistribution(self.x)
+        self.model.add_subcircuit(UniformDistribution(self.x, portion.closed(-1.5, -0.5)), 0.5)
+        self.model.add_subcircuit(UniformDistribution(self.x, portion.closed(0.5, 1.5)), 0.5)
+
+    def test_plot(self):
+        fig = go.Figure(self.model.plot())
+        self.assertIsNotNone(fig)
+        # fig.show()
+
 if __name__ == '__main__':
     unittest.main()

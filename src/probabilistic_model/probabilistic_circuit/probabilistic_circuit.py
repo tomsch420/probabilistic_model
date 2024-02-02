@@ -19,10 +19,8 @@ def cache_inference_result(func):
     def wrapper(*args, **kwargs):
 
         self: ProbabilisticCircuitMixin = args[0]
-
         if not self.cache_result:
             return func(*args, **kwargs)
-
         if self.result_of_current_query is None:
             self.result_of_current_query = func(*args, **kwargs)
         return self.result_of_current_query
@@ -305,16 +303,15 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         """
         Sample from the sum node using the latent variable interpretation.
         """
-
         weights, subcircuits = zip(*self.weighted_subcircuits)
 
         # sample the latent variable
         states = random.choices(list(range(len(weights))), weights=weights, k=amount)
-
         # sample from the children
         result = []
         for index, subcircuit in enumerate(self.subcircuits):
             result.extend(subcircuit.sample(states.count(index)))
+
         return result
 
     @cache_inference_result
@@ -603,19 +600,30 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     @cache_inference_result
     def sample(self, amount: int) -> List[List[Any]]:
 
+        # load on variables
         variables = self.variables
-        # list for the samples content in the same order as self.variables
-        rearranged_sample = [[None] * len(variables)] * amount
 
+        # list for the samples content in the same order as self.variables
+        rearranged_samples = [[None] * len(variables)] * amount
+
+        # for every subcircuit
         for subcircuit in self.subcircuits:
+
+            # sample from the subcircuit
             sample_subset = subcircuit.sample(amount)
 
+
+            # for each sample from the subcircuit
             for sample_index in range(amount):
+
+                # for each variable and its index of the subcircuit
                 for child_variable_index, variable in enumerate(subcircuit.variables):
-                    rearranged_sample[sample_index][variables.index(variable)] = sample_subset[sample_index][
+
+                    # find the index of the variable in the variables of the product
+                    rearranged_samples[sample_index][variables.index(variable)] = sample_subset[sample_index][
                         child_variable_index]
 
-        return rearranged_sample
+        return rearranged_samples
 
     @cache_inference_result
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
@@ -671,6 +679,27 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             result.mount(copied_subcircuit)
             result.probabilistic_circuit.add_edge(result, copied_subcircuit)
         return result
+
+    def is_decomposable(self) -> bool:
+        """
+        Check if only this product unit is decomposable.
+
+        A product mode is decomposable iff all children have disjoint scopes.
+
+        :return: if this product unit is decomposable
+        """
+        # for every child pair
+        for subcircuits_a, subcircuits_b in itertools.combinations(self.subcircuits, 2):
+
+            # form the intersection of the scopes
+            scope_intersection = set(subcircuits_a.variables) & set(subcircuits_b.variables)
+
+            # if this not empty, the product unit is not decomposable
+            if len(scope_intersection) > 0:
+                return False
+
+        # if every pairwise intersection is empty, the product unit is decomposable
+        return True
 
 
 class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerializer):
@@ -755,7 +784,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         root.reset_result_of_current_query()
         return result.probabilistic_circuit
 
-    @graph_inference_caching_wrapper
+    # @graph_inference_caching_wrapper
     def sample(self, amount: int) -> Iterable:
         return self.root.sample(amount)
 
@@ -769,6 +798,17 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         result = self.root.domain
         root.reset_result_of_current_query()
         return result
+
+    def is_decomposable(self) -> bool:
+        """
+        Check if the whole circuit is decomposed.
+
+        A circuit is decomposed if all its product units are decomposed.
+
+        :return: if the whole circuit is decomposed
+        """
+        return all([subcircuit.is_decomposable() for subcircuit in self.leaves
+                    if isinstance(subcircuit, DecomposableProductUnit)])
 
     def __eq__(self, other: 'ProbabilisticCircuit'):
         return self.root == other.root

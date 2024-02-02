@@ -394,5 +394,49 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(1, self.sum_unit_1.probability(Event()))
 
 
+class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
+
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+
+    probabilities = np.array([[0, 1],
+                              [1, 0]])
+    model: DeterministicSumUnit
+
+    def setUp(self):
+        model = DeterministicSumUnit()
+        model.add_subcircuit(UniformDistribution(self.x, portion.closed(-1.5, -0.5)), 0.5)
+        model.add_subcircuit(UniformDistribution(self.x, portion.closed(0.5, 1.5)), 0.5)
+        next_model = model.__copy__()
+        for leaf in next_model.leaves:
+            leaf._variables = (self.y,)
+
+        transition_model = MultinomialDistribution([model.latent_variable, next_model.latent_variable],
+                                                   self.probabilities)
+        next_model.mount_with_interaction_terms(model, transition_model)
+        self.model = next_model
+
+    def test_setup(self):
+        self.assertEqual(self.model.variables, (self.x, self.y))
+        self.assertTrue(self.model.probabilistic_circuit.is_decomposable())
+
+    def test_sample_from_uniform(self):
+        for leaf in self.model.leaves:
+            samples = leaf.sample(2)
+            self.assertNotEqual(samples[0], samples[1])
+
+    @unittest.skip("Sampling multiple things with undirected cycles is weird")
+    def test_sample(self):
+        # self.show(self.model)
+        samples: List = self.model.probabilistic_circuit.sample(2)
+        self.assertEqual(len(samples), 2)
+        print(samples)
+        self.assertNotEqual(samples[0], samples[1])
+
+    def test_samples_in_sequence(self):
+        samples = self.model.probabilistic_circuit.sample(1) + self.model.probabilistic_circuit.sample(1)
+        self.assertEqual(len(samples), 2)
+        self.assertNotEqual(samples[0], samples[1])
+
 if __name__ == '__main__':
     unittest.main()

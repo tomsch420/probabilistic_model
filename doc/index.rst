@@ -21,9 +21,7 @@ You can read more about the theory behind probabilistic models in these resource
 
    distributions
    probabilistic_circuits
-   examples/nyga_distribution
-   examples/joint_probability_trees
-   examples/truncated_gaussians
+   examples
 
 .. bibliography::
    :all:

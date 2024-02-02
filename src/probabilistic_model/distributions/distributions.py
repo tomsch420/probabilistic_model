@@ -87,6 +87,15 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
             "variable": self.variable.to_json()
         }
 
+    def plotly_layout(self) -> Dict[str, Any]:
+        """
+        :return: The layout argument for plotly figures as dict
+        """
+        return {
+            "title": f"{self.__class__.__name__}",
+            "xaxis": {"title": self.variable.name}
+        }
+
 
 class ContinuousDistribution(UnivariateDistribution):
     """
