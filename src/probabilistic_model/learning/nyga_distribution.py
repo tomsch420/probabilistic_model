@@ -423,3 +423,15 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         traces.append(go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05], mode='lines+markers',
                                  name="Expectation"))
         return traces
+
+    def area_validation_metric(self, other: Self) -> float:
+        distance = 0.
+        if isinstance(other, NygaDistribution):
+            for own_weight , own_subcircuit in self.weighted_subcircuits:
+                own_subcircuit: UniformDistribution
+                for other_weight , other_subcircuit in other.weighted_subcircuits:
+                    other_subcircuit: UniformDistribution
+                    distance += own_weight * other_weight * own_subcircuit.area_validation_metric(other_subcircuit)
+        else:
+            raise NotImplementedError(f"AVM between NygaDistribution and {type(other)} is not known.")
+        return distance / 2

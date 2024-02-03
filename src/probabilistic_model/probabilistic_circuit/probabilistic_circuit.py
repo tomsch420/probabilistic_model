@@ -168,7 +168,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             {variable: value for variable, value in variable_map.items() if variable in variables})
 
     @property
-    def variables(self) -> tuple[Variable, ...]:
+    def variables(self) -> Tuple[Variable, ...]:
         variables = set([variable for distribution in self.leaves for variable in distribution.variables])
         return tuple(sorted(variables))
 
@@ -207,9 +207,19 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         return self.__class__()
 
+    def draw_io_style(self) -> Dict[str, Any]:
+        return {
+            "style": self.representation,
+            "width": 30,
+            "height": 30,
+            "label": self.label
+        }
+
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
-    representation = "+"
+    representation = 'shape=stencil(tZTtboMgFIavhr8LHzHp34Zt98EUKykFAmzt7n4okoktzi6aGJJzjjy8OV+AUNcxwwGGHSCvAGMEYTiDfZ3ZzBle++hsxY030e281Wd+FY0fAUJ13ArfR8kbgMfwT/8RWmulAkFo5bLIJB5gTKhwF94ibHz7O7NM4F+453ZUGL0Av6/HvlT7gNFOenNsUr+53u3AuWK0V+E2A6P/YwkNnlJzE/rB6vPJ6k/VPBTDpRTG8T9afj6M82F9qKnwMqGttnxBUiukjGO9kETD+oG/C6TwdC0E+b/rAS/VJt2+6K9JRqpZM1VrEFKoMuKwCpGrQHnnJeIzKg7PIIYSFrKc8luq/F2BB2/c9IPjBw==);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+
+    label = '⊕'
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
@@ -454,7 +464,8 @@ class DeterministicSumUnit(SmoothSumUnit):
     Deterministic Sum Units for Probabilistic Circuits
     """
 
-    representation = "⊕"
+    representation = 'shape=stencil(tZXdboQgEIWfhttGISa7l41t34PqWMmyYID96dsXRVNBZXeNJsaEGfw4mZmDiOS6pg0gnNSIfCCM0ySxb7u+BWuqGyiMC1bsDqULa6PkCW6sND2AiRoUM22WfKLk3e5pH5IXUghLYFJoLzPKWxhlwn6b3B2sP/vXWzWWfwYDqlfoogh/PY99y/YBpzvp9bGD+s31bgf2Fad7NW4zcLoeS3IbWRpukn/T4vSj5EWUs2KAc9ZoeDDyoRlDs85qWjiZ5JVUEJGk6RUi5asY5871kU3ja8HK/78ecLw3DW03ThJD+iyvo1JlwZRlMfaA4EwsIw5PIXwVqT+SA/EVFYdXEF1vF+o0FH5NZx64RoE2dm626t3smMdrNrFKUDXPKkffKcfoCStL2n02MVMXdX/VLvAH);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+    label = '⊕'
 
     def merge_modes_if_one_dimensional(self, modes: List[EncodedEvent]) -> List[EncodedEvent]:
         """
@@ -504,8 +515,8 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     Decomposable Product Units for Probabilistic Circuits
     """
 
-    representation = "⊗"
-
+    representation = 'shape=stencil(tZRvb4MgEMY/DW8bhDTr24Vu34PqWUkpEKB/9u2LopnY6tymiSG55+THkzsORJmruAFEcIXoHhGSYRzWEN8GMXcGch/FUtyhiLLzVp/gJgrfAoSqwApfZ+kHwu/hn/qjLNdKBYLQyiWZXj7AuFBhL75HWHv2VxKZwD+DB9s6jCoin/Oxm+064Gwlvym2c7+43+XAqeNsrcYtBs7+jqUsKGOXm7IDz09Hqy+qeGkGpBTGwQ9XfjiMw2F96WnkZMpKbWHCUimkjGM9UUTD64F/SnTp/rMQ7H8/D2SqN93us772KjIoCdnOQUiheohdinibhUhd7P7vgvzGRdPCkSp39R3r/FODGzW+9I3wAA==);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+    label = "⊗"
     def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin):
         """
         Add a subcircuit to the children of this unit.
@@ -712,7 +723,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         nx.DiGraph.__init__(self)
 
     @property
-    def variables(self) -> tuple[Variable, ...]:
+    def variables(self) -> Tuple[Variable, ...]:
         return self.root.variables
 
     @property
@@ -823,3 +834,30 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         root = ProbabilisticCircuitMixin.from_json(data["root"])
         return root.probabilistic_circuit
+
+    @property
+    def weighted_edges(self):
+        # gather all weighted and non-weighted edges from the subgraph
+        weighted_edges = []
+
+        for edge in self.edges:
+            edge_ = self.edges[edge]
+
+            if "weight" in edge_.keys():
+                weight = edge_["weight"]
+                weighted_edges.append((*edge, weight))
+
+        return weighted_edges
+
+    @property
+    def unweighted_edges(self):
+        # gather all weighted and non-weighted edges from the subgraph
+        unweighted_edges = []
+
+        for edge in self.edges:
+            edge_ = self.edges[edge]
+
+            if "weight" not in edge_.keys():
+                unweighted_edges.append(edge)
+
+        return unweighted_edges

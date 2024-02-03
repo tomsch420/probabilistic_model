@@ -2,6 +2,7 @@ import abc
 import random
 from typing import Optional
 
+import numpy as np
 import portion
 import random_events.utils
 from random_events.events import EncodedEvent, Event, VariableMap
@@ -360,6 +361,20 @@ class DiscreteDistribution(UnivariateDistribution):
         weights = data["weights"]
         return cls(variable, weights)
 
+    def area_validation_metric(self, other: Self) -> float:
+        """
+        Calculate the area validation metric of this distribution and another.
+
+        ..math:: \sum_{x \in self \cup other} |self(x) - other(x)| dx
+
+        """
+        distance = 0.
+        if isinstance(other, DiscreteDistribution):
+            for p_probability, q_probability in zip(self.weights, other.weights):
+                distance += abs(p_probability - q_probability)
+        else:
+            raise NotImplementedError(f"AVM between DiscreteDistribution and {type(other)} is not known.")
+        return distance/2
 
 class SymbolicDistribution(DiscreteDistribution):
     """
@@ -373,8 +388,11 @@ class SymbolicDistribution(DiscreteDistribution):
         return self.variables[0]
 
     @property
-    def representation(self):
+    def label(self):
         return f"Nominal{self.variable.domain}"
+    @property
+    def representation(self):
+        return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
 
 
 class IntegerDistribution(DiscreteDistribution, ContinuousDistribution):

@@ -108,6 +108,9 @@ class UniformDistribution(ContinuousDistribution):
 
     @property
     def representation(self):
+        return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
+    @property
+    def label(self):
         return f"U({self.interval})"
 
     def __copy__(self):
@@ -152,6 +155,31 @@ class UniformDistribution(ContinuousDistribution):
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))
 
+    def area_validation_metric(self, other: ContinuousDistribution) -> float:
+        """
+        Calculate the area validation metric of this distribution and another.
+
+        ..math:: \int_{-\infty}^\infty |self(x) - other(x)| dx
+        """
+        distance = 0.
+        if isinstance(other, UniformDistribution):
+
+            # calculate AVM of intersecting part
+            intersection = self.interval.intersection(other.interval)
+
+            if not intersection.empty:
+                difference_of_pdfs = abs(self.pdf_value() - other.pdf_value())
+                distance += difference_of_pdfs * (intersection.upper - intersection.lower)
+
+            # calculate AVM of non-intersecting parts
+            difference = self.interval.union(other.interval).difference(intersection)
+            for interval in difference:
+                pdf_value = self.pdf_value() if interval in self.interval else other.pdf_value()
+                distance += pdf_value * (interval.upper - interval.lower)
+
+        else:
+            raise NotImplementedError(f"AVM between UniformDistribution and {type(other)} is not known.")
+        return distance/2
     def parameters(self):
         return {"variable": self.variable, "interval": self.interval}
 
