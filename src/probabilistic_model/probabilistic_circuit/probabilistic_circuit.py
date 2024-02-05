@@ -168,7 +168,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             {variable: value for variable, value in variable_map.items() if variable in variables})
 
     @property
-    def variables(self) -> tuple[Variable, ...]:
+    def variables(self) -> Tuple[Variable, ...]:
         variables = set([variable for distribution in self.leaves for variable in distribution.variables])
         return tuple(sorted(variables))
 
@@ -712,7 +712,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         nx.DiGraph.__init__(self)
 
     @property
-    def variables(self) -> tuple[Variable, ...]:
+    def variables(self) -> Tuple[Variable, ...]:
         return self.root.variables
 
     @property
