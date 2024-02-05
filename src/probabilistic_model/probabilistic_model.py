@@ -28,7 +28,7 @@ class ProbabilisticModel(abc.ABC):
     This is useful to separating the process of parsing user inputs and the actual calculations.
     """
 
-    _variables: Tuple[Variable]
+    _variables: Tuple[Variable, ...]
     """The variables involved in the model."""
 
     def __init__(self, variables: Optional[Iterable[Variable]]):
@@ -42,7 +42,7 @@ class ProbabilisticModel(abc.ABC):
             self._variables = tuple(sorted(variables))
 
     @property
-    def variables(self) -> Tuple[Variable]:
+    def variables(self) -> Tuple[Variable, ...]:
         return self._variables
 
     @variables.setter

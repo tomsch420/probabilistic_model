@@ -1,7 +1,6 @@
 import json
 import math
 import tempfile
-import time
 import unittest
 from datetime import datetime
 
@@ -10,26 +9,23 @@ import numpy as np
 import pandas as pd
 import random_events
 import sklearn.datasets
-from anytree import RenderTree
 from jpt import infer_from_dataframe as old_infer_from_dataframe
 from jpt.learning.impurity import Impurity
 from jpt.trees import JPT as OldJPT, Leaf
 from matplotlib import pyplot as plt
-from random_events.variables import Variable
 from random_events.events import Event
+from random_events.variables import Variable
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic, Continuous)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, SymbolicDistribution
+from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
+    SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
-import plotly.graph_objects as go
-from probabilistic_model.distributions.multinomial import MultinomialDistribution
 
 
 class ShowMixin:
-
     model: JPT
 
     def show(self):
@@ -194,8 +190,7 @@ class JPTTestCase(unittest.TestCase):
             if isinstance(variable, Continuous):
                 continue
             old_distribution = leaf.distributions[variable.name]
-            new_distribution = \
-                [child for child in product.subcircuits if child.variable == variable][0]
+            new_distribution = [child for child in product.subcircuits if child.variable == variable][0]
             for value in variable.domain:
                 old_probability = old_distribution.p(value)
                 new_probability = new_distribution.pdf(value)
@@ -253,8 +248,7 @@ class JPTTestCase(unittest.TestCase):
         self.model._min_samples_leaf = 10
         self.model.fit(self.data)
         fig = self.model.plot()
-        self.assertIsNotNone(fig)
-        # fig.show()
+        self.assertIsNotNone(fig)  # fig.show()
 
     def test_variable_dependencies_to_json(self):
         serialized = self.model._variable_dependencies_to_json()

@@ -21,8 +21,12 @@ from ...distributions.gaussian import (GaussianDistribution as PMGaussianDistrib
 class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin):
 
     @property
-    def variables(self) -> Tuple[Variable]:
+    def variables(self) -> Tuple[Variable, ...]:
         return self._variables
+
+    @variables.setter
+    def variables(self, variables: Iterable[Variable]):
+        self._variables = tuple(sorted(variables))
 
     def __hash__(self):
         return ProbabilisticCircuitMixin.__hash__(self)

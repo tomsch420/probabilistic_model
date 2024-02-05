@@ -225,6 +225,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
     symbol = Symbolic("symbol", ("a", "b", "c"))
     real = Continuous("x")
     real2 = Continuous("y")
+    real3 = Continuous("z")
 
     model: ProbabilisticCircuit
 
@@ -341,6 +342,12 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         serialized = self.model.to_json()
         deserialized = ProbabilisticCircuit.from_json(serialized)
         self.assertEqual(self.model, deserialized)
+
+    def test_update_variables(self):
+        print(self.model.variables)
+        self.model.update_variables(VariableMap({self.real: self.real3}))
+        print(self.model.variables)
+        self.assertEqual(self.model.variables, (self.real2, self.real3))
 
 
 class FactorizationTestCase(unittest.TestCase, ShowMixin):
