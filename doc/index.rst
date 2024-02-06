@@ -7,8 +7,6 @@ probabilistic models. Just like sklearn does for classical machine learning mode
 
 I provide a walkthrough the essential concepts of probabilities in this notebook.
 
-.. nbgallery:: examples/probability_theory
-
 You can read more about the theory behind probabilistic models in these resources.
 
    * Probabilistic Circuits :cite:p:`choi2020probabilistic`, :cite:p:`youtube2020probabilistic`
@@ -18,6 +16,7 @@ You can read more about the theory behind probabilistic models in these resource
    :maxdepth: 2
    :caption: Contents:
 
+   examples/probability_theory
    distributions
    probabilistic_circuits
    examples
