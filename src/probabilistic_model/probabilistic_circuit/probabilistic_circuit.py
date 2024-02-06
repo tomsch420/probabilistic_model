@@ -840,3 +840,37 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         :param new_variables: The new variables to set.
         """
         self.root.update_variables(new_variables)
+
+    @property
+    def weighted_edges(self):
+        """
+        :return: All weighted edges of the circuit.
+        """
+
+        # gather all weighted and non-weighted edges from the subgraph
+        weighted_edges = []
+
+        for edge in self.edges:
+            edge_ = self.edges[edge]
+
+            if "weight" in edge_.keys():
+                weight = edge_["weight"]
+                weighted_edges.append((*edge, weight))
+
+        return weighted_edges
+
+    @property
+    def unweighted_edges(self):
+        """
+        :return: All unweighted edges of the circuit.
+        """
+        # gather all weighted and non-weighted edges from the subgraph
+        unweighted_edges = []
+
+        for edge in self.edges:
+            edge_ = self.edges[edge]
+
+            if "weight" not in edge_.keys():
+                unweighted_edges.append(edge)
+
+        return unweighted_edges
