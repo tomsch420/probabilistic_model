@@ -1,3 +1,4 @@
+import random
 import unittest
 
 import numpy as np
@@ -344,9 +345,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(self.model, deserialized)
 
     def test_update_variables(self):
-        print(self.model.variables)
         self.model.update_variables(VariableMap({self.real: self.real3}))
-        print(self.model.variables)
         self.assertEqual(self.model.variables, (self.real2, self.real3))
 
 
@@ -411,6 +410,7 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
     model: DeterministicSumUnit
 
     def setUp(self):
+        random.seed(69)
         model = DeterministicSumUnit()
         model.add_subcircuit(UniformDistribution(self.x, portion.closed(-1.5, -0.5)), 0.5)
         model.add_subcircuit(UniformDistribution(self.x, portion.closed(0.5, 1.5)), 0.5)
@@ -432,12 +432,11 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
             samples = leaf.sample(2)
             self.assertNotEqual(samples[0], samples[1])
 
-    @unittest.skip("Sampling multiple things with undirected cycles is weird")
     def test_sample(self):
-        # self.show(self.model)
         samples: List = self.model.probabilistic_circuit.sample(2)
+        samples: List = self.model.sample(2)
         self.assertEqual(len(samples), 2)
-        print(samples)
+
         self.assertNotEqual(samples[0], samples[1])
 
     def test_samples_in_sequence(self):
