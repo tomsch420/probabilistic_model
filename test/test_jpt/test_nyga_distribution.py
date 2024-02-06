@@ -175,7 +175,23 @@ class NygaDistributionTestCase(unittest.TestCase):
 
     def test_plot(self):
         fig = go.Figure(self.model.plot())
-        self.assertIsNotNone(fig)  # fig.show()
+        self.assertIsNotNone(fig)
+        # fig.show()
+
+
+class FittedNygaDistributionTestCase(unittest.TestCase):
+    x: Continuous = Continuous("x")
+    model: NygaDistribution
+
+    def setUp(self) -> None:
+        self.model = NygaDistribution(self.x, min_likelihood_improvement=0.05)
+        data = np.random.normal(0, 1, 100).tolist()
+        self.model.fit(data)
+
+    def test_plot(self):
+        fig = go.Figure(self.model.plot())
+        self.assertIsNotNone(fig)
+        # fig.show()
 
 
 if __name__ == '__main__':
