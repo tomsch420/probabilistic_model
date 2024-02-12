@@ -15,7 +15,7 @@ class MultinomialDistribution(ProbabilisticModel):
     A multinomial distribution over discrete random variables.
     """
 
-    variables: Tuple[Discrete]
+    variables: Tuple[Discrete, ...]
     """
     The variables in the distribution.
     """
@@ -103,7 +103,7 @@ class MultinomialDistribution(ProbabilisticModel):
         probabilities[indices] = self.probabilities[indices]
         return MultinomialDistribution(self.variables, probabilities), self.probabilities[indices].sum()
 
-    def normalize(self) -> 'MultinomialDistribution':
+    def normalize(self) -> Self:
         """
         Normalize the distribution.
         :return: The normalized distribution
