@@ -10,6 +10,9 @@ from typing_extensions import List, Optional, Any, Self, Dict
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
 
+import matplotlib.pyplot as plt
+import os
+import PIL
 
 def cache_inference_result(func):
     """
@@ -73,6 +76,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     """
     The string representing this component.
     """
+
 
     result_of_current_query: Any = None
     """
@@ -209,17 +213,16 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
 
     def draw_io_style(self) -> Dict[str, Any]:
         return {
-            "style": self.representation,
+            "style": self.label,
             "width": 30,
             "height": 30,
-            "label": self.label
+            "label": self.representation
         }
 
-
 class SmoothSumUnit(ProbabilisticCircuitMixin):
-    representation = 'shape=stencil(tZTtboMgFIavhr8LHzHp34Zt98EUKykFAmzt7n4okoktzi6aGJJzjjy8OV+AUNcxwwGGHSCvAGMEYTiDfZ3ZzBle++hsxY030e281Wd+FY0fAUJ13ArfR8kbgMfwT/8RWmulAkFo5bLIJB5gTKhwF94ibHz7O7NM4F+453ZUGL0Av6/HvlT7gNFOenNsUr+53u3AuWK0V+E2A6P/YwkNnlJzE/rB6vPJ6k/VPBTDpRTG8T9afj6M82F9qKnwMqGttnxBUiukjGO9kETD+oG/C6TwdC0E+b/rAS/VJt2+6K9JRqpZM1VrEFKoMuKwCpGrQHnnJeIzKg7PIIYSFrKc8luq/F2BB2/c9IPjBw==);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
-
-    label = '⊕'
+    label = 'shape=stencil(tZVtb4MgEMc/DW8XHmLSt43bvgdTOkkpEKBr9+2LoGvxgXULGqPh/tzPu5MDQGrbUc0Ahh0grwBjBKF/+vFlMqZWs8ZF44FfWRvN1hl1ZBfeugHAZccMd71K3gDc+zn9TepGSekJXEmbKA+6h1EuvS+8Rtjw7e9kpD3/xBwzQ4TRCvD789iXahsw2ijeFDtGXzzecuA0YrTVjysGRv/Hktpb1hY3qT9oc/w06izbudeqdlCGLQg/MhciNl4mzTihUUIZb4jvkAfABIYrX6bHzvbbwb3Dcd5P037iTBjlk/pi97pXk4VS5dgjQnC5jtg9hUijQOmqqrKVWY5i9xdE+PkrdRoLX6rCi1toPjMmBNf2N8b0gJgeIEVTD26zrgjWeIAFww0=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+    image = os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", "Smoothsum.png")
+    representation = '⊕'
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
@@ -464,8 +467,9 @@ class DeterministicSumUnit(SmoothSumUnit):
     Deterministic Sum Units for Probabilistic Circuits
     """
 
-    representation = 'shape=stencil(tZXdboQgEIWfhttGISa7l41t34PqWMmyYID96dsXRVNBZXeNJsaEGfw4mZmDiOS6pg0gnNSIfCCM0ySxb7u+BWuqGyiMC1bsDqULa6PkCW6sND2AiRoUM22WfKLk3e5pH5IXUghLYFJoLzPKWxhlwn6b3B2sP/vXWzWWfwYDqlfoogh/PY99y/YBpzvp9bGD+s31bgf2Fad7NW4zcLoeS3IbWRpukn/T4vSj5EWUs2KAc9ZoeDDyoRlDs85qWjiZ5JVUEJGk6RUi5asY5871kU3ja8HK/78ecLw3DW03ThJD+iyvo1JlwZRlMfaA4EwsIw5PIXwVqT+SA/EVFYdXEF1vF+o0FH5NZx64RoE2dm626t3smMdrNrFKUDXPKkffKcfoCStL2n02MVMXdX/VLvAH);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
-    label = '⊕'
+    label = 'shape=stencil(vZVtb4MgEMc/DW8XhLj6dnHb92B6naQUDLC1+/ZD0LX4QLtFZ4zm7uDn3d8DEC1Nw1pABDeIPiNCMozd09mnkc1MC5UNzj0/Qx3cxmp1gBOvbQ/gsgHNbRelLwg/uTHdTctKSekIXEkTRa7iDsa4dHPxOcD6b39FVuv4R7Cg+wyDF5HX+7EP+TbgbKN8Y+yQ/er5rgeOM862+nGrgbO/Y2npPEvNTcs3Vh3etfqQ9XTWYmyvNMwEfsJciLDwEmWGAZUSSjtHePs6EKHYX2mZrle22w4uK5yk57WsGzgJDOGj+oSL7vmoUfIUe0AILpcRxV2IOIss7qo8qcx8FsVvEP7nL+g0CL+WwrNbaLoyEIK35hZjfECMD5BNSl9syhtr/t8l20WMXSRZ8RgpNpirCuanTbYR7w0nvnd8Aw==);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+    representation = '⊕'
+    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DeterministicSumUnit.png')
 
     def merge_modes_if_one_dimensional(self, modes: List[EncodedEvent]) -> List[EncodedEvent]:
         """
@@ -515,8 +519,10 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     Decomposable Product Units for Probabilistic Circuits
     """
 
-    representation = 'shape=stencil(tZRvb4MgEMY/DW8bhDTr24Vu34PqWUkpEKB/9u2LopnY6tymiSG55+THkzsORJmruAFEcIXoHhGSYRzWEN8GMXcGch/FUtyhiLLzVp/gJgrfAoSqwApfZ+kHwu/hn/qjLNdKBYLQyiWZXj7AuFBhL75HWHv2VxKZwD+DB9s6jCoin/Oxm+064Gwlvym2c7+43+XAqeNsrcYtBs7+jqUsKGOXm7IDz09Hqy+qeGkGpBTGwQ9XfjiMw2F96WnkZMpKbWHCUimkjGM9UUTD64F/SnTp/rMQ7H8/D2SqN93us772KjIoCdnOQUiheohdinibhUhd7P7vgvzGRdPCkSp39R3r/FODGzW+9I3wAA==);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
-    label = "⊗"
+    label = 'shape=stencil(tZXbboQgEIafhtsGIY3XjW3fg+psJcsCAbe7ffsiSFc8dduiMZqZYT5/BgcQrWzLNCCCW0SfESEFxu7p7MvEZlZD3QXngV+hCW7bGXWEC2+6AcBlC4Z3fZS+IPzkxvQ3rWolpSNwJW0SGcUdjHHpcvE1wIZvfyaWdvwTdGAGhcGLyOv92IfHfcDFTnpTbFSfXW8+cKq42GvhsoGLv2Np5TxrPzet3lh9fDfqLJt51mrsoAwsBL7DXIjQeBvTDANqJZRxjvD280CEYn9tl2nc2W47uHU42c7TrB84C8TwSX3Are4kXc9oLrMjQnA5QpQporwLkaoo/6+C/EaFX/yVOsXC56rw4ha6PTMQgmv7E2N6QEwPkKxT92mzrvDecIB5xxc=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+    representation = "⊗"
+    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DecomposableProductUnit.png')
+
     def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin):
         """
         Add a subcircuit to the children of this unit.
@@ -861,3 +867,4 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 unweighted_edges.append(edge)
 
         return unweighted_edges
+

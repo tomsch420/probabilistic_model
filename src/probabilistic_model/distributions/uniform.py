@@ -1,5 +1,7 @@
+import os
 import random
 from typing import Tuple, Optional
+
 
 import portion
 from plotly import graph_objects as go
@@ -107,11 +109,15 @@ class UniformDistribution(ContinuousDistribution):
                 and self.variable == other.variable)
 
     @property
-    def representation(self):
+    def label(self):
         return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
     @property
-    def label(self):
+    def representation(self):
         return f"U({self.interval})"
+
+    @property
+    def image(self):
+        return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval)

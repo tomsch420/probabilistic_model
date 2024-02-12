@@ -1,15 +1,13 @@
-import abc
+
+import os
 import random
 from typing import Optional
 
-import numpy as np
+import plotly.graph_objects as go
 import portion
-import random_events.utils
 from random_events.events import EncodedEvent, Event, VariableMap
 from random_events.variables import Variable, Continuous, Discrete, Symbolic, Integer
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
-import plotly.graph_objects as go
-
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
 from ..utils import SubclassJSONSerializer
@@ -388,11 +386,15 @@ class SymbolicDistribution(DiscreteDistribution):
         return self.variables[0]
 
     @property
-    def label(self):
+    def representation(self):
         return f"Nominal{self.variable.domain}"
     @property
-    def representation(self):
+    def label(self):
         return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
+
+    @property
+    def image(self):
+        return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
 
 
 class IntegerDistribution(DiscreteDistribution, ContinuousDistribution):

@@ -10,6 +10,7 @@ import pandas as pd
 from random_events.variables import Variable
 import plotly.graph_objects as go
 from probabilistic_model.probabilistic_circuit.exporter.draw_io_expoter import DrawIoExporter
+from probabilistic_model.probabilistic_circuit.exporter.networkx_expoter import NetworkxExporter
 
 
 class MyTestCase(unittest.TestCase):
@@ -29,15 +30,17 @@ class MyTestCase(unittest.TestCase):
         df["malignant"] = target
         cls.dataset = df
 
-        variables = infer_variables_from_dataframe(df, min_samples_per_quantile=100)
+        variables = infer_variables_from_dataframe(df, min_likelihood_improvement=1)
 
-        model = JPT(variables, min_samples_leaf=0.8)
+        model = JPT(variables, min_samples_leaf=0.9)
         model.fit(df)
         cls.model = model
 
     def test_export_to_drawio(self):
         diagram = DrawIoExporter(self.model.probabilistic_circuit).export()
         diagram.dump_file("test.drawio", )
+
+
 
 
 if __name__ == '__main__':
