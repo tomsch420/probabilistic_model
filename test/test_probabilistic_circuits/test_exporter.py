@@ -40,7 +40,8 @@ class MyTestCase(unittest.TestCase):
         diagram = DrawIoExporter(self.model.probabilistic_circuit).export()
         diagram.dump_file("test.drawio", )
 
-
+    def test_export_to_networkx(self):
+        diagram = self.model.probabilistic_circuit.plot()
 
 
 if __name__ == '__main__':
