@@ -1,18 +1,15 @@
 import unittest
 from typing import List
 
-import networkx as nx
 import numpy as np
+import plotly.graph_objects as go
 import portion
-from anytree import RenderTree
-from matplotlib import pyplot as plt
 from random_events.variables import Continuous
 
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SmoothSumUnit
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
 from probabilistic_model.probabilistic_circuit.distributions import DiracDeltaDistribution
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
-import plotly.graph_objects as go
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SmoothSumUnit
 from probabilistic_model.utils import SubclassJSONSerializer
 
 
@@ -90,8 +87,7 @@ class InductionStepTestCase(unittest.TestCase):
         data = np.random.normal(0, 1, 100).tolist()
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        self.assertAlmostEqual(sum([weight for weight, _ in distribution.weighted_subcircuits]),
-                               1.)
+        self.assertAlmostEqual(sum([weight for weight, _ in distribution.weighted_subcircuits]), 1.)
 
     def test_domain(self):
         np.random.seed(69)
@@ -107,8 +103,7 @@ class InductionStepTestCase(unittest.TestCase):
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
         fig = go.Figure(distribution.plot())
-        self.assertIsNotNone(fig)
-        # fig.show()
+        self.assertIsNotNone(fig)  # fig.show()
 
     def test_fit_from_singular_data(self):
         data = [1., 1.]
@@ -182,6 +177,22 @@ class NygaDistributionTestCase(unittest.TestCase):
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
         # fig.show()
+
+
+class FittedNygaDistributionTestCase(unittest.TestCase):
+    x: Continuous = Continuous("x")
+    model: NygaDistribution
+
+    def setUp(self) -> None:
+        self.model = NygaDistribution(self.x, min_likelihood_improvement=0.05)
+        data = np.random.normal(0, 1, 100).tolist()
+        self.model.fit(data)
+
+    def test_plot(self):
+        fig = go.Figure(self.model.plot())
+        self.assertIsNotNone(fig)
+        # fig.show()
+
 
 if __name__ == '__main__':
     unittest.main()

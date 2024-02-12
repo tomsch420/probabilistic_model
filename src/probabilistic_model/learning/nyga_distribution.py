@@ -390,9 +390,8 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
             uniform: UniformDistribution = subcircuit
             lower_value = uniform.interval.lower
             upper_value = uniform.interval.upper
-            x += [lower_value, upper_value]
-            y += [self.cdf(lower_value), self.cdf(upper_value)]
-            self.reset_result_of_current_query()
+            x += [lower_value, upper_value, None]
+            y += [self.cdf(lower_value), self.cdf(upper_value), None]
 
         x.extend([self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05])
         y.extend([1, 1])

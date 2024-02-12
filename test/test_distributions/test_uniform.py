@@ -109,3 +109,9 @@ class UniformDistributionTestCase(unittest.TestCase):
         deserialized = SubclassJSONSerializer.from_json(serialized)
         self.assertEqual(self.distribution, deserialized)
         self.assertIsInstance(deserialized, UniformDistribution)
+
+    def test_variable_setting(self):
+        distribution = UniformDistribution(Continuous("x"), portion.closed(0, 1))
+        self.assertEqual(distribution.variable, Continuous("x"))
+        distribution.variables = [Continuous("y")]
+        self.assertEqual(distribution.variable, Continuous("y"))

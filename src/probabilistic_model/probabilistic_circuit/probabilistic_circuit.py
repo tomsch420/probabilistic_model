@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import itertools
 import random
-from typing import Tuple, Iterable
+from typing import Tuple, Iterable, TYPE_CHECKING
 
 import networkx as nx
 from random_events.events import EncodedEvent, VariableMap, Event
@@ -13,6 +15,10 @@ from ..utils import SubclassJSONSerializer
 import matplotlib.pyplot as plt
 import os
 import PIL
+
+if TYPE_CHECKING:
+    from .distributions import UnivariateDistribution
+
 
 def cache_inference_result(func):
     """
@@ -35,8 +41,8 @@ def graph_inference_caching_wrapper(func):
     """
     Decorator for (re)setting the caching flag and results in a Probabilistic Circuit.
     """
-    def wrapper(*args, **kwargs):
 
+    def wrapper(*args, **kwargs):
         # highlight type of self
         self: ProbabilisticCircuit = args[0]
 
@@ -59,6 +65,7 @@ def graph_inference_caching_wrapper(func):
         # reset flag
         root.cache_result = False
         return result
+
     return wrapper
 
 
@@ -76,7 +83,6 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     """
     The string representing this component.
     """
-
 
     result_of_current_query: Any = None
     """
@@ -116,6 +122,23 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             target_domain = subcircuit.domain
             domain = domain | target_domain
         return domain
+
+    def update_variables(self, new_variables: VariableMap):
+        """
+        Update the variables of this unit and its descendants.
+
+        :param new_variables: A map that maps the variables that should be replaced to their new variable.
+        """
+        for leaf in self.leaves:
+
+            new_leaf_variables = []
+            for variable in leaf.variables:
+                if variable in new_variables:
+                    new_leaf_variables.append(new_variables[variable])
+                else:
+                    new_leaf_variables.append(variable)
+
+            leaf.variables = new_leaf_variables
 
     def mount(self, other: 'ProbabilisticCircuitMixin'):
         """
@@ -177,7 +200,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return tuple(sorted(variables))
 
     @property
-    def leaves(self) -> List['ProbabilisticCircuitMixin']:
+    def leaves(self) -> List[UnivariateDistribution]:
         return [node for node in nx.descendants(self.probabilistic_circuit, self) if
                 self.probabilistic_circuit.out_degree(node) == 0]
 
@@ -195,8 +218,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return id(self)
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__)
-                and self.subcircuits == other.subcircuits)
+        return (isinstance(other, self.__class__) and self.subcircuits == other.subcircuits)
 
     def __copy__(self):
         raise NotImplementedError()
@@ -229,8 +251,8 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         """
         :return: The weighted subcircuits of this unit.
         """
-        return [(self.probabilistic_circuit.edges[self, subcircuit]["weight"], subcircuit)
-                for subcircuit in self.subcircuits]
+        return [(self.probabilistic_circuit.edges[self, subcircuit]["weight"], subcircuit) for subcircuit in
+                self.subcircuits]
 
     @property
     def latent_variable(self) -> Symbolic:
@@ -302,7 +324,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
             return None, 0
 
         # normalize probabilities
-        normalized_probabilities = [p/total_probability for p in subcircuit_probabilities]
+        normalized_probabilities = [p / total_probability for p in subcircuit_probabilities]
 
         # add edges and subcircuits
         for weight, subcircuit in zip(normalized_probabilities, conditional_subcircuits):
@@ -371,15 +393,11 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         return id(self)
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__)
-                and self.weighted_subcircuits == other.weighted_subcircuits)
+        return (isinstance(other, self.__class__) and self.weighted_subcircuits == other.weighted_subcircuits)
 
     def to_json(self):
-        return {
-            **super().to_json(),
-            "weighted_subcircuits": [(weight, subcircuit.to_json())
-                                     for weight, subcircuit in self.weighted_subcircuits]
-        }
+        return {**super().to_json(), "weighted_subcircuits": [(weight, subcircuit.to_json()) for weight, subcircuit in
+                                                              self.weighted_subcircuits]}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
@@ -552,7 +570,6 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         result = 1.
 
         for subcircuit in self.subcircuits:
-
             # load variables of this subcircuit
             subcircuit_variables = subcircuit.variables
 
@@ -629,13 +646,11 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             # sample from the subcircuit
             sample_subset = subcircuit.sample(amount)
 
-
             # for each sample from the subcircuit
             for sample_index in range(amount):
 
                 # for each variable and its index of the subcircuit
                 for child_variable_index, variable in enumerate(subcircuit.variables):
-
                     # find the index of the variable in the variables of the product
                     rearranged_samples[sample_index][variables.index(variable)] = sample_subset[sample_index][
                         child_variable_index]
@@ -675,10 +690,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         return result
 
     def to_json(self) -> Dict[str, Any]:
-        return {
-            **super().to_json(),
-            "subcircuits": [subcircuit.to_json() for subcircuit in self.subcircuits]
-        }
+        return {**super().to_json(), "subcircuits": [subcircuit.to_json() for subcircuit in self.subcircuits]}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
@@ -733,7 +745,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return self.root.variables
 
     @property
-    def leaves(self) -> List[ProbabilisticCircuitMixin]:
+    def leaves(self) -> List[UnivariateDistribution]:
         return self.root.leaves
 
     def is_valid(self) -> bool:
@@ -824,25 +836,34 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         :return: if the whole circuit is decomposed
         """
-        return all([subcircuit.is_decomposable() for subcircuit in self.leaves
-                    if isinstance(subcircuit, DecomposableProductUnit)])
+        return all([subcircuit.is_decomposable() for subcircuit in self.leaves if
+                    isinstance(subcircuit, DecomposableProductUnit)])
 
     def __eq__(self, other: 'ProbabilisticCircuit'):
         return self.root == other.root
 
     def to_json(self) -> Dict[str, Any]:
-        return {
-            **super().to_json(),
-            "root": self.root.to_json()
-        }
+        return {**super().to_json(), "root": self.root.to_json()}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         root = ProbabilisticCircuitMixin.from_json(data["root"])
         return root.probabilistic_circuit
 
+    def update_variables(self, new_variables: VariableMap):
+        """
+        Update the variables of this unit and its descendants.
+
+        :param new_variables: The new variables to set.
+        """
+        self.root.update_variables(new_variables)
+
     @property
     def weighted_edges(self):
+        """
+        :return: All weighted edges of the circuit.
+        """
+
         # gather all weighted and non-weighted edges from the subgraph
         weighted_edges = []
 
@@ -857,6 +878,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     @property
     def unweighted_edges(self):
+        """
+        :return: All unweighted edges of the circuit.
+        """
         # gather all weighted and non-weighted edges from the subgraph
         unweighted_edges = []
 
@@ -867,4 +891,3 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 unweighted_edges.append(edge)
 
         return unweighted_edges
-
