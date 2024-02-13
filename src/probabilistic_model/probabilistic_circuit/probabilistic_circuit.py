@@ -898,25 +898,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         for node in self.nodes:
             images[hash(node)] = PIL.Image.open(node.image)
 
-
-        fig, ax = plt.subplots(dpi=200)
-        center_x = ax.get_position().x0 + (ax.get_position().width / 2)
-        center_y = ax.get_position().y0 + (ax.get_position().height / 2)
-        #pos = nx.spring_layout(self, k=0.5, iterations=1000)  # change layout style still need find out
-        circu_pos = nx.circular_layout(self)
-        #pos = nx.random_layout(self, center=(0,0), seed=111)
-        planar_pos = nx.planar_layout(self, scale=0.5, dim=2)
-        kama_pos = nx.kamada_kawai_layout(self, scale=0.5, weight=1)#fav
-        node_li_list = []
-        for node in self.nodes:
-            succes = [n for n in self.successors(node)]
-            succes.append(node)
-            node_li_list.append(succes)
-        shell_pos = nx.shell_layout(self, scale=0.5, nlist=node_li_list)
-        spec_pos = nx.spectral_layout(self, scale=0.5)
-        spiral_pos = nx.spiral_layout(self, scale=0.5, resolution=0.5, equidistant=True)
-        pos = nx.spring_layout(self, scale=0.5, pos=planar_pos, threshold=0.003, k=0.5, weight=10, iterations=100)
-        #pos = nx.nx_agraph.graphviz_layout(self, prog="twopi", args="")
+        fig, ax = plt.subplots(dpi=200, figsize=(10, 10))
+        graph_pos = nx.nx_agraph.graphviz_layout(self, prog="twopi", args="")
+        pos = nx.spring_layout(self, scale=0.5, pos=graph_pos, threshold=2.0531, k=2, weight=1, iterations=100)
         nx.draw_networkx_edges(
             self,
             pos=pos,
@@ -935,11 +919,11 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
             xf, yf = tr_figure(pos[node])
             xa, ya = tr_axes((xf, yf))
-            # get overlapped axes and plot icon
+
             a = plt.axes([xa - icon_center, ya - icon_center, icon_size, icon_size])
             a.imshow(images[hash(node)])
             a.axis("off")
-            # Add text on top of the image with a little margin
+
             text_margin = 5
             text_x = xa - icon_center + text_margin
             text_y = ya + icon_center - text_margin
