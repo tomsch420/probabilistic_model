@@ -12,6 +12,10 @@ from typing_extensions import List, Optional, Any, Self, Dict
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
 
+import matplotlib.pyplot as plt
+import os
+import PIL
+
 if TYPE_CHECKING:
     from .distributions import UnivariateDistribution
 
@@ -229,9 +233,18 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         return self.__class__()
 
+    def draw_io_style(self) -> Dict[str, Any]:
+        return {
+            "style": self.label,
+            "width": 30,
+            "height": 30,
+            "label": self.representation
+        }
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
-    representation = "+"
+    label = 'shape=stencil(tZVtb4MgEMc/DW8XHmLSt43bvgdTOkkpEKBr9+2LoGvxgXULGqPh/tzPu5MDQGrbUc0Ahh0grwBjBKF/+vFlMqZWs8ZF44FfWRvN1hl1ZBfeugHAZccMd71K3gDc+zn9TepGSekJXEmbKA+6h1EuvS+8Rtjw7e9kpD3/xBwzQ4TRCvD789iXahsw2ijeFDtGXzzecuA0YrTVjysGRv/Hktpb1hY3qT9oc/w06izbudeqdlCGLQg/MhciNl4mzTihUUIZb4jvkAfABIYrX6bHzvbbwb3Dcd5P037iTBjlk/pi97pXk4VS5dgjQnC5jtg9hUijQOmqqrKVWY5i9xdE+PkrdRoLX6rCi1toPjMmBNf2N8b0gJgeIEVTD26zrgjWeIAFww0=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+    image = os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", "Smoothsum.png")
+    representation = '⊕'
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
@@ -472,7 +485,9 @@ class DeterministicSumUnit(SmoothSumUnit):
     Deterministic Sum Units for Probabilistic Circuits
     """
 
-    representation = "⊕"
+    label = 'shape=stencil(vZVtb4MgEMc/DW8XhLj6dnHb92B6naQUDLC1+/ZD0LX4QLtFZ4zm7uDn3d8DEC1Nw1pABDeIPiNCMozd09mnkc1MC5UNzj0/Qx3cxmp1gBOvbQ/gsgHNbRelLwg/uTHdTctKSekIXEkTRa7iDsa4dHPxOcD6b39FVuv4R7Cg+wyDF5HX+7EP+TbgbKN8Y+yQ/er5rgeOM862+nGrgbO/Y2npPEvNTcs3Vh3etfqQ9XTWYmyvNMwEfsJciLDwEmWGAZUSSjtHePs6EKHYX2mZrle22w4uK5yk57WsGzgJDOGj+oSL7vmoUfIUe0AILpcRxV2IOIss7qo8qcx8FsVvEP7nL+g0CL+WwrNbaLoyEIK35hZjfECMD5BNSl9syhtr/t8l20WMXSRZ8RgpNpirCuanTbYR7w0nvnd8Aw==);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+    representation = '⊕'
+    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DeterministicSumUnit.png')
 
     def merge_modes_if_one_dimensional(self, modes: List[EncodedEvent]) -> List[EncodedEvent]:
         """
@@ -522,7 +537,9 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     Decomposable Product Units for Probabilistic Circuits
     """
 
+    label = 'shape=stencil(tZXbboQgEIafhtsGIY3XjW3fg+psJcsCAbe7ffsiSFc8dduiMZqZYT5/BgcQrWzLNCCCW0SfESEFxu7p7MvEZlZD3QXngV+hCW7bGXWEC2+6AcBlC4Z3fZS+IPzkxvQ3rWolpSNwJW0SGcUdjHHpcvE1wIZvfyaWdvwTdGAGhcGLyOv92IfHfcDFTnpTbFSfXW8+cKq42GvhsoGLv2Np5TxrPzet3lh9fDfqLJt51mrsoAwsBL7DXIjQeBvTDANqJZRxjvD280CEYn9tl2nc2W47uHU42c7TrB84C8TwSX3Are4kXc9oLrMjQnA5QpQporwLkaoo/6+C/EaFX/yVOsXC56rw4ha6PTMQgmv7E2N6QEwPkKxT92mzrvDecIB5xxc=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
     representation = "⊗"
+    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DecomposableProductUnit.png')
 
     def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin):
         """
@@ -874,3 +891,41 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 unweighted_edges.append(edge)
 
         return unweighted_edges
+
+    def plot(self):
+
+        images = dict()
+        for node in self.nodes:
+            images[hash(node)] = PIL.Image.open(node.image)
+
+        fig, ax = plt.subplots(dpi=200, figsize=(10, 10))
+        graph_pos = nx.nx_agraph.graphviz_layout(self, prog="twopi", args="")
+        pos = nx.spring_layout(self, scale=0.5, pos=graph_pos, threshold=2.0531, k=2, weight=1, iterations=100)
+        nx.draw_networkx_edges(
+            self,
+            pos=pos,
+            ax=ax,
+            arrows=True,
+            min_source_margin=10,
+            min_target_margin=10,
+        )
+
+        tr_figure = ax.transData.transform
+        tr_axes = fig.transFigure.inverted().transform
+        icon_size = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.02
+        icon_center = icon_size / 2.0
+
+        for node in self.nodes:
+
+            xf, yf = tr_figure(pos[node])
+            xa, ya = tr_axes((xf, yf))
+
+            a = plt.axes([xa - icon_center, ya - icon_center, icon_size, icon_size])
+            a.imshow(images[hash(node)])
+            a.axis("off")
+
+            text_margin = 5
+            text_x = xa - icon_center + text_margin
+            text_y = ya + icon_center - text_margin
+            plt.text(text_x, text_y, node.representation, color='black', fontsize=3, ha='left', va='top')
+        plt.show()
