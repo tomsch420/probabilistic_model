@@ -96,4 +96,4 @@ class GaussianDistributionTestCase(unittest.TestCase):
         distribution, _ = self.distribution.conditional(Event({self.x: condition}))
         traces = distribution.plot()
         self.assertGreater(len(traces), 0)
-        # go.Figure(traces).show()
+        # go.Figure(traces, distribution.plotly_layout()).show()

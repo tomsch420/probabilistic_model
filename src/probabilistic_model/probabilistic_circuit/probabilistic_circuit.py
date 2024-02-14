@@ -400,6 +400,15 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             raise ValueError("The circuit has too many variables to plot.")
         return self.plot_1d()
 
+    def plotly_layout(self) -> Dict[str, Any]:
+        """
+        :return: The layout argument for plotly figures as dict
+        """
+        return {
+            "title": f"{self.__class__.__name__}",
+            "xaxis": {"title": self.variables[0].name}
+        }
+
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
     representation = "+"
