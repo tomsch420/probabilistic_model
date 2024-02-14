@@ -2,6 +2,7 @@ import unittest
 
 import portion
 from matplotlib import pyplot as plt
+import plotly.graph_objects as go
 from random_events.events import Event
 from random_events.variables import Integer, Symbolic, Continuous
 
@@ -9,7 +10,9 @@ from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
 
 from probabilistic_model.probabilistic_circuit.distributions.distributions import (UniformDistribution,
                                                                                    SymbolicDistribution,
-                                                                                   IntegerDistribution)
+                                                                                   IntegerDistribution,
+                                                                                   GaussianDistribution,
+                                                                                   TruncatedGaussianDistribution)
 
 
 class UniformDistributionTestCase(unittest.TestCase):
@@ -67,3 +70,30 @@ class DiscreteDistributionTestCase(unittest.TestCase):
         circuit.add_node(self.integer_distribution)
         self.assertEqual(len(list(circuit.nodes)), 2)
 
+
+class GaussianDistributionTestCase(unittest.TestCase):
+
+    x: Continuous = Continuous("x")
+    distribution: GaussianDistribution
+
+    def setUp(self):
+        self.distribution = GaussianDistribution(self.x, 0, 1)
+
+    def test_conditional_from_simple_interval(self):
+        conditional, _ = self.distribution.conditional(Event({self.x: portion.closed(0, 1)}))
+        self.assertIsNotNone(conditional.probabilistic_circuit)
+        self.assertEqual(len(list(conditional.probabilistic_circuit.nodes)), 1)
+        self.assertEqual(conditional.interval, portion.closed(0, 1))
+
+    def test_conditional_from_complex_interval(self):
+        conditional, _ = self.distribution.conditional(Event({self.x: portion.closed(0, 1) |
+                                                                      portion.closed(2, 3)}))
+        self.assertIsNotNone(conditional.probabilistic_circuit)
+        self.assertEqual(len(list(conditional.probabilistic_circuit.nodes)), 3)
+
+    def test_plot(self):
+        condition = portion.closed(-float("inf"), -1) | portion.closed(1, float("inf"))
+        distribution, _ = self.distribution.conditional(Event({self.x: condition}))
+        traces = distribution.plot()
+        self.assertGreater(len(traces), 0)
+        # go.Figure(traces).show()

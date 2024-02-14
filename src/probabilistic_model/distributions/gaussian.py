@@ -277,7 +277,8 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             gamma_term_lower = -0.5 * gamma.cdf(lower_bound ** 2 / 2, (k + 1) / 2) * bound_selection_lower
             gamma_term_upper = 0.5 * gamma.cdf(upper_bound ** 2 / 2, (k + 1) / 2) * bound_selection_upper
 
-            truncated_moment +=  multiplying_constant * (gamma_term_lower + gamma_term_upper) * (-normalized_center) ** (order - k)
+            truncated_moment += (multiplying_constant * (gamma_term_lower + gamma_term_upper) * (-normalized_center)
+                                 ** (order - k))
 
         truncated_moment *= (math.sqrt(self.variance) ** order) / self.normalizing_constant
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Iterable
 
 from random_events.events import EncodedEvent
@@ -99,10 +101,15 @@ class UniformDistribution(ContinuousDistribution, PMUniformDistribution):
 
 
 class GaussianDistribution(ContinuousDistribution, PMGaussianDistribution):
-    ...
+
+    def conditional_from_simple_interval(self, interval: portion.Interval) -> (
+            Tuple)[Optional[TruncatedGaussianDistribution], float]:
+        conditional, probability = PMGaussianDistribution.conditional_from_simple_interval(self, interval)
+        return TruncatedGaussianDistribution(conditional.variable, conditional.interval,
+                                             conditional.mean, conditional.variance), probability
 
 
-class TruncatedGaussianDistribution(ContinuousDistribution, PMTruncatedGaussianDistribution):
+class TruncatedGaussianDistribution(GaussianDistribution, ContinuousDistribution, PMTruncatedGaussianDistribution):
     ...
 
 

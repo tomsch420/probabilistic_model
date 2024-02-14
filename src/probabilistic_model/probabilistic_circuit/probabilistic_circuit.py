@@ -5,9 +5,11 @@ import random
 from typing import Tuple, Iterable, TYPE_CHECKING
 
 import networkx as nx
+import portion
 from random_events.events import EncodedEvent, VariableMap, Event
 from random_events.variables import Variable, Symbolic
 from typing_extensions import List, Optional, Any, Self, Dict
+import plotly.graph_objects as go
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
@@ -228,6 +230,175 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         :return: A copy of this circuit without any subcircuits.
         """
         return self.__class__()
+
+    def pdf_trace_1d(self, samples: List[float], support: portion.Interval) -> go.Scatter:
+        """
+        Generate the pdf trace for a 1D plot of a circuit.
+
+        :param samples: The samples to generate the pdf from.
+        :param support: The support of the circuit.
+        :return: The trace for the pdf of a circuit.
+        """
+
+        # calculate size of support
+        size_of_support = support.upper - support.lower
+
+        # form complement of support
+        complement_of_support = support.complement()
+
+        # stitch the intervals together and sort them
+        intervals = support._intervals + complement_of_support._intervals
+        intervals.sort(key=lambda x: x.lower)
+
+        # initialize x and y values
+        x_values = []
+        y_values = []
+
+        # for every interval in the partitioning of the domain
+        for interval in intervals:
+
+            # if the interval is not in the support
+            if interval in complement_of_support._intervals:
+
+                # if it is the leftmost interval
+                if interval.lower <= float("-inf"):
+                    # create left padding
+                    x_values.extend([interval.upper - size_of_support * 0.1, interval.upper, None])
+                    y_values.extend([0, 0, None])
+
+                # if it is the rightmost interval
+                elif interval.upper >= float("inf"):
+                    # create right padding
+                    x_values.extend([None, interval.lower, interval.lower + size_of_support * 0.1])
+                    y_values.extend([None, 0, 0])
+                # if it is an inner interval
+                else:
+                    # extend with zeros
+                    x_values.extend([None, interval.lower, interval.upper, None])
+                    y_values.extend([None, 0, 0, None])
+
+            # if the interval is in the support
+            elif interval in support._intervals:
+
+                # get samples in this interval
+                samples_in_interval = [sample for sample in samples if interval.lower <= sample <= interval.upper]
+
+                # calculate the pdf values
+                pdf_values = [self.likelihood([sample]) for sample in samples_in_interval]
+
+                # extend the x and y values
+                x_values.extend(samples_in_interval)
+                y_values.extend(pdf_values)
+
+            else:
+                raise ValueError("This should not happen.")
+
+        return go.Scatter(x=x_values, y=y_values, mode="lines", name="PDF")
+
+    def cdf_trace_1d(self, samples: List[float], support: portion.Interval) -> go.Scatter:
+        """
+        Generate the cdf trace for a 1D plot of a circuit.
+        :param samples: The samples to generate the cdf from.
+        :param support: The support of the circuit.
+        :return: The trace for the cdf of a circuit.
+        """
+        # calculate size of support
+        size_of_support = support.upper - support.lower
+        x = [support.lower - size_of_support * 0.1] + samples + [support.upper + size_of_support * 0.1]
+        cdf_values = [self.probability(Event({self.variables[0]: portion.closed(float("-inf"), sample)}))
+                      for sample in samples]
+        y = [0] + cdf_values + [1]
+        return go.Scatter(x=x, y=y, mode="lines", name="CDF")
+
+    def mode_trace_1d(self) -> Tuple[Optional[go.Scatter], float]:
+        """
+        Generate the mode trace for a 1D plot of a circuit.
+        :return:
+        """
+
+        # try to calculate the mode
+        try:
+            modes, maximum_likelihood = self.mode()
+
+        # if the mode cannot be calculated analytically
+        except NotImplementedError:
+
+            # skip the creation of this trace
+            return None, 0
+
+        # initialize x and y values
+        xs = []
+        ys = []
+
+        # for every mode
+        for mode in modes[0][self.variables[0]]:
+
+            # extend the x and y values
+            xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
+            ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
+
+        # create trace
+        trace = go.Scatter(x=xs, y=ys, mode='lines+markers', name="Mode", fill="toself")
+        return trace, maximum_likelihood
+
+    def plot_1d(self) -> List[go.Scatter]:
+        """
+        Plot the circuit if it is one dimensional.
+        :return: Traces for the 1D plot of a circuit.
+        """
+        # generate samples as basis for plotting
+        samples = [sample[0] for sample in sorted(self.sample(1000))]
+
+        # get variable and domain
+        domain = self.domain
+        variable = list(domain.keys())[0]
+        support: portion.Interval = domain[variable]
+
+        # if the support has infinite lower bound
+        if support.lower <= float("-inf"):
+            # set it to the minimum of the samples
+            support = support.replace(lower=min(samples))
+
+        # if the support has infinite upper bound
+        if support.upper >= float("inf"):
+            # set it to the maximum of the samples
+            support = support.replace(upper=max(samples))
+
+        # initialize result
+        traces = []
+
+        # create pdf trace
+        pdf_trace = self.pdf_trace_1d(samples, support)
+        traces.append(pdf_trace)
+
+        # add cdf trace
+        traces.append(self.cdf_trace_1d(samples, support))
+
+        # get mode trace
+        mode_trace, maximum_likelihood = self.mode_trace_1d()
+
+        # of mode trace does not exist
+        if mode_trace is None:
+            # calculate maximum approximately
+            maximum_likelihood = max(pdf_trace.x)
+        else:
+            traces.append(mode_trace)
+
+        # create expectation trace
+        expectation = self.expectation([variable])[variable]
+        traces.append(go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05], mode="lines+markers",
+                                 name="Expectation"))
+
+        return traces
+
+    def plot(self) -> List[go.Scatter]:
+        """
+        Plot the circuit.
+        """
+        variables = self.variables
+        if len(variables) > 1:
+            raise ValueError("The circuit has too many variables to plot.")
+        return self.plot_1d()
 
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):

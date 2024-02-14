@@ -377,7 +377,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
         x.extend([self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05])
         y.extend([0, 0])
-        return go.Scatter(x=x, y=y, mode='lines', name="Probability Density Function")
+        return go.Scatter(x=x, y=y, mode='lines', name="PDF")
 
     def cdf_trace(self) -> go.Scatter:
         """
@@ -395,25 +395,14 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
         x.extend([self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05])
         y.extend([1, 1])
-        return go.Scatter(x=x, y=y, mode='lines', name="Cumulative Distribution Function")
-
-    def mode_trace(self) -> Tuple[go.Scatter, float]:
-        modes, maximum_likelihood = self.mode()
-        xs = []
-        ys = []
-        for mode in modes[0][self.variable]:
-            xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
-            ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
-
-        trace = go.Scatter(x=xs, y=ys, mode='lines+markers', name="Mode", fill="toself")
-        return trace, maximum_likelihood
+        return go.Scatter(x=x, y=y, mode='lines', name="CDF")
 
     def plot(self) -> List[go.Scatter]:
         """
         Plot the distribution with PDF, CDF, Expectation and Mode.
         """
         traces = [self.pdf_trace(), self.cdf_trace()]
-        mode_trace, maximum_likelihood = self.mode_trace()
+        mode_trace, maximum_likelihood = self.mode_trace_1d()
         self.reset_result_of_current_query()
 
         expectation = self.expectation([self.variable])[self.variable]
