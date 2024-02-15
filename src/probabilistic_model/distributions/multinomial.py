@@ -3,11 +3,15 @@ from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
-from random_events.variables import Discrete
+from random_events.variables import Discrete, Integer, Symbolic
 from random_events.events import EncodedEvent
 
 from ..probabilistic_model import ProbabilisticModel
 from typing_extensions import Self
+
+from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
+                                                          DecomposableProductUnit)
+from ..probabilistic_circuit.distributions.distributions import SymbolicDistribution, IntegerDistribution
 
 
 class MultinomialDistribution(ProbabilisticModel):
@@ -110,3 +114,45 @@ class MultinomialDistribution(ProbabilisticModel):
         """
         normalized_probabilities = self.probabilities / np.sum(self.probabilities)
         return MultinomialDistribution(self.variables, normalized_probabilities)
+
+    def as_probabilistic_circuit(self) -> DeterministicSumUnit:
+        """
+        Convert this distribution to a probabilistic circuit. A deterministic sum unit with decomposable children is
+        used to describe every state. The size of the circuit is equal to the size of `self.probabilities`.
+
+        :return: The distribution as a probabilistic circuit.
+        """
+        # initialize the result as a deterministic sum unit
+        result = DeterministicSumUnit()
+
+        # iterate through all states of this distribution
+        for event in itertools.product(*[variable.domain for variable in self.variables]):
+
+            # create a product unit for the current state
+            product_unit = DecomposableProductUnit()
+
+            # iterate through all variables
+            for variable, value in zip(self.variables, event):
+
+                # create probabilities for the current variables state as one hot encoding
+                weights = [0.] * len(variable.domain)
+                weights[variable.encode(value)] = 1.
+
+                # create a distribution for the current variable
+                if isinstance(variable, Integer):
+                    distribution = IntegerDistribution(variable, weights)
+                elif isinstance(variable, Symbolic):
+                    distribution = SymbolicDistribution(variable, weights)
+                else:
+                    raise ValueError(f"Variable type {type(variable)} not supported.")
+
+                # mount the distribution to the product unit
+                product_unit.add_subcircuit(distribution)
+
+            # calculate the probability of the current state
+            probability = self.likelihood(event)
+
+            # mount the product unit to the result
+            result.add_subcircuit(product_unit, probability)
+
+        return result

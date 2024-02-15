@@ -159,6 +159,15 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         self.assertAlmostEqual(conditional.probability(Event()), 1.)
         self.assertEqual(conditional.probability(Event({self.y: 2})), 0.)
 
+    def test_as_probabilistic_circuit(self):
+        distribution = self.random_distribution.normalize()
+        circuit = distribution.as_probabilistic_circuit()
+
+        for event in itertools.product(self.x.domain, self.y.domain, self.z.domain):
+            event = Event(zip([self.x, self.y, self.z], event))
+            self.assertAlmostEqual(distribution.probability(event),
+                                   circuit.probability(event))
+
 
 if __name__ == '__main__':
     unittest.main()
