@@ -9,7 +9,8 @@ from typing_extensions import Union
 
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import (ContinuousDistribution,
-                                                                                   UniformDistribution)
+                                                                                   UniformDistribution,
+                                                                                   GaussianDistribution)
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
 
 
@@ -401,7 +402,6 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
 
 
 class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
-
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
 
@@ -443,6 +443,17 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
         samples = self.model.probabilistic_circuit.sample(1) + self.model.probabilistic_circuit.sample(1)
         self.assertEqual(len(samples), 2)
         self.assertNotEqual(samples[0], samples[1])
+
+    def test_plot_non_deterministic(self):
+        gaussian_1 = GaussianDistribution(Continuous("x"), 0, 1)
+        gaussian_2 = GaussianDistribution(Continuous("x"), 5, 0.5)
+        mixture = SmoothSumUnit()
+        mixture.add_subcircuit(gaussian_1, 0.5)
+        mixture.add_subcircuit(gaussian_2, 0.5)
+        traces = mixture.plot()
+        self.assertGreater(len(traces), 0)
+        # go.Figure(mixture.plot(), mixture.plotly_layout()).show()
+
 
 if __name__ == '__main__':
     unittest.main()

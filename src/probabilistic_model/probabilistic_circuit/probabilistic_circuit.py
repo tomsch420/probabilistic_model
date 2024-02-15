@@ -341,13 +341,15 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         trace = go.Scatter(x=xs, y=ys, mode='lines+markers', name="Mode", fill="toself")
         return trace, maximum_likelihood
 
-    def plot_1d(self) -> List[go.Scatter]:
+    def plot_1d(self, sample_amount: int) -> List[go.Scatter]:
         """
         Plot the circuit if it is one dimensional.
+
+        :param sample_amount: The amount of samples to use for plotting.
         :return: Traces for the 1D plot of a circuit.
         """
         # generate samples as basis for plotting
-        samples = [sample[0] for sample in sorted(self.sample(1000))]
+        samples = [sample[0] for sample in sorted(self.sample(sample_amount))]
 
         # get variable and domain
         domain = self.domain
@@ -380,7 +382,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         # of mode trace does not exist
         if mode_trace is None:
             # calculate maximum approximately
-            maximum_likelihood = max(pdf_trace.x)
+            maximum_likelihood = max([l for l in pdf_trace.y if l is not None])
         else:
             traces.append(mode_trace)
 
@@ -391,14 +393,17 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
 
         return traces
 
-    def plot(self) -> List[go.Scatter]:
+    def plot(self, sample_amount: int = 5000) -> List[go.Scatter]:
         """
         Plot the circuit.
+
+        :param sample_amount: The amount of samples to use for plotting.
+        :return: Traces for the plot of a circuit.
         """
         variables = self.variables
         if len(variables) > 1:
             raise ValueError("The circuit has too many variables to plot.")
-        return self.plot_1d()
+        return self.plot_1d(sample_amount)
 
     def plotly_layout(self) -> Dict[str, Any]:
         """
