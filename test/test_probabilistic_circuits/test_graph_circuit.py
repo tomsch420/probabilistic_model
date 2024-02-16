@@ -433,7 +433,6 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
             self.assertNotEqual(samples[0], samples[1])
 
     def test_sample(self):
-        samples: List = self.model.probabilistic_circuit.sample(2)
         samples: List = self.model.sample(2)
         self.assertEqual(len(samples), 2)
 
@@ -454,6 +453,40 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
         self.assertGreater(len(traces), 0)
         # go.Figure(mixture.plot(), mixture.plotly_layout()).show()
 
+    def test_simplify(self):
+        simplified = self.model.simplify()
+        self.assertEqual(len(simplified.probabilistic_circuit.nodes()), 7)
+        self.assertEqual(len(simplified.probabilistic_circuit.edges()), 6)
+
+
+class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+
+    probabilities = np.array([[0.9, 0.1],
+                              [0.3, 0.7]])
+    model: DeterministicSumUnit
+
+    def setUp(self):
+        random.seed(69)
+        model = DeterministicSumUnit()
+        model.add_subcircuit(UniformDistribution(self.x, portion.closed(-1.5, -0.5)), 0.5)
+        model.add_subcircuit(UniformDistribution(self.x, portion.closed(0.5, 1.5)), 0.5)
+        next_model = model.__copy__()
+        for leaf in next_model.leaves:
+            leaf._variables = (self.y,)
+
+        transition_model = MultinomialDistribution([model.latent_variable, next_model.latent_variable],
+                                                   self.probabilities)
+        next_model.mount_with_interaction_terms(model, transition_model)
+        self.model = next_model
+
+    def test_simplify(self):
+        self.show()
+        simplified = self.model.probabilistic_circuit.simplify().root
+        self.show(simplified)
+        self.assertEqual(len(simplified.probabilistic_circuit.nodes()), len(self.model.probabilistic_circuit.nodes))
+        self.assertEqual(len(simplified.probabilistic_circuit.edges()), len(self.model.probabilistic_circuit.edges))
 
 if __name__ == '__main__':
     unittest.main()

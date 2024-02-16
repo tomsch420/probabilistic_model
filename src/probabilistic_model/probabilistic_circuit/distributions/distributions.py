@@ -33,6 +33,10 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
     def __hash__(self):
         return ProbabilisticCircuitMixin.__hash__(self)
 
+    @cache_inference_result
+    def simplify(self) -> Self:
+        return self.__copy__()
+
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin):
 

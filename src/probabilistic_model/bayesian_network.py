@@ -4,7 +4,7 @@ import itertools
 from functools import cached_property
 from typing import Tuple
 
-from random_events.events import EncodedEvent
+from random_events.events import EncodedEvent, Event
 from random_events.variables import Variable
 from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
 
@@ -24,6 +24,11 @@ class BayesianNetworkMixin:
     forward_message: MultinomialDistribution
     """
     The marginal distribution (message) as calculated in the forward pass.
+    """
+
+    forward_probability: float
+    """
+    The probability of the forward message at each node.
     """
 
     @property
@@ -105,19 +110,23 @@ class ConditionalMultinomialDistribution(BayesianNetworkMixin, MultinomialDistri
             parent_event = tuple()
         return self.probabilities[tuple(parent_event) + tuple(event)].item()
 
-    def calculate_forward_message(self):
-        if not self.is_root:
-            parent = self.parents[0]
-            probabilities = self.probabilities * parent.forward_message.probabilities.reshape(-1, 1)
-            forward_message = MultinomialDistribution(self.parent_and_node_variables, None)
-            forward_message._variables = self.parent_and_node_variables
-            forward_message.probabilities = probabilities
-            forward_message.marginal(self.variables)
-            self.forward_message = forward_message
+    def calculate_forward_message(self, event: EncodedEvent):
+        """
+        Calculate the forward message for this node given the event and the forward probability of said event.
+        :param event: The event to account for
+        """
 
-        if self.is_root:
-            forward_message = MultinomialDistribution(self.variables, self.probabilities)
-            self.forward_message = forward_message
+        forward_message = self.joint_distribution_with_parents()
+
+        # calculate conditional probability
+        forward_message, forward_probability = forward_message._conditional(event)
+
+        # marginalize with respect to the node variables
+        forward_message = forward_message.marginal(self.variables).normalize()
+
+        # save forward message and probability
+        self.forward_message = forward_message
+        self.forward_probability = forward_probability
 
     def __hash__(self):
         return BayesianNetworkMixin.__hash__(self)
@@ -131,6 +140,28 @@ class ConditionalMultinomialDistribution(BayesianNetworkMixin, MultinomialDistri
 
     def as_probabilistic_circuit(self) -> DeterministicSumUnit:
         return MultinomialDistribution.as_probabilistic_circuit(self)
+
+    def joint_distribution_with_parents(self) -> MultinomialDistribution:
+        """
+        Calculate the joint distribution of the node and its parents.
+        :return: The joint distribution of the node and its parents.
+        """
+
+        if self.is_root:
+            return MultinomialDistribution(self.variables, self.probabilities)
+
+        # get the parent
+        parent = self.parents[0]
+
+        # multiply the parent forward message with the own probabilities
+        probabilities = self.probabilities * parent.forward_message.probabilities.reshape(-1, 1)
+
+        # create the new forward message
+        result = MultinomialDistribution(self.parent_and_node_variables, None)
+        result._variables = self.parent_and_node_variables
+        result.probabilities = probabilities
+
+        return result
 
 
 class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
@@ -168,22 +199,20 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
             result *= node._likelihood(node_event, parent_event)
         return result
 
-    def forward_pass(self):
+    def forward_pass(self, event: EncodedEvent):
         """
         Calculate all forward messages.
         """
         # calculate forward pass
         for node in self.nodes:
-            node.calculate_forward_message()
+            node.calculate_forward_message(event)
 
     def _probability(self, event: EncodedEvent) -> float:
-        self.forward_pass()
-
+        self.forward_pass(event)
         result = 1.
 
-        for leaf in self.leaves:
-            result *= leaf.forward_message._probability(event)
-
+        for node in self.nodes:
+            result *= node.forward_probability
         return result
 
     def brute_force_joint_distribution(self) -> MultinomialDistribution:
@@ -223,23 +252,43 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         Convert the BayesianNetwork to a probabilistic circuit that expresses the same probability distribution.
         :return:
         """
+
+        # this only works for bayesian trees
         assert nx.is_tree(self)
 
-        self.forward_pass()
+        # calculate forward pass
+        self.forward_pass(self.preprocess_event(Event()))
 
+        # initialize dict that maps from the basic network node to the component in the circuit
         pointers_to_sum_units: Dict[BayesianNetworkMixin, DeterministicSumUnit] = dict()
 
-        bn_root = self.root
-        circuit = bn_root.forward_message.as_probabilistic_circuit()
+        # warm start the algorithm
+        for leaf in self.leaves:
 
-        pointers_to_sum_units[bn_root] = circuit
+            # by creating the circuit for every leafs marginal distribution
+            distribution = leaf.joint_distribution_with_parents().marginal(leaf.variables)
+            pointers_to_sum_units[leaf] = distribution.as_probabilistic_circuit().simplify()
 
-        edges = nx.bfs_edges(self, bn_root)
+        # iterate over the edges in reversed bfs order
+        edges = nx.bfs_edges(self, self.root)
+        edges = reversed(list(edges))
 
-        for source, target in edges:
-            target_circuit = target.forward_message.as_probabilistic_circuit()
-            print(target_circuit.variables)
-            print(target_circuit.probabilities)
-            pointers_to_sum_units[source].mount_with_interaction_terms(target_circuit, target)
+        # for every edge
+        for parent, child in edges:
 
-        return circuit
+            # if the parent is not in the dict
+            if parent not in pointers_to_sum_units:
+                # create the parent
+                pointers_to_sum_units[parent] = (parent.joint_distribution_with_parents().marginal(parent.variables).
+                                                 as_probabilistic_circuit().simplify())
+
+            # calculate the interaction term between parent and child
+            joint_distribution = child.joint_distribution_with_parents()
+            joint_distribution._variables = (pointers_to_sum_units[parent].latent_variable,
+                                             pointers_to_sum_units[child].latent_variable)
+
+            # mount child into the parent using interaction term
+            pointers_to_sum_units[parent].mount_with_interaction_terms(pointers_to_sum_units[child],
+                                                                       joint_distribution)
+
+        return pointers_to_sum_units[self.root]

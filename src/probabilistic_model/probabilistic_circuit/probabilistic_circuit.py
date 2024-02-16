@@ -414,6 +414,14 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             "xaxis": {"title": self.variables[0].name}
         }
 
+    def simplify(self) -> Self:
+        """
+        Simplify the circuit by removing nodes and redirected edges that have no impact.
+
+        :return: The simplified circuit.
+        """
+        raise NotImplementedError()
+
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
     representation = "+"
@@ -650,6 +658,46 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
 
                 # create edge from proxy to subcircuit
                 proxy_sum_node.add_subcircuit(other_subcircuit, weight=weight)
+
+    @cache_inference_result
+    def simplify(self) -> Self:
+
+        # if this has only one child
+        if len(self.subcircuits) == 1:
+            return self.subcircuits[0].simplify()
+
+        # create empty copy
+        result = self.empty_copy()
+
+        # for every subcircuit
+        for weight, subcircuit in self.weighted_subcircuits:
+
+            # if the weight is 0, skip this subcircuit
+            if weight == 0:
+                continue
+
+            # simplify the subcircuit
+            simplified_subcircuit = subcircuit.simplify()
+
+            # if the simplified subcircuit is of the same type as this
+            if type(simplified_subcircuit) is type(self):
+
+                # type hinting
+                simplified_subcircuit: Self
+
+                # mount the children of that circuit directly
+                for sub_weight, sub_subcircuit in simplified_subcircuit.weighted_subcircuits:
+                    new_weight = sub_weight * weight
+                    if new_weight > 0:
+                        result.add_subcircuit(sub_subcircuit, new_weight)
+
+            # if this cannot be simplified
+            else:
+
+                # mount the simplified subcircuit
+                result.add_subcircuit(simplified_subcircuit, weight)
+
+        return result
 
 
 class DeterministicSumUnit(SmoothSumUnit):
@@ -898,6 +946,39 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         # if every pairwise intersection is empty, the product unit is decomposable
         return True
 
+    @cache_inference_result
+    def simplify(self) -> Self:
+
+        # if this has only one child
+        if len(self.subcircuits) == 1:
+            return self.subcircuits[0].simplify()
+
+        # create empty copy
+        result = self.empty_copy()
+
+        # for every subcircuit
+        for subcircuit in self.subcircuits:
+
+            # simplify the subcircuit
+            simplified_subcircuit = subcircuit.simplify()
+
+            # if the simplified subcircuit is of the same type as this
+            if type(simplified_subcircuit) is type(self):
+
+                # type hinting
+                simplified_subcircuit: Self
+
+                # mount the children of that circuit directly
+                for sub_subcircuit in simplified_subcircuit.subcircuits:
+                    result.add_subcircuit(sub_subcircuit)
+
+            # if this cannot be simplified
+            else:
+                # mount the simplified subcircuit
+                result.add_subcircuit(simplified_subcircuit)
+
+        return result
+
 
 class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerializer):
     """
@@ -988,6 +1069,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     @graph_inference_caching_wrapper
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         return self.root.moment(order, center)
+
+    @graph_inference_caching_wrapper
+    def simplify(self) -> Self:
+        return self.root.simplify().probabilistic_circuit
 
     @property
     def domain(self) -> Event:
