@@ -72,7 +72,6 @@ class MinimalBayesianNetworkTestCase(unittest.TestCase):
         event = Event({self.y: [1]})
         self.assertEqual(self.model.probability(event), 0.43)
 
-    @unittest.skip("Not implemented")
     def test_as_probabilistic_circuit(self):
         circuit = self.model.as_probabilistic_circuit()
         for event in itertools.product(self.x.domain, self.y.domain):

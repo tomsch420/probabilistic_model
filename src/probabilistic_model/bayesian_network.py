@@ -238,7 +238,8 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
 
         for source, target in edges:
             target_circuit = target.forward_message.as_probabilistic_circuit()
-
+            print(target_circuit.variables)
+            print(target_circuit.probabilities)
             pointers_to_sum_units[source].mount_with_interaction_terms(target_circuit, target)
 
         return circuit
