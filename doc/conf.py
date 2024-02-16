@@ -51,9 +51,18 @@ extensions = [
     "myst_nb"
 ]
 
+myst_enable_extensions = [
+    "amsmath",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "html_image",
+]
+
 # -- AutoAPI configuration ---------------------------------------------------
 autoapi_dirs = ['../src']
 inheritance_graph_attrs = dict(rankdir="TB",)
+myst_dmath_double_inline = True
 # -- Bibliography configuration ----------------------------------------------
 bibtex_bibfiles = ['references.bib']
 
