@@ -47,7 +47,8 @@ extensions = [
     'autoapi.extension',
     'sphinxcontrib.bibtex',
     'nbsphinx',
-    'sphinx_gallery.load_style'
+    'sphinx_gallery.load_style',
+    "myst_nb"
 ]
 
 # -- AutoAPI configuration ---------------------------------------------------
