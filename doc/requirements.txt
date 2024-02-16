@@ -3,3 +3,4 @@ sphinx-autoapi
 sphinxcontrib-bibtex
 nbsphinx
 sphinx-gallery
+myst-nb
