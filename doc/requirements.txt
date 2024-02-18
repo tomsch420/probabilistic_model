@@ -5,3 +5,4 @@ sphinxcontrib-bibtex
 nbsphinx
 sphinx-gallery
 myst-nb
+probabilistic_model
