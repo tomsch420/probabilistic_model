@@ -1,15 +1,21 @@
 import itertools
 import unittest
 
+import portion
 from random_events.events import Event
 
-from probabilistic_model.bayesian_network import BayesianNetwork, ConditionalMultinomialDistribution
+from probabilistic_model.bayesian_network import (BayesianNetwork, ConditionalMultinomialDistribution,
+                                                  ConditionalProbabilisticCircuit)
+from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
-from random_events.variables import Symbolic
+from random_events.variables import Symbolic, Continuous, Integer
 import numpy as np
 
 import matplotlib.pyplot as plt
 import networkx as nx
+
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DeterministicSumUnit, \
+    DecomposableProductUnit
 
 
 class MinimalBayesianNetworkTestCase(unittest.TestCase):
@@ -139,7 +145,6 @@ class ComplexBayesianNetworkTestCase(unittest.TestCase):
             self.assertEqual(self.model.likelihood(event), self.bf_distribution.likelihood(event))
 
     def test_probability(self):
-        self.plot()
         event = Event({self.x: [1], self.y: [0, 1], self.z: [0]})
         probability = self.model.probability(event)
         self.assertEqual(probability, self.bf_distribution.probability(event))
@@ -149,6 +154,65 @@ class ComplexBayesianNetworkTestCase(unittest.TestCase):
         for event in itertools.product(self.a.domain, self.x.domain, self.y.domain, self.z.domain):
             self.assertAlmostEqual(self.model.likelihood(event),
                                    circuit.likelihood(event))
+
+
+class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
+    model: BayesianNetwork
+    x: Integer = Integer('x', [0, 1, 2])
+    y: Continuous = Continuous('y')
+    d_x: ConditionalMultinomialDistribution
+    d_xy: ConditionalProbabilisticCircuit
+
+    def setUp(self):
+        np.random.seed(69)
+
+        self.model = BayesianNetwork()
+
+        self.d_x = ConditionalMultinomialDistribution([self.x])
+        self.d_xy = ConditionalProbabilisticCircuit()
+
+        for x_value in self.x.domain:
+            distribution = UniformDistribution(self.y, portion.closed(x_value, 5.))
+            self.d_xy.circuits[(x_value, )] = distribution
+
+        self.model.add_nodes_from([self.d_x, self.d_xy])
+        self.model.add_edge(self.d_x, self.d_xy)
+
+        self.d_x.probabilities = np.array([0.5, 0.3, 0.2])
+
+    def plot(self):
+        pos = nx.planar_layout(self.model)
+        nx.draw(self.model, pos=pos, with_labels=True, labels={node: repr(node) for node in self.model.nodes})
+        plt.show()
+
+    def test_likelihood(self):
+        event = [0, 1]
+        likelihood = self.model.likelihood(event,)
+        self.assertEqual(likelihood, 0.5 * 1 / 5)
+
+        event = [1, 2]
+        likelihood = self.model.likelihood(event)
+        self.assertEqual(likelihood, 0.3 * 1 / 4)
+
+        event = [1, 0]
+        likelihood = self.model.likelihood(event)
+        self.assertEqual(likelihood, 0.)
+
+    def test_probability(self):
+        event = Event({self.x: [1, 2], self.y: portion.closed(0, 2)})
+        probability = self.model.probability(event)
+        self.assertEqual(probability, 0.3 * 1 / 4)
+
+    def test_as_probabilistic_circuit(self):
+        circuit = self.model.as_probabilistic_circuit()
+        self.assertEqual(circuit.probabilistic_circuit.probability(Event()), 1.)
+
+        nx.draw(circuit.probabilistic_circuit.simplify(), with_labels=True)
+        plt.show()
+
+        event = Event({self.x: [1, 2], self.y: portion.closed(0, 2)})
+        self.assertAlmostEqual(self.model.probability(event), circuit.probability(event))
+
 
 
 if __name__ == '__main__':

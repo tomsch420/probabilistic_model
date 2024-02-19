@@ -482,9 +482,7 @@ class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
         self.model = next_model
 
     def test_simplify(self):
-        self.show()
         simplified = self.model.probabilistic_circuit.simplify().root
-        self.show(simplified)
         self.assertEqual(len(simplified.probabilistic_circuit.nodes()), len(self.model.probabilistic_circuit.nodes))
         self.assertEqual(len(simplified.probabilistic_circuit.edges()), len(self.model.probabilistic_circuit.edges))
 
