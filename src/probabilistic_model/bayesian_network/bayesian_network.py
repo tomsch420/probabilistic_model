@@ -7,24 +7,27 @@ from random_events.events import EncodedEvent, Event, VariableMap
 from random_events.variables import Variable, Symbolic, Integer
 from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
 
-from .probabilistic_circuit.distributions import SymbolicDistribution, IntegerDistribution
-from .probabilistic_model import ProbabilisticModel
-from .distributions.multinomial import MultinomialDistribution
+from probabilistic_model.probabilistic_circuit.distributions import SymbolicDistribution, IntegerDistribution
+from probabilistic_model.probabilistic_model import ProbabilisticModel
+from probabilistic_model.distributions.multinomial import MultinomialDistribution
 import networkx as nx
 import numpy as np
 
-from .probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
-                                                          DecomposableProductUnit, ProbabilisticCircuitMixin)
+from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit,
+                                                                             DeterministicSumUnit,
+                                                                             DecomposableProductUnit,
+                                                                             ProbabilisticCircuitMixin)
+from ..distributions.distributions import DiscreteDistribution
 
 
-class BayesianNetworkMixin:
+class BayesianNetworkMixin(ProbabilisticModel):
     """
-    Mixin class for (conditional) probability distributions in bayesian networks.
+    Mixin class for conditional probability distributions in tree shaped bayesian networks.
     """
 
     bayesian_network: BayesianNetwork
 
-    forward_message: MultinomialDistribution
+    forward_message: DiscreteDistribution
     """
     The marginal distribution (message) as calculated in the forward pass.
     """
@@ -35,41 +38,39 @@ class BayesianNetworkMixin:
     """
 
     @property
-    def parents(self) -> List[Self]:
-        return list(self.bayesian_network.predecessors(self))
+    def parent(self) -> Optional[Self]:
+        """
+        The parent node if it exists and None if this is a root.
+        :return:
+        """
+        parents = list(self.bayesian_network.predecessors(self))
+        if len(parents) > 1:
+            raise ValueError("Bayesian Network is not a tree.")
+        elif len(parents) == 1:
+            return parents[0]
+        else:
+            return None
 
     @property
-    def is_root(self):
-        return len(self.parents) == 0
+    def is_root(self) -> bool:
+        """
+        :return: Rather this is the root or not.
+        """
+        return self.parent is None
 
     @property
-    def variables(self) -> Tuple[Variable, ...]:
-        raise NotImplementedError
-
-    @property
-    def parent_variables(self) -> Tuple[Variable, ...]:
-        parent_variables = [variable for parent in self.parents for variable in parent.variables]
-        return tuple(sorted(parent_variables))
-
-    @property
-    def parent_and_node_variables(self):
-        return self.parent_variables + self.variables
+    def parent_and_node_variables(self) -> Tuple[Variable, ...]:
+        """
+        Get the parent variables together with this nodes variable.
+        :return: A tuple containing first the parent variable and second this nodes variable.
+        """
+        if self.is_root:
+            return self.variables
+        else:
+            return self.parent.variables + self.variables
 
     def __hash__(self):
         return id(self)
-
-    def _likelihood(self, event: Iterable, parent_event: Iterable) -> float:
-        """
-        Calculate the conditional likelihood of the event given the parent event.
-
-        :param event: The event to calculate the likelihood for.
-        :param parent_event: The parent event to condition on.
-        :return: The likelihood of the event given the parent event.
-        """
-        raise NotImplementedError
-
-    def as_probabilistic_circuit(self) -> DeterministicSumUnit:
-        raise NotImplementedError
 
     def as_probabilistic_circuit_with_parent_message(self) -> DeterministicSumUnit:
         """
@@ -83,6 +84,14 @@ class BayesianNetworkMixin:
         """
         Calculate the joint distribution of the node and its parents.
         :return: The joint distribution of the node and its parents.
+        """
+        raise NotImplementedError
+
+    def forward_pass(self, event: EncodedEvent):
+        """
+        Calculate the forward pass for this node given the event.
+        This includes calculating the forward message and the forward probability of said event.
+        :param event: The event to account for
         """
         raise NotImplementedError
 
@@ -135,7 +144,7 @@ class ConditionalMultinomialDistribution(BayesianNetworkMixin, MultinomialDistri
             parent_event = tuple()
         return self.probabilities[tuple(parent_event) + tuple(event)].item()
 
-    def calculate_forward_message(self, event: EncodedEvent):
+    def forward_pass(self, event: EncodedEvent):
         """
         Calculate the forward message for this node given the event and the forward probability of said event.
         :param event: The event to account for
@@ -204,7 +213,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
         circuit = self.circuits[tuple(parent_event)]
         return circuit._likelihood(event)
 
-    def calculate_forward_message(self, event: EncodedEvent):
+    def forward_pass(self, event: EncodedEvent):
         parent = self.parents[0]
         probability = 0.
         for parent_probability, circuit in zip(parent.forward_message.probabilities, self.circuits.values()):
@@ -244,6 +253,9 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
 
 
 class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
+    """
+    Class for Bayesian Networks that are tree shaped and have univariate inner nodes.
+    """
 
     def __init__(self):
         ProbabilisticModel.__init__(self, None)
@@ -284,7 +296,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         """
         # calculate forward pass
         for node in self.nodes:
-            node.calculate_forward_message(event)
+            node.forward_pass(event)
 
     def _probability(self, event: EncodedEvent) -> float:
         self.forward_pass(event)

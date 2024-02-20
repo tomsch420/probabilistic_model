@@ -4,8 +4,8 @@ import unittest
 import portion
 from random_events.events import Event
 
-from probabilistic_model.bayesian_network import (BayesianNetwork, ConditionalMultinomialDistribution,
-                                                  ConditionalProbabilisticCircuit)
+from probabilistic_model.bayesian_network.bayesian_network import (BayesianNetwork, ConditionalMultinomialDistribution,
+                                                                   ConditionalProbabilisticCircuit)
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 from random_events.variables import Symbolic, Continuous, Integer
@@ -13,9 +13,6 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 import networkx as nx
-
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DeterministicSumUnit, \
-    DecomposableProductUnit
 
 
 class MinimalBayesianNetworkTestCase(unittest.TestCase):
