@@ -1,10 +1,12 @@
 import unittest
 
+from random_events.events import Event
 from random_events.variables import Symbolic
 
 from probabilistic_model.bayesian_network.distributions import ConditionalProbabilityTable, RootDistribution
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
 from probabilistic_model.distributions.distributions import SymbolicDistribution
+from probabilistic_model.probabilistic_circuit.distributions import DiscreteDistribution as PCDiscreteDistribution
 
 import tabulate
 
@@ -43,8 +45,49 @@ class DistributionTestCase(unittest.TestCase):
     def test_likelihood(self):
         self.assertEqual(self.p_yx.likelihood([0, 1]), 0.5)
 
-    def test_probability(self):
-        ...
+    def test_forward_pass(self):
+        event = Event({self.x: [0, 1], self.y: [0]})
+        event = self.p_x.bayesian_network.preprocess_event(event)
+        self.p_x.forward_pass(event)
+
+        self.assertEqual(self.p_x.forward_message.weights, [0.5/0.8, 0.3/0.8, 0.])
+        self.assertEqual(self.p_x.forward_probability, 0.8)
+
+        self.p_yx.forward_pass(event)
+        self.assertEqual(self.p_yx.forward_message.weights, [1., 0.])
+        self.assertEqual(self.p_yx.forward_probability, 0.5/0.8 * 0.5 + 0.3/0.8 * 0.3)
+
+    def test_forward_pass_impossible_event(self):
+        self.p_x.weights = [1, 0, 0]
+        event = Event({self.x: 2})
+        event = self.p_x.bayesian_network.preprocess_event(event)
+
+        self.p_x.forward_pass(event)
+        self.assertIsNone(self.p_x.forward_message)
+        self.assertEqual(self.p_x.forward_probability, 0)
+
+        self.p_yx.forward_pass(event)
+        self.assertIsNone(self.p_yx.forward_message)
+        self.assertEqual(self.p_yx.forward_probability, 0)
+
+    def test_joint_distribution_with_parents_root(self):
+        event = Event()
+        event = self.p_x.bayesian_network.preprocess_event(event)
+
+        self.p_x.forward_pass(event)
+
+        joint_distribution = self.p_x.joint_distribution_with_parents()
+        self.assertIsInstance(joint_distribution, PCDiscreteDistribution)
+
+    def test_joint_distribution_with_parents(self):
+        event = Event()
+        event = self.p_x.bayesian_network.preprocess_event(event)
+
+        self.p_x.bayesian_network.forward_pass(event)
+
+        joint_distribution = self.p_yx.joint_distribution_with_parents()
+        self.assertIsInstance(joint_distribution, None)
+
 
 if __name__ == '__main__':
     unittest.main()

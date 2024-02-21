@@ -4,7 +4,7 @@ import itertools
 from functools import cached_property
 
 from random_events.events import EncodedEvent, Event, VariableMap
-from random_events.variables import Variable, Symbolic, Integer
+from random_events.variables import Variable, Symbolic, Integer, Discrete
 from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
 
 from probabilistic_model.probabilistic_circuit.distributions import SymbolicDistribution, IntegerDistribution
@@ -13,10 +13,8 @@ from probabilistic_model.distributions.multinomial import MultinomialDistributio
 import networkx as nx
 import numpy as np
 
-from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit,
-                                                                             DeterministicSumUnit,
-                                                                             DecomposableProductUnit,
-                                                                             ProbabilisticCircuitMixin)
+from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
+                                                           DecomposableProductUnit, ProbabilisticCircuitMixin)
 from ..distributions.distributions import DiscreteDistribution
 
 
@@ -27,9 +25,9 @@ class BayesianNetworkMixin(ProbabilisticModel):
 
     bayesian_network: BayesianNetwork
 
-    forward_message: DiscreteDistribution
+    forward_message: Optional[DiscreteDistribution]
     """
-    The marginal distribution (message) as calculated in the forward pass.
+    The marginal distribution of this nodes variable (message) as calculated in the forward pass.
     """
 
     forward_probability: float
@@ -72,17 +70,12 @@ class BayesianNetworkMixin(ProbabilisticModel):
     def __hash__(self):
         return id(self)
 
-    def as_probabilistic_circuit_with_parent_message(self) -> DeterministicSumUnit:
+    def joint_distribution_with_parents(self) -> ProbabilisticModel:
         """
-        Convert the distribution to a probabilistic circuit that includes the parents messages.
-        The resulting distribution is only about the variable(s) that are in this node.
-        :return: A probabilistic circuit that represents the distribution.
-        """
-        raise NotImplementedError
+        Calculate the joint distribution of the node and its parent.
+        The joint distribution is formed w. r. t. the forward message of the parent.
+        Hence, this can only be called after the forward pass has been performed.
 
-    def joint_distribution_with_parents(self) -> MultinomialDistribution:
-        """
-        Calculate the joint distribution of the node and its parents.
         :return: The joint distribution of the node and its parents.
         """
         raise NotImplementedError
@@ -96,165 +89,9 @@ class BayesianNetworkMixin(ProbabilisticModel):
         raise NotImplementedError
 
 
-class ConditionalMultinomialDistribution(BayesianNetworkMixin, MultinomialDistribution):
-
-    variables: Tuple[Variable, ...]
-
-    _probabilities: np.ndarray
-    """
-    Private array of probabilities.
-    """
-
-    def __init__(self, variables: Iterable[Variable]):
-        ProbabilisticModel.__init__(self, variables)
-        BayesianNetworkMixin.__init__(self)
-
-    @property
-    def variables(self) -> Tuple[Variable, ...]:
-        return self._variables
-
-    @property
-    def probabilities(self):
-        return self._probabilities
-
-    @probabilities.setter
-    def probabilities(self, probabilities: np.ndarray):
-        """
-        Set the probabilities of this distribution. The probabilities have to have the shape that is obtained by the
-        concatenation of the parent variables shape and the own variables shape.
-        """
-        own_variables_shape = tuple(len(variable.domain) for variable in self.variables)
-        parent_variables_shape = tuple(len(variable.domain) for variable in self.parent_variables)
-
-        if parent_variables_shape + own_variables_shape != probabilities.shape:
-            raise ValueError(
-                f"""The probabilities have to have the shape that is obtained by the concatenation of the parent 
-                variables shape and the own variables shape. 
-                Parent Variables {self.parent_variables} \n 
-                Own Variables {self.variables} \n
-                Probability Shape {probabilities.shape}""")
-        self._probabilities = probabilities
-
-    def normalize(self):
-        normalized_probabilities = self.probabilities / np.sum(self.probabilities, axis=-1).reshape(-1, 1)
-        self.probabilities = normalized_probabilities
-
-    def _likelihood(self, event: Iterable, parent_event: Optional[Iterable] = None) -> float:
-        if parent_event is None:
-            parent_event = tuple()
-        return self.probabilities[tuple(parent_event) + tuple(event)].item()
-
-    def forward_pass(self, event: EncodedEvent):
-        """
-        Calculate the forward message for this node given the event and the forward probability of said event.
-        :param event: The event to account for
-        """
-
-        forward_message = self.joint_distribution_with_parents()
-
-        # calculate conditional probability
-        forward_message, forward_probability = forward_message._conditional(event)
-
-        # marginalize with respect to the node variables
-        forward_message = forward_message.marginal(self.variables).normalize()
-
-        # save forward message and probability
-        self.forward_message = forward_message
-        self.forward_probability = forward_probability
-
-    def __hash__(self):
-        return BayesianNetworkMixin.__hash__(self)
-
-    def __repr__(self):
-        node_variables_representation = ', '.join([repr(v) for v in self.variables])
-        if len(self.parent_variables) == 0:
-            return f"P({node_variables_representation})"
-        else:
-            return f"P( {node_variables_representation} | {', '.join([repr(v) for v in self.parent_variables])})"
-
-    def as_probabilistic_circuit(self) -> DeterministicSumUnit:
-        return MultinomialDistribution.as_probabilistic_circuit(self)
-
-    def as_probabilistic_circuit_with_parent_message(self) -> DeterministicSumUnit:
-        return (self.joint_distribution_with_parents().marginal(self.variables).as_probabilistic_circuit().
-                simplify())
-
-    def joint_distribution_with_parents(self) -> MultinomialDistribution:
-
-        if self.is_root:
-            return MultinomialDistribution(self.variables, self.probabilities)
-
-        # get the parent
-        parent = self.parents[0]
-
-        # multiply the parent forward message with the own probabilities
-        probabilities = self.probabilities * parent.forward_message.probabilities.reshape(-1, 1)
-
-        # create the new forward message
-        result = MultinomialDistribution(self.parent_and_node_variables, None)
-        result._variables = self.parent_and_node_variables
-        result.probabilities = probabilities
-
-        return result
-
-
-class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
-
-    circuits: Dict[Tuple, ProbabilisticCircuitMixin] = dict()
-    """
-    A collection of circuits that maps each possible parent event to a circuit.
-    """
-
-    @property
-    def variables(self) -> Tuple[Variable, ...]:
-        return list(self.circuits.values())[0].variables
-
-    def _likelihood(self, event: Iterable, parent_event: Iterable) -> float:
-        circuit = self.circuits[tuple(parent_event)]
-        return circuit._likelihood(event)
-
-    def forward_pass(self, event: EncodedEvent):
-        parent = self.parents[0]
-        probability = 0.
-        for parent_probability, circuit in zip(parent.forward_message.probabilities, self.circuits.values()):
-            probability += parent_probability * circuit._probability(event)
-        self.forward_probability = probability
-
-    def as_probabilistic_circuit_with_parent_message(self) -> DeterministicSumUnit:
-
-        # initialize result
-        result = DeterministicSumUnit()
-
-        # for every event and circuit
-        for event, circuit in self.circuits.items():
-
-            # initialize weight of this branch in the sum unit
-            weight = 1.
-
-            # for each parent
-            for parent, parent_event in zip(self.parents, event):
-
-                # update the weight of this branch
-                weight *= parent.forward_message.likelihood((parent_event, ))
-
-            # add the product proxy to the result
-            result.add_subcircuit(circuit, weight)
-
-        return result
-
-    def joint_distribution_with_parents(self) -> MultinomialDistribution:
-        parent = self.parents[0]
-        parent_variable = parent.variables[0]
-        variables = (parent_variable, Symbolic("latent", parent_variable.domain))
-        result = MultinomialDistribution(variables, None)
-        result._variables = variables
-        result.probabilities = (result.probabilities * parent.forward_message.probabilities).T
-        return result.normalize()
-
-
 class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
     """
-    Class for Bayesian Networks that are tree shaped and have univariate inner nodes.
+    Class for Bayesian Networks that are rooted, tree shaped and have univariate inner nodes.
     """
 
     def __init__(self):
@@ -262,7 +99,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         nx.DiGraph.__init__(self)
 
     @cached_property
-    def nodes(self) -> Iterable[ConditionalMultinomialDistribution]:
+    def nodes(self) -> Iterable[BayesianNetworkMixin]:
         return super().nodes
 
     @property
@@ -271,7 +108,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         return tuple(sorted(variables))
 
     @property
-    def leaves(self) -> List[ConditionalMultinomialDistribution]:
+    def leaves(self) -> List[BayesianNetworkMixin]:
         return [node for node in self.nodes if self.out_degree(node) == 0]
 
     def add_node(self, node: BayesianNetworkMixin, **attr):
@@ -285,9 +122,8 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         event = VariableMap(zip(self.variables, event))
         result = 1.
         for node in self.nodes:
-            parent_event = [event[variable] for variable in node.parent_variables]
-            node_event = [event[variable] for variable in node.variables]
-            result *= node._likelihood(node_event, parent_event)
+            node_event = [event[variable] for variable in node.parent_and_node_variables]
+            result *= node._likelihood(node_event)
         return result
 
     def forward_pass(self, event: EncodedEvent):
@@ -308,19 +144,22 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
 
     def brute_force_joint_distribution(self) -> MultinomialDistribution:
         """
-        Compute the joint distribution of the factor graphs variables by brute force.
+        Compute the joint distribution of this bayes network variables by brute force.
+        This only works if only discrete variables are present in the network.
 
         .. Warning::
             This method is only feasible for a small number of variables as it has exponential runtime.
 
         :return: A Multinomial distribution over all the variables.
         """
+        assert all([isinstance(variable, Discrete) for variable in self.variables])
+
         worlds = list(itertools.product(*[variable.domain for variable in self.variables]))
         worlds = np.array(worlds)
         potentials = np.zeros(tuple(len(variable.domain) for variable in self.variables))
 
         for idx, world in enumerate(worlds):
-            potentials[tuple(world)] = self._likelihood(world.tolist())
+            potentials[tuple(world)] = self._likelihood(world)
 
         return MultinomialDistribution(self.variables, potentials)
 
