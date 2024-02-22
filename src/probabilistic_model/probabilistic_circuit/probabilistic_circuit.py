@@ -774,6 +774,14 @@ class DeterministicSumUnit(SmoothSumUnit):
         modes = self.merge_modes_if_one_dimensional(result)
         return modes, maximum_likelihood
 
+    def sub_circuit_index_of_sample(self, sample: Iterable) -> Optional[int]:
+        """
+        :return: the index of the subcircuit where p(sample) > 0 and None if p(sample) = 0 for all subcircuits.
+        """
+        for index, subcircuit in enumerate(self.subcircuits):
+            if subcircuit.likelihood(sample) > 0:
+                return index
+        return None
 
 class DecomposableProductUnit(ProbabilisticCircuitMixin):
     """

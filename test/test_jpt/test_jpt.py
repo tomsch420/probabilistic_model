@@ -16,13 +16,16 @@ from matplotlib import pyplot as plt
 from random_events.events import Event
 from random_events.variables import Variable
 
+from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic, Continuous)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
     SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
+    DeterministicSumUnit
+from probabilistic_model.distributions.multinomial import MultinomialDistribution
 
 
 class ShowMixin:
@@ -77,7 +80,7 @@ class InferFromDataFrameTestCase(unittest.TestCase):
         self.assertEqual(self.data.dtypes.iloc[2], object)
 
     def test_infer_from_dataframe_with_scaling(self):
-        real, integer, symbol = infer_variables_from_dataframe(self.data)
+        real, integer, symbol = infer_variables_from_dataframe(self.data, scale_continuous_types=True)
         self.assertEqual(real.name, "real")
         self.assertIsInstance(real, ScaledContinuous)
         self.assertEqual(integer.name, "integer")
@@ -350,3 +353,54 @@ class MNISTTestCase(unittest.TestCase):
         model_ = JPT.from_json(model_)
         self.assertEqual(model, model_)
         file.close()
+
+
+class BayesianJPTTestCase(unittest.TestCase):
+
+    model_sl_sw: JPT
+    model_pl_pw: JPT
+    model_species: JPT
+
+    bayesian_network: BayesianNetwork
+
+    sl: Continuous
+    sw: Continuous
+    pl: Continuous
+    pw: Continuous
+    species: Integer
+
+    species_sepal_interaction_term: MultinomialDistribution
+    species_petal_interaction_term: MultinomialDistribution
+
+    @classmethod
+    def setUpClass(cls):
+        iris = sklearn.datasets.load_iris(as_frame=True)
+        df = iris.data
+        target = iris.target
+        df["species"] = target
+
+        variables = infer_variables_from_dataframe(df, scale_continuous_types=False, min_likelihood_improvement=0.1)
+
+        cls.sl, cls.sw, cls.pl, cls.pw, cls.species = variables
+
+        model_sl_sw = JPT(variables, min_samples_leaf=0.4, features=[cls.sl, cls.sw], targets=variables)
+        model_sl_sw.fit(df)
+        cls.model_sl_sw = model_sl_sw.marginal([cls.sl, cls.sw])
+
+        model_pl_pw = JPT(variables, min_samples_leaf=0.4, features=[cls.pl, cls.pw], targets=variables)
+        model_pl_pw.fit(df)
+        cls.model_pl_pw = model_pl_pw.marginal([cls.pl, cls.pw])
+
+        model_species = JPT(variables, min_samples_leaf=0.3, features=[cls.species], targets=variables)
+        model_species.fit(df)
+        cls.model_species = DeterministicSumUnit.marginal(model_species, [cls.species])
+
+
+    def test_setup(self):
+        self.assertEqual(self.model_sl_sw.variables, (self.sl, self.sw))
+        self.assertEqual(self.model_pl_pw.variables, (self.pl, self.pw))
+        self.assertEqual(self.model_species.variables, (self.species, ))
+
+        self.assertGreater(len(self.model_sl_sw.subcircuits), 1)
+        self.assertGreater(len(self.model_pl_pw.subcircuits), 1)
+        self.assertGreater(len(self.model_species.subcircuits), 1)
