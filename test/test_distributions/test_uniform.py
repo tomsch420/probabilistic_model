@@ -91,8 +91,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertIsNotNone(fig)
         # fig.show()
 
-    def test_partly_joint_differenz_Distributions(self):
-        # UNI_1 - UNI_2 = 11/19 + 8*|1/17-1/19| + 9/17
+    def test_partly_joint_different_Distributions(self):
         variable = self.distribution.variable
         distribution_1 = UniformDistribution(variable, portion.closed(7, 24))
         distribution_2 = UniformDistribution(variable, portion.closed(-4, 15))

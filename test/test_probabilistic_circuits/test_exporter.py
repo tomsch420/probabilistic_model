@@ -8,9 +8,9 @@ from probabilistic_model.learning.jpt.variables import infer_variables_from_data
 from sklearn.datasets import load_breast_cancer
 import pandas as pd
 from random_events.variables import Variable
-import plotly.graph_objects as go
+
 from probabilistic_model.probabilistic_circuit.exporter.draw_io_expoter import DrawIoExporter
-from probabilistic_model.probabilistic_circuit.exporter.networkx_expoter import NetworkxExporter
+
 
 
 class MyTestCase(unittest.TestCase):
@@ -40,7 +40,7 @@ class MyTestCase(unittest.TestCase):
         diagram = DrawIoExporter(self.model.probabilistic_circuit).export()
         diagram.dump_file("test.drawio", )
 
-    def test_export_to_networkx(self):
+    def test_networkx_plot(self):
         diagram = self.model.probabilistic_circuit.plot()
 
 
