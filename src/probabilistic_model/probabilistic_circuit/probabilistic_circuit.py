@@ -659,6 +659,32 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
                 # create edge from proxy to subcircuit
                 proxy_sum_node.add_subcircuit(other_subcircuit, weight=weight)
 
+    def mount_from_bayesian_network(self, other: 'SmoothSumUnit'):
+        """
+        Mount a distribution from tge `to_probabilistic_circuit` method in bayesian networks.
+        The distribution is mounted as follows:
+
+
+        :param other:
+        :return:
+        """
+        assert set(self.variables).intersection(set(other.variables)) == set()
+        assert len(self.subcircuits) == len(other.subcircuits)
+        # mount the other subcircuit
+
+        for (own_weight, own_subcircuit), other_subcircuit in zip(self.weighted_subcircuits, other.subcircuits):
+
+            # create proxy nodes for mounting
+            proxy_product_node = DecomposableProductUnit()
+            self.probabilistic_circuit.add_node(proxy_product_node)
+
+            # remove edge to old child and replace it by product proxy
+            self.probabilistic_circuit.remove_edge(self, own_subcircuit)
+            self.add_subcircuit(proxy_product_node, own_weight)
+            proxy_product_node.add_subcircuit(own_subcircuit)
+            proxy_product_node.add_subcircuit(other_subcircuit)
+
+
     @cache_inference_result
     def simplify(self) -> Self:
 

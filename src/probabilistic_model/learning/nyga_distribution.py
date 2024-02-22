@@ -269,17 +269,18 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     def _cdf(self, value: Union[float, int]) -> float:
         return sum([weight * subcircuit._cdf(value) for weight, subcircuit in self.weighted_subcircuits])
 
-    def fit(self, data: List[float]):
-        return self._fit(list(self.variable.encode_many(data)))
-
-    def _fit(self, data: List[float]) -> Self:
+    def fit(self, data: List[float], weights: Optional[List[float]] = None) -> Self:
         """
         Fit the distribution to the data.
 
         :param data: The data to fit the distribution to.
+        :param weights: The optional weights of the data points.
 
         :return: The fitted distribution.
         """
+        return self._fit(list(self.variable.encode_many(data)), weights)
+
+    def _fit(self, data: List[float],  weights: Optional[List[float]] = None) -> Self:
 
         # sort the data and calculate the weights
         sorted_data = sorted(set(data))
@@ -289,7 +290,8 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
             self.probabilistic_circuit.add_edge(self, distribution, weight=1)
             return self
 
-        weights = [data.count(value) / len(data) for value in sorted_data]
+        if weights is None:
+            weights = [data.count(value) / len(data) for value in sorted_data]
 
         # construct the initial induction step
         initial_induction_step = InductionStep(data=sorted_data, total_number_of_samples=len(data), weights=weights,

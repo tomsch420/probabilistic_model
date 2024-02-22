@@ -17,15 +17,24 @@ from ..distributions.distributions import SymbolicDistribution, IntegerDistribut
 from ..utils import type_converter
 
 
-class RootDistribution(BayesianNetworkMixin, DiscreteDistribution):
+class RootDistribution(BayesianNetworkMixin, PCDiscreteDistribution):
 
     forward_message: Optional[PCDiscreteDistribution]
 
     def forward_pass(self, event: EncodedEvent):
         self.forward_message, self.forward_probability = self._conditional(event)
 
-    def joint_distribution_with_parents(self) -> PCDiscreteDistribution:
-        return PCDiscreteDistribution(self.variable, self.forward_message.weights)
+    def joint_distribution_with_parent(self) -> DeterministicSumUnit:
+        result = DeterministicSumUnit()
+
+        for event in self.variable.domain:
+
+            event = Event({self.variable: event})
+            conditional, probability = self.forward_message.conditional(event)
+            result.add_subcircuit(conditional, probability)
+
+        return result
+
 
     def __repr__(self):
         return f"P({self.variable.name})"
@@ -107,7 +116,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
                 table.append([str(parent_event[0]), str(event), str(probability)])
         return table
 
-    def joint_distribution_with_parents(self) -> ProbabilisticModel:
+    def joint_distribution_with_parent(self) -> ProbabilisticModel:
         result = DeterministicSumUnit()
 
         for parent_event, distribution in self.conditional_probability_distributions.items():
@@ -121,6 +130,6 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
             weight = self.parent.forward_message.likelihood(parent_event)
 
-
+            result.add_subcircuit(product_unit, weight)
 
         return result

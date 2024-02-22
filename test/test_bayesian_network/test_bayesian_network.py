@@ -89,6 +89,8 @@ class MinimalBayesianNetworkTestCase(unittest.TestCase):
 
     def test_as_probabilistic_circuit(self):
         circuit = self.model.as_probabilistic_circuit()
+        nx.draw(circuit.probabilistic_circuit.simplify(), with_labels=True)
+        plt.show()
         for event in itertools.product(self.x.domain, self.y.domain):
             self.assertAlmostEqual(self.model.likelihood(event),
                                    circuit.likelihood(event))

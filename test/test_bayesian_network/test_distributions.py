@@ -5,8 +5,9 @@ from random_events.variables import Symbolic
 
 from probabilistic_model.bayesian_network.distributions import ConditionalProbabilityTable, RootDistribution
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
-from probabilistic_model.distributions.distributions import SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.distributions import DiscreteDistribution as PCDiscreteDistribution
+from probabilistic_model.probabilistic_circuit.distributions import (DiscreteDistribution as PCDiscreteDistribution,
+                                                                     SymbolicDistribution)
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DeterministicSumUnit
 
 import tabulate
 
@@ -76,7 +77,7 @@ class DistributionTestCase(unittest.TestCase):
 
         self.p_x.forward_pass(event)
 
-        joint_distribution = self.p_x.joint_distribution_with_parents()
+        joint_distribution = self.p_x.joint_distribution_with_parent()
         self.assertIsInstance(joint_distribution, PCDiscreteDistribution)
 
     def test_joint_distribution_with_parents(self):
@@ -85,8 +86,11 @@ class DistributionTestCase(unittest.TestCase):
 
         self.p_x.bayesian_network.forward_pass(event)
 
-        joint_distribution = self.p_yx.joint_distribution_with_parents()
-        self.assertIsInstance(joint_distribution, None)
+        joint_distribution = self.p_yx.joint_distribution_with_parent()
+        self.assertIsInstance(joint_distribution, DeterministicSumUnit)
+
+        self.assertEqual(joint_distribution.likelihood([0, 1]), 0.25)
+        self.assertEqual(joint_distribution.likelihood([2, 1]), 0.2 * 0.9)
 
 
 if __name__ == '__main__':

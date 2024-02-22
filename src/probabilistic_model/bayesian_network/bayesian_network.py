@@ -7,7 +7,8 @@ from random_events.events import EncodedEvent, Event, VariableMap
 from random_events.variables import Variable, Symbolic, Integer, Discrete
 from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
 
-from probabilistic_model.probabilistic_circuit.distributions import SymbolicDistribution, IntegerDistribution
+from probabilistic_model.probabilistic_circuit.distributions import (SymbolicDistribution, IntegerDistribution,
+                                                                     DiscreteDistribution as PCDiscreteDistribution)
 from probabilistic_model.probabilistic_model import ProbabilisticModel
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 import networkx as nx
@@ -25,7 +26,7 @@ class BayesianNetworkMixin(ProbabilisticModel):
 
     bayesian_network: BayesianNetwork
 
-    forward_message: Optional[DiscreteDistribution]
+    forward_message: Optional[PCDiscreteDistribution]
     """
     The marginal distribution of this nodes variable (message) as calculated in the forward pass.
     """
@@ -70,7 +71,7 @@ class BayesianNetworkMixin(ProbabilisticModel):
     def __hash__(self):
         return id(self)
 
-    def joint_distribution_with_parents(self) -> ProbabilisticModel:
+    def joint_distribution_with_parent(self) -> ProbabilisticCircuitMixin:
         """
         Calculate the joint distribution of the node and its parent.
         The joint distribution is formed w. r. t. the forward message of the parent.
@@ -101,6 +102,10 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
     @cached_property
     def nodes(self) -> Iterable[BayesianNetworkMixin]:
         return super().nodes
+
+    @cached_property
+    def edges(self) -> Iterable[Tuple[BayesianNetworkMixin, BayesianNetworkMixin]]:
+        return super().edges
 
     @property
     def variables(self) -> Tuple[Variable, ...]:
@@ -195,7 +200,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         # warm start the algorithm
         for leaf in self.leaves:
             # by creating the circuit for every leafs marginal distribution
-            pointers_to_sum_units[leaf] = leaf.as_probabilistic_circuit_with_parent_message()
+            pointers_to_sum_units[leaf] = leaf.joint_distribution_with_parent().marginal(leaf.variables).simplify()
 
         # iterate over the edges in reversed bfs order
         edges = nx.bfs_edges(self, self.root)
@@ -204,22 +209,19 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         # for every edge
         for parent, child in edges:
 
+            # type hints
+            parent: BayesianNetworkMixin
+            child: BayesianNetworkMixin
+
             # if the parent is not in the dict
             if parent not in pointers_to_sum_units:
 
                 # simplify the interaction term
-                circuit = parent.joint_distribution_with_parents().marginal(parent.variables).as_probabilistic_circuit()
-                simplified = circuit.probabilistic_circuit.simplify().root
+                circuit = parent.joint_distribution_with_parent().probabilistic_circuit.marginal(parent.variables).root
                 # create the parent
-                pointers_to_sum_units[parent] = simplified
-
-            # calculate the interaction term between parent and child
-            joint_distribution = child.joint_distribution_with_parents()
-            joint_distribution._variables = (pointers_to_sum_units[parent].latent_variable,
-                                             pointers_to_sum_units[child].latent_variable)
+                pointers_to_sum_units[parent] = circuit
 
             # mount child into the parent using interaction term
-            pointers_to_sum_units[parent].mount_with_interaction_terms(pointers_to_sum_units[child],
-                                                                       joint_distribution)
+            pointers_to_sum_units[parent].mount_from_bayesian_network(pointers_to_sum_units[child])
 
         return pointers_to_sum_units[self.root]
