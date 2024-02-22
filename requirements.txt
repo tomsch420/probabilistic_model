@@ -2,5 +2,6 @@ random-events>=1.2.5
 networkx>=3.0
 portion==2.4.2
 plotly==5.19.0
-scipy>=1.12.0
+scipy>=1.10.0
 typing_extensions>=4.9.0
+numpy==1.24.4

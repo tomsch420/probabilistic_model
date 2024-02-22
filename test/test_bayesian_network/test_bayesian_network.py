@@ -2,26 +2,22 @@ import itertools
 import math
 import unittest
 
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
 import portion
 from random_events.events import Event
+from random_events.variables import Symbolic, Continuous
 
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, SymbolicDistribution,
                                                                 ConditionalProbabilisticCircuit, DiscreteDistribution)
-
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
-from random_events.variables import Symbolic, Continuous, Integer
-import numpy as np
-
-import matplotlib.pyplot as plt
-import networkx as nx
-
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
 
 
 class MinimalBayesianNetworkTestCase(unittest.TestCase):
-
     model: BayesianNetwork
     x: Symbolic = Symbolic('x', [0, 1, 2])
     y: Symbolic = Symbolic('y', [0, 1])
@@ -94,12 +90,10 @@ class MinimalBayesianNetworkTestCase(unittest.TestCase):
     def test_as_probabilistic_circuit(self):
         circuit = self.model.as_probabilistic_circuit()
         for event in itertools.product(self.x.domain, self.y.domain):
-            self.assertAlmostEqual(self.model.likelihood(event),
-                                   circuit.likelihood(event))
+            self.assertAlmostEqual(self.model.likelihood(event), circuit.likelihood(event))
 
 
 class ComplexBayesianNetworkTestCase(unittest.TestCase):
-
     model: BayesianNetwork
     x: Symbolic = Symbolic('x', [0, 1, 2])
     y: Symbolic = Symbolic('y', [0, 1])
@@ -156,12 +150,10 @@ class ComplexBayesianNetworkTestCase(unittest.TestCase):
         circuit = self.model.as_probabilistic_circuit().simplify()
         self.assertLess(len(circuit.weighted_edges), math.prod([len(v.domain) for v in circuit.variables]))
         for event in itertools.product(self.a.domain, self.x.domain, self.y.domain, self.z.domain):
-            self.assertAlmostEqual(self.model.likelihood(event),
-                                   circuit.likelihood(event))
+            self.assertAlmostEqual(self.model.likelihood(event), circuit.likelihood(event))
 
 
 class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
-
     x: Symbolic = Symbolic("x", [0, 1])
     y: Continuous = Continuous("y")
     z: Continuous = Continuous("z")
@@ -194,27 +186,23 @@ class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
 
     def test_likelihood(self):
         event = [0, 1, 1]
-        likelihood = self.bayesian_network.likelihood(event,)
+        likelihood = self.bayesian_network.likelihood(event, )
         self.assertEqual(likelihood, 0.7)
 
         event = [1, 2, 2]
         likelihood = self.bayesian_network.likelihood(event)
-        self.assertEqual(likelihood, 0.3 * 0.5 * 1/3)
+        self.assertEqual(likelihood, 0.3 * 0.5 * 1 / 3)
 
     def test_probability(self):
         event = Event({self.x: [0, 1], self.y: portion.closed(1.5, 2)})
         probability = self.bayesian_network.probability(event)
-        self.assertEqual(probability, 0.3*0.25)
+        self.assertEqual(probability, 0.3 * 0.25)
 
     def test_as_probabilistic_circuit(self):
         circuit = self.bayesian_network.as_probabilistic_circuit().simplify()
         self.assertEqual(circuit.probability(Event()), 1.)
         event = Event({self.x: [0, 1], self.y: portion.closed(1.5, 2)})
         self.assertAlmostEqual(self.bayesian_network.probability(event), circuit.probability(event))
-
-
-# class PatchieUseCaseTestCase(unittest.TestCase):
-
 
 
 if __name__ == '__main__':
