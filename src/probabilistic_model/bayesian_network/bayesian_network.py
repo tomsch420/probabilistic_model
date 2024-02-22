@@ -3,9 +3,10 @@ from __future__ import annotations
 import itertools
 from functools import cached_property
 
+from matplotlib import pyplot as plt
 from random_events.events import EncodedEvent, Event, VariableMap
 from random_events.variables import Variable, Symbolic, Integer, Discrete
-from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
+from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict, TYPE_CHECKING
 
 from probabilistic_model.probabilistic_circuit.distributions import (SymbolicDistribution, IntegerDistribution,
                                                                      DiscreteDistribution as PCDiscreteDistribution)
@@ -15,8 +16,11 @@ import networkx as nx
 import numpy as np
 
 from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
-                                                           DecomposableProductUnit, ProbabilisticCircuitMixin)
-from ..distributions.distributions import DiscreteDistribution
+                                                           DecomposableProductUnit, ProbabilisticCircuitMixin,
+                                                           SmoothSumUnit)
+
+if TYPE_CHECKING:
+    from .distributions import DiscreteDistribution as RootDistribution, ConditionalProbabilisticCircuit
 
 
 class BayesianNetworkMixin(ProbabilisticModel):
@@ -71,7 +75,7 @@ class BayesianNetworkMixin(ProbabilisticModel):
     def __hash__(self):
         return id(self)
 
-    def joint_distribution_with_parent(self) -> ProbabilisticCircuitMixin:
+    def joint_distribution_with_parent(self) -> DeterministicSumUnit:
         """
         Calculate the joint distribution of the node and its parent.
         The joint distribution is formed w. r. t. the forward message of the parent.
@@ -86,6 +90,24 @@ class BayesianNetworkMixin(ProbabilisticModel):
         Calculate the forward pass for this node given the event.
         This includes calculating the forward message and the forward probability of said event.
         :param event: The event to account for
+        """
+        raise NotImplementedError
+
+    def forward_message_as_sum_unit(self) -> SmoothSumUnit:
+        """
+        Convert this leaf nodes forward message to a sum unit.
+        This is used for the start of the conversion to a probabilistic circuit and only called for leaf nodes.
+
+        :return: The forward message as sum unit.
+        """
+        raise NotImplementedError
+
+    def interaction_term(self, node_latent_variable: Discrete, parent_latent_variable: Discrete) \
+            -> ProbabilisticCircuit:
+        """
+        Generate the interaction term that is used for mounting into the parent circuit in the generation of a
+        probabilistic circuit form the bayesian network.
+        :return: The interaction term as probabilistic circuit.
         """
         raise NotImplementedError
 
@@ -169,7 +191,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         return MultinomialDistribution(self.variables, potentials)
 
     @property
-    def root(self) -> BayesianNetworkMixin:
+    def root(self) -> RootDistribution:
         """
         The root of the circuit is the node with in-degree 0.
         This is the output node, that will perform the final computation.
@@ -182,7 +204,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
 
         return possible_roots[0]
 
-    def as_probabilistic_circuit(self) -> DeterministicSumUnit:
+    def as_probabilistic_circuit(self) -> ProbabilisticCircuit:
         """
         Convert the BayesianNetwork to a probabilistic circuit that expresses the same probability distribution.
         :return:
@@ -194,34 +216,36 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         # calculate forward pass
         self.forward_pass(self.preprocess_event(Event()))
 
-        # initialize dict that maps from the basic network node to the component in the circuit
-        pointers_to_sum_units: Dict[BayesianNetworkMixin, DeterministicSumUnit] = dict()
+        pointers_to_sum_units: Dict[BayesianNetworkMixin, SmoothSumUnit] = dict()
 
-        # warm start the algorithm
         for leaf in self.leaves:
-            # by creating the circuit for every leafs marginal distribution
-            pointers_to_sum_units[leaf] = leaf.joint_distribution_with_parent().marginal(leaf.variables).simplify()
+            pointers_to_sum_units[leaf] = leaf.forward_message_as_sum_unit()
 
         # iterate over the edges in reversed bfs order
         edges = nx.bfs_edges(self, self.root)
-        edges = reversed(list(edges))
 
-        # for every edge
-        for parent, child in edges:
+        # for each edge in reverse bfs order
+        for parent, child in reversed(list(edges)):
 
-            # type hints
+            # type hinting
             parent: BayesianNetworkMixin
             child: BayesianNetworkMixin
 
-            # if the parent is not in the dict
-            if parent not in pointers_to_sum_units:
+            # if the parent circuit does not yet exist
+            if parent not in pointers_to_sum_units.keys():
 
-                # simplify the interaction term
-                circuit = parent.joint_distribution_with_parent().probabilistic_circuit.marginal(parent.variables).root
-                # create the parent
-                pointers_to_sum_units[parent] = circuit
+                # create the parent circuit
+                pointers_to_sum_units[parent] = parent.forward_message.as_deterministic_sum()
 
-            # mount child into the parent using interaction term
-            pointers_to_sum_units[parent].mount_from_bayesian_network(pointers_to_sum_units[child])
+            # get parent and child circuits
+            parent_sum_unit = pointers_to_sum_units[parent]
+            child_sum_unit = pointers_to_sum_units[child]
 
-        return pointers_to_sum_units[self.root]
+            # calculate interaction term
+            interaction_term = child.interaction_term(child_sum_unit.latent_variable,
+                                                      parent_sum_unit.latent_variable)
+
+            # mount child into parent
+            parent_sum_unit.mount_with_interaction_terms(pointers_to_sum_units[child], interaction_term)
+
+        return pointers_to_sum_units[self.root].probabilistic_circuit

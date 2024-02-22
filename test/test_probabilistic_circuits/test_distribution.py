@@ -70,6 +70,13 @@ class DiscreteDistributionTestCase(unittest.TestCase):
         circuit.add_node(self.integer_distribution)
         self.assertEqual(len(list(circuit.nodes)), 2)
 
+    def test_as_deterministic_sum(self):
+        self.symbolic_distribution = SymbolicDistribution(self.symbol, [0.1, 0.2, 0.7])
+        result = self.symbolic_distribution.as_deterministic_sum()
+        self.assertEqual(len(result.subcircuits), 3)
+        self.assertEqual(result.weights, self.symbolic_distribution.weights)
+        self.assertIsInstance(result.probabilistic_circuit.root, DeterministicSumUnit)
+
 
 class GaussianDistributionTestCase(unittest.TestCase):
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from random_events.events import EncodedEvent
+from random_events.events import EncodedEvent, Event
 from random_events.variables import Variable
 from typing_extensions import Union, Tuple, Optional, Self
 
@@ -93,7 +93,22 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, P
 
 
 class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, ProbabilisticCircuitMixin):
-    ...
+
+    def as_deterministic_sum(self) -> DeterministicSumUnit:
+        """
+        Convert this distribution to a deterministic sum unit that encodes the same distribution.
+        The result has as many children as the domain of the variable and each child encodes the value of the variable.
+
+        :return: A deterministic sum unit that encodes the same distribution.
+        """
+        result = DeterministicSumUnit()
+
+        for event in self.variable.domain:
+            event = Event({self.variable: event})
+            conditional, probability = self.conditional(event)
+            result.add_subcircuit(conditional, probability)
+
+        return result
 
 
 class DiracDeltaDistribution(ContinuousDistribution, PMDiracDeltaDistribution):

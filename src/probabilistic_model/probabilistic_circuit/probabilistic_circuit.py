@@ -665,7 +665,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         The distribution is mounted as follows:
 
 
-        :param other:
+        :param other: The other distribution to mount at this distribution children level.
         :return:
         """
         assert set(self.variables).intersection(set(other.variables)) == set()
@@ -683,7 +683,6 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
             self.add_subcircuit(proxy_product_node, own_weight)
             proxy_product_node.add_subcircuit(own_subcircuit)
             proxy_product_node.add_subcircuit(other_subcircuit)
-
 
     @cache_inference_result
     def simplify(self) -> Self:
