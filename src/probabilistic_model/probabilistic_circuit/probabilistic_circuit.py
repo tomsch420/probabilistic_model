@@ -783,6 +783,7 @@ class DeterministicSumUnit(SmoothSumUnit):
                 return index
         return None
 
+
 class DecomposableProductUnit(ProbabilisticCircuitMixin):
     """
     Decomposable Product Units for Probabilistic Circuits

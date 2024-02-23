@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from random_events.events import Event, EncodedEvent, VariableMap
-from typing_extensions import Tuple, Dict, Iterable, List, Type, Union, Optional
+from typing_extensions import Tuple, Dict, Iterable, List, Type, Union, Optional, Self
 
 from .bayesian_network import BayesianNetworkMixin
 from ..probabilistic_model import ProbabilisticModel
@@ -13,6 +13,7 @@ from ..probabilistic_circuit.probabilistic_circuit import DecomposableProductUni
 from ..probabilistic_circuit.distributions import (SymbolicDistribution as PCSymbolicDistribution,
                                                    IntegerDistribution as PCIntegerDistribution,
                                                    DiscreteDistribution as PCDiscreteDistribution)
+from ..distributions.multinomial import MultinomialDistribution
 
 
 class DiscreteDistribution(BayesianNetworkMixin, PCDiscreteDistribution):
@@ -171,6 +172,28 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
                                                        self.parent.variable: parent_latent_variable}))
         return interaction_term
 
+    def from_multinomial_distribution(self, distribution: MultinomialDistribution) -> Self:
+        """
+        Get the conditional probability table from a multinomial distribution.
+
+        :param distribution: The multinomial distribution to get the data from
+        :return:
+        """
+        assert len(distribution.variables) == 2
+        assert self.variable in distribution.variables
+
+        parent_variable = distribution.variables[0] \
+            if distribution.variables[0] != self.variable else distribution.variables[1]
+
+        for parent_event in parent_variable.domain:
+            parent_event = Event({parent_variable: parent_event})
+            conditional, _ = distribution.conditional(parent_event)
+            marginal = conditional.marginal(self.variables).normalize()
+            self.conditional_probability_distributions[parent_event[parent_variable]] = (
+                DiscreteDistribution(self.variable, marginal.probabilities.tolist()))
+
+        return self
+
 
 class ConditionalProbabilisticCircuit(ConditionalProbabilityTable):
 
@@ -224,4 +247,13 @@ class ConditionalProbabilisticCircuit(ConditionalProbabilityTable):
 
         return result.probabilistic_circuit
 
-
+    def from_unit(self, unit: ProbabilisticCircuitMixin) -> Self:
+        """
+        Get the conditional probability table from a probabilistic circuit by mounting all children as conditional
+        probability distributions.
+        :param unit: The probabilistic circuit to get the data from
+        :return: The conditional probability distribution
+        """
+        for index, subcircuit in enumerate(unit.subcircuits):
+            self.conditional_probability_distributions[(index, )] = subcircuit.__copy__().probabilistic_circuit
+        return self

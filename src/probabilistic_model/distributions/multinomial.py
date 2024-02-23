@@ -7,7 +7,7 @@ from random_events.variables import Discrete, Integer, Symbolic
 from random_events.events import EncodedEvent
 
 from ..probabilistic_model import ProbabilisticModel
-from typing_extensions import Self
+from typing_extensions import Self, Any
 
 from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
                                                           DecomposableProductUnit)
@@ -156,3 +156,34 @@ class MultinomialDistribution(ProbabilisticModel):
             result.add_subcircuit(product_unit, probability)
 
         return result
+
+    def encode_full_evidence_event(self, event: Iterable) -> List[int]:
+        """
+        Encode a full evidence event into a list of integers.
+        :param event: The event to encode.
+        :return: The encoded event.
+        """
+        return [variable.encode(value) for variable, value in zip(self.variables, event)]
+
+    def fit(self, data: Iterable[Iterable[Any]]) -> Self:
+        """
+        Fit the distribution to the data.
+        :param data: The data to fit the distribution to.
+        :return: The fitted distribution.
+        """
+        encoded_data = np.zeros((len(data), len(self.variables)), dtype=int)
+        for index, sample in enumerate(data):
+            indices = self.encode_full_evidence_event(sample)
+            encoded_data[index] = indices
+
+        return self._fit(encoded_data)
+
+    def _fit(self, data: np.ndarray) -> Self:
+        probabilities = np.zeros_like(self.probabilities)
+        uniques, counts = np.unique(data, return_counts=True, axis=0)
+
+        for unique, count in zip(uniques.astype(int), counts):
+            probabilities[tuple(unique)] = count
+
+        self.probabilities = probabilities / probabilities.sum()
+        return self

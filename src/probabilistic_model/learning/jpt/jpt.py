@@ -439,10 +439,10 @@ class JPT(DeterministicSumUnit):
             result.probabilistic_circuit.add_edge(result, subcircuit, weight=weight)
         return result
 
-    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+    def marginal(self, variables: Iterable[Variable], simplify_if_univariate=True) -> Optional[Self]:
         result = super().marginal(variables)
 
-        if result is None or len(result.variables) > 1:
+        if result is None or len(result.variables) > 1 or not simplify_if_univariate:
             return result
 
         variable = result.variables[0]

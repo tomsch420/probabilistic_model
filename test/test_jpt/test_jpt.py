@@ -17,15 +17,16 @@ from random_events.events import Event
 from random_events.variables import Variable
 
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
+from probabilistic_model.bayesian_network.distributions import (DiscreteDistribution, ConditionalProbabilisticCircuit,
+                                                                ConditionalProbabilityTable)
+from probabilistic_model.distributions.multinomial import MultinomialDistribution
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic, Continuous)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
     SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
-    DeterministicSumUnit
-from probabilistic_model.distributions.multinomial import MultinomialDistribution
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
 
 
 class ShowMixin:
@@ -356,12 +357,9 @@ class MNISTTestCase(unittest.TestCase):
 
 
 class BayesianJPTTestCase(unittest.TestCase):
-
     model_sl_sw: JPT
     model_pl_pw: JPT
     model_species: JPT
-
-    bayesian_network: BayesianNetwork
 
     sl: Continuous
     sw: Continuous
@@ -371,6 +369,12 @@ class BayesianJPTTestCase(unittest.TestCase):
 
     species_sepal_interaction_term: MultinomialDistribution
     species_petal_interaction_term: MultinomialDistribution
+
+    subcircuit_indices: pd.DataFrame
+
+    species_latent_variable: random_events.variables.Discrete
+    sepal_latent_variable: random_events.variables.Discrete
+    petal_latent_variable: random_events.variables.Discrete
 
     @classmethod
     def setUpClass(cls):
@@ -393,14 +397,89 @@ class BayesianJPTTestCase(unittest.TestCase):
 
         model_species = JPT(variables, min_samples_leaf=0.3, features=[cls.species], targets=variables)
         model_species.fit(df)
-        cls.model_species = DeterministicSumUnit.marginal(model_species, [cls.species])
+        cls.model_species = model_species.marginal([cls.species], simplify_if_univariate=False)
 
+        subcircuit_indices = np.zeros((len(df), 3))
+        for index, sample in enumerate(df.values):
+            sl, sw, pl, pw, species = sample
+            subcircuit_indices[index, 0] = cls.model_sl_sw.sub_circuit_index_of_sample((sl, sw))
+            subcircuit_indices[index, 1] = cls.model_pl_pw.sub_circuit_index_of_sample((pl, pw))
+            subcircuit_indices[index, 2] = cls.model_species.sub_circuit_index_of_sample((species,))
+
+        cls.subcircuit_indices = pd.DataFrame(subcircuit_indices, columns=["sl_sw", "pl_pw", "species"])
+
+        cls.species_latent_variable = random_events.variables.Discrete("species.latent",
+                                                                       range(len(cls.model_species.subcircuits)))
+        cls.sepal_latent_variable = random_events.variables.Discrete("sepal.latent",
+                                                                     range(len(cls.model_sl_sw.subcircuits)))
+        cls.petal_latent_variable = random_events.variables.Discrete("petal.latent",
+                                                                     range(len(cls.model_sl_sw.subcircuits)))
+
+        cls.species_sepal_interaction_term = MultinomialDistribution(
+            [cls.sepal_latent_variable, cls.species_latent_variable])
+        cls.species_sepal_interaction_term._fit(subcircuit_indices[:, (0, 2)])
+
+        cls.species_petal_interaction_term = MultinomialDistribution(
+            [cls.petal_latent_variable, cls.species_latent_variable])
+        cls.species_petal_interaction_term._fit(subcircuit_indices[:, (1, 2)])
 
     def test_setup(self):
         self.assertEqual(self.model_sl_sw.variables, (self.sl, self.sw))
         self.assertEqual(self.model_pl_pw.variables, (self.pl, self.pw))
-        self.assertEqual(self.model_species.variables, (self.species, ))
+        self.assertEqual(self.model_species.variables, (self.species,))
 
         self.assertGreater(len(self.model_sl_sw.subcircuits), 1)
         self.assertGreater(len(self.model_pl_pw.subcircuits), 1)
         self.assertGreater(len(self.model_species.subcircuits), 1)
+
+        self.assertFalse(self.subcircuit_indices.isna().any().any())
+
+        self.assertEqual(self.species_petal_interaction_term.probabilities.sum(), 1.)
+        self.assertEqual(self.species_sepal_interaction_term.probabilities.sum(), 1.)
+
+    def test_to_bayesian_network(self):
+
+        # create bayesian network with root node
+        bayesian_network = BayesianNetwork()
+        root = DiscreteDistribution(self.species_latent_variable, self.model_species.weights)
+        self.assertEqual(root.weights, [1 / 3] * 3)
+        bayesian_network.add_node(root)
+        self.assertEqual(bayesian_network.probability(Event()), 1.)
+
+        # mount the interaction term with the latent variable of the sepal distribution
+        p_sepal_species = ConditionalProbabilityTable(self.sepal_latent_variable)
+        p_sepal_species.from_multinomial_distribution(self.species_sepal_interaction_term)
+        bayesian_network.add_node(p_sepal_species)
+        bayesian_network.add_edge(root, p_sepal_species)
+        self.assertEqual(bayesian_network.probability(Event()), 1.)
+
+        # mount the distributions of the sepal variables
+        p_sepal = ConditionalProbabilisticCircuit(self.model_sl_sw.variables)
+        p_sepal.from_unit(self.model_sl_sw)
+        [self.assertIsInstance(circuit.root, DecomposableProductUnit) for circuit in
+         p_sepal.conditional_probability_distributions.values()]
+        bayesian_network.add_node(p_sepal)
+        bayesian_network.add_edge(p_sepal_species, p_sepal)
+
+        # mount the interaction term with the latent variable of the petal distribution
+        p_petal_species = ConditionalProbabilityTable(self.petal_latent_variable)
+        p_petal_species.from_multinomial_distribution(self.species_petal_interaction_term)
+        bayesian_network.add_node(p_petal_species)
+        bayesian_network.add_edge(root, p_petal_species)
+
+        # mount the distributions of the petal variables
+        p_petal = ConditionalProbabilisticCircuit(self.model_pl_pw.variables)
+        p_petal.from_unit(self.model_pl_pw)
+        [self.assertIsInstance(circuit.root, DecomposableProductUnit) for circuit in
+         p_petal.conditional_probability_distributions.values()]
+        bayesian_network.add_node(p_petal)
+        bayesian_network.add_edge(p_petal_species, p_petal)
+
+        # test some queries
+        self.assertEqual(bayesian_network.probability(Event()), 1.)
+        self.assertAlmostEqual(bayesian_network.as_probabilistic_circuit().probability(Event()), 1)
+
+        p_specie_1 = Event({self.species_latent_variable: 0})
+        self.assertAlmostEqual(bayesian_network.probability(p_specie_1), 1 / 3)
+        self.assertAlmostEqual(bayesian_network.as_probabilistic_circuit().probability(p_specie_1), 1 / 3)
+
