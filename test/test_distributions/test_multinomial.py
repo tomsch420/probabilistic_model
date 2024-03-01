@@ -168,6 +168,12 @@ class MultinomialInferenceTestCase(unittest.TestCase):
             self.assertAlmostEqual(distribution.probability(event),
                                    circuit.probability(event))
 
+    def test_serialization(self):
+        distribution = self.random_distribution
+        serialized = distribution.to_json()
+        deserialized = MultinomialDistribution.from_json(serialized)
+        self.assertEqual(distribution, deserialized)
+
 
 if __name__ == '__main__':
     unittest.main()

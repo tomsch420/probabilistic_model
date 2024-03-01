@@ -1,12 +1,13 @@
 import itertools
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple, Dict
 
 import numpy as np
 
-from random_events.variables import Discrete, Integer, Symbolic
+from random_events.variables import Discrete, Integer, Symbolic, Variable
 from random_events.events import EncodedEvent
 
 from ..probabilistic_model import ProbabilisticModel
+from ..utils import SubclassJSONSerializer
 from typing_extensions import Self, Any
 
 from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
@@ -14,7 +15,7 @@ from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit,
 from ..probabilistic_circuit.distributions.distributions import SymbolicDistribution, IntegerDistribution
 
 
-class MultinomialDistribution(ProbabilisticModel):
+class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """
     A multinomial distribution over discrete random variables.
     """
@@ -187,3 +188,14 @@ class MultinomialDistribution(ProbabilisticModel):
 
         self.probabilities = probabilities / probabilities.sum()
         return self
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**SubclassJSONSerializer.to_json(self),
+                "variables": [variable.to_json() for variable in self.variables],
+                "probabilities": self.probabilities.tolist()}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variables = [Variable.from_json(variable) for variable in data["variables"]]
+        probabilities = np.array(data["probabilities"])
+        return cls(variables, probabilities)

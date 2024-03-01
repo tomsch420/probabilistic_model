@@ -439,7 +439,16 @@ class JPT(DeterministicSumUnit):
             result.probabilistic_circuit.add_edge(result, subcircuit, weight=weight)
         return result
 
-    def marginal(self, variables: Iterable[Variable], simplify_if_univariate=True) -> Optional[Self]:
+    def marginal(self, variables: Iterable[Variable], simplify_if_univariate=True, as_deterministic_sum=False) \
+            -> Optional[Self]:
+        """
+        Marginalize the model to the given variables.
+        :param variables: The variables to marginalize to.
+        :param simplify_if_univariate: If the result is univariate, simplify it to a univariate distribution.
+        :param as_deterministic_sum: If the result is univariate and discrete, return it as a deterministic sum
+        instead of the distribution itself.
+        :return: The marginal JPT.
+        """
         result = super().marginal(variables)
 
         if result is None or len(result.variables) > 1 or not simplify_if_univariate:
@@ -451,7 +460,6 @@ class JPT(DeterministicSumUnit):
             distribution = NygaDistribution.from_uniform_mixture(result)
 
         elif isinstance(variable, Discrete):
-
             weights = [result.probability(Event({variable: value})) for value in variable.domain]
             if isinstance(variable, Symbolic):
                 distribution = SymbolicDistribution(variable, weights=weights)
@@ -459,6 +467,8 @@ class JPT(DeterministicSumUnit):
                 distribution = IntegerDistribution(variable, weights=weights)
             else:
                 raise NotImplementedError(f"Variable {variable} is not supported.")
+            if as_deterministic_sum:
+                distribution = distribution.as_deterministic_sum()
         else:
             raise NotImplementedError(f"Variable {variable} not supported.")
 

@@ -27,7 +27,8 @@ from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
     SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
+    DeterministicSumUnit
 
 
 class ShowMixin:
@@ -323,6 +324,11 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         variables = [v for v in self.model.variables if v.name == "malignant"]
         marginal = self.model.marginal(variables)
         self.assertIsInstance(marginal, SymbolicDistribution)
+
+    def test_univariate_symbolic_marginal_as_sum_unit(self):
+        variables = [v for v in self.model.variables if v.name == "malignant"]
+        marginal = self.model.marginal(variables, as_deterministic_sum=True)
+        self.assertIsInstance(marginal, DeterministicSumUnit)
 
 
 class MNISTTestCase(unittest.TestCase):
