@@ -158,7 +158,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         Calculate all forward messages.
         """
         # calculate forward pass
-        for node in self.nodes:
+        for node in nx.bfs_tree(self, self.root):
             node.forward_pass(event)
 
     def _probability(self, event: EncodedEvent) -> float:

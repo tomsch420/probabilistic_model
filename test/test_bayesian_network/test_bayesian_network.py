@@ -205,5 +205,30 @@ class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
         self.assertAlmostEqual(self.bayesian_network.probability(event), circuit.probability(event))
 
 
+class BayesianNetworkWrongOrderTestCase(unittest.TestCase):
+
+    x: Symbolic = Symbolic("x", [0, 1])
+    y: Symbolic = Symbolic("y", [0, 1])
+
+    p_y: DiscreteDistribution
+    p_x_y: ConditionalProbabilityTable
+
+    model: BayesianNetwork
+
+    def setUp(self):
+        self.p_y = DiscreteDistribution(self.y, [0.5, 0.5])
+        self.p_x_y = ConditionalProbabilityTable(self.x)
+        self.p_x_y.conditional_probability_distributions[(0,)] = DiscreteDistribution(self.x, [0.7, 0.3])
+        self.p_x_y.conditional_probability_distributions[(1,)] = DiscreteDistribution(self.x, [0.3, 0.7])
+        self.model = BayesianNetwork()
+        self.model.add_node(self.p_x_y)
+        self.model.add_node(self.p_y)
+
+        self.model.add_edge(self.p_y, self.p_x_y)
+
+    def test_forward_pass(self):
+        event = self.model.preprocess_event(Event())
+        self.model.forward_pass(event)
+
 if __name__ == '__main__':
     unittest.main()
