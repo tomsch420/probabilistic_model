@@ -486,5 +486,20 @@ class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(len(simplified.probabilistic_circuit.nodes()), len(self.model.probabilistic_circuit.nodes))
         self.assertEqual(len(simplified.probabilistic_circuit.edges()), len(self.model.probabilistic_circuit.edges))
 
+
+class NormalizationTestCase(unittest.TestCase):
+    x: Continuous = Continuous("x")
+
+    def test_normalization(self):
+        u1 = UniformDistribution(self.x, portion.closed(0, 1))
+        u2 = UniformDistribution(self.x, portion.closed(3, 4))
+        sum_unit = DeterministicSumUnit()
+        sum_unit.add_subcircuit(u1, 0.5)
+        sum_unit.add_subcircuit(u2, 0.3)
+        sum_unit.normalize()
+        self.assertAlmostEqual(sum_unit.weights[0], 0.5/0.8)
+        self.assertAlmostEqual(sum_unit.weights[1], 0.3/0.8)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -724,6 +724,14 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
 
         return result
 
+    def normalize(self):
+        """
+        Normalize the weights of the subcircuits such that they sum up to 1 inplace.
+        """
+        total_weight = sum([weight for weight, _ in self.weighted_subcircuits])
+        for subcircuit in self.subcircuits:
+            self.probabilistic_circuit.edges[self, subcircuit]["weight"] /= total_weight
+
 
 class DeterministicSumUnit(SmoothSumUnit):
     """
