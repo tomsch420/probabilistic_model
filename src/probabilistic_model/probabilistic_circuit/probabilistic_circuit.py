@@ -7,7 +7,7 @@ from typing import Tuple, Iterable, TYPE_CHECKING
 import networkx as nx
 import portion
 from random_events.events import EncodedEvent, VariableMap, Event
-from random_events.variables import Variable, Symbolic
+from random_events.variables import Variable, Symbolic, Continuous
 from typing_extensions import List, Optional, Any, Self, Dict
 import plotly.graph_objects as go
 
@@ -393,6 +393,49 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
 
         return traces
 
+    def plot_2d(self, sample_amount: int = 5000) -> List[go.Scatter]:
+        """
+        Plot the circuit if it is two-dimensional and both dimensions are continuous.
+
+        :param sample_amount: The amount of samples to use for plotting.
+        :return: Traces for the 2D plot of a circuit.
+        """
+
+        assert all([isinstance(variable, Continuous) for variable in self.variables])
+
+        traces = []
+
+        samples = self.sample(sample_amount)
+        x_values = [sample[0] for sample in samples]
+        y_values = [sample[1] for sample in samples]
+
+        traces.append(go.Scatter(x=x_values, y=y_values, mode="markers", name="Samples"))
+
+        expectation = self.expectation(self.variables)
+        traces.append(go.Scatter(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
+                                 mode="markers", name="Expectation"))
+
+        mode_trace = None
+        try:
+            x_mode_trace = []
+            y_mode_trace = []
+            modes, _ = self.mode()
+            for mode in modes:
+                for x_mode in mode[self.variables[0]]:
+                    for y_mode in mode[self.variables[1]]:
+                        x_mode_trace.extend([x_mode.lower, x_mode.upper, x_mode.upper, x_mode.lower, x_mode.lower, None])
+                        y_mode_trace.extend([y_mode.lower, y_mode.lower, y_mode.upper, y_mode.upper, y_mode.lower, None])
+                        x_mode_trace.extend([x_mode.lower, x_mode.upper, x_mode.upper, x_mode.lower, x_mode.lower, None])
+                        y_mode_trace.extend([y_mode.lower, y_mode.lower, y_mode.upper, y_mode.upper, y_mode.lower, None])
+            mode_trace = go.Scatter(x=x_mode_trace, y=y_mode_trace, mode="lines+markers", name="Mode", fill="toself")
+        except NotImplementedError:
+            ...
+
+        if mode_trace:
+            traces.append(mode_trace)
+
+        return traces
+
     def plot(self, sample_amount: int = 5000) -> List[go.Scatter]:
         """
         Plot the circuit.
@@ -401,7 +444,11 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         :return: Traces for the plot of a circuit.
         """
         variables = self.variables
-        if len(variables) > 1:
+        if len(variables) == 1:
+            return self.plot_1d(sample_amount)
+        elif len(variables) == 2:
+            return self.plot_2d(sample_amount)
+        if len(variables) > 2:
             raise ValueError("The circuit has too many variables to plot.")
         return self.plot_1d(sample_amount)
 
@@ -409,10 +456,19 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         :return: The layout argument for plotly figures as dict
         """
-        return {
-            "title": f"{self.__class__.__name__}",
-            "xaxis": {"title": self.variables[0].name}
-        }
+        if len(self.variables) == 1:
+            return {
+                "title": f"{self.__class__.__name__}",
+                "xaxis": {"title": self.variables[0].name}
+            }
+        elif len(self.variables) == 2:
+            return {
+                "title": f"{self.__class__.__name__}",
+                "xaxis": {"title": self.variables[0].name},
+                "yaxis": {"title": self.variables[1].name}
+            }
+        else:
+            raise ValueError("The circuit has too many variables to plot.")
 
     def simplify(self) -> Self:
         """

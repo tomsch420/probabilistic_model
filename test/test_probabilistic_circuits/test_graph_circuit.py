@@ -476,6 +476,10 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(len(simplified.probabilistic_circuit.nodes()), 7)
         self.assertEqual(len(simplified.probabilistic_circuit.edges()), 6)
 
+    def test_plot_2d(self):
+        traces = self.model.plot_2d()
+        assert len(traces) > 0
+        # go.Figure(traces, self.model.plotly_layout()).show()
 
 class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
