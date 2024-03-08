@@ -279,9 +279,9 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         data = sklearn.datasets.load_breast_cancer(as_frame=True)
 
         df = data.data
-        target = data.target
-        target[target == 1] = "malignant"
-        target[target == 0] = "friendly"
+        target = data.target.astype(str)
+        target[target == "1"] = "malignant"
+        target[target == "0"] = "friendly"
 
         df["malignant"] = target
         cls.data = df

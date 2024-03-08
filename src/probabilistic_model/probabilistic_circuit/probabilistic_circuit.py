@@ -896,7 +896,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         variables = self.variables
 
         # list for the samples content in the same order as self.variables
-        rearranged_samples = [[None] * len(variables)] * amount
+        rearranged_samples = [[None for _ in range(len(variables))] for _ in range(amount)]
 
         # for every subcircuit
         for subcircuit in self.subcircuits:
@@ -909,9 +909,10 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
                 # for each variable and its index of the subcircuit
                 for child_variable_index, variable in enumerate(subcircuit.variables):
+
                     # find the index of the variable in the variables of the product
-                    rearranged_samples[sample_index][variables.index(variable)] = sample_subset[sample_index][
-                        child_variable_index]
+                    rearranged_samples[sample_index][variables.index(variable)] = (
+                        sample_subset[sample_index][child_variable_index])
 
         return rearranged_samples
 

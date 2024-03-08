@@ -117,6 +117,12 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(self.model, copy)
         self.assertNotEqual(id(copy), id(self.model))
 
+    def test_sample_not_equal(self):
+        samples = self.model.sample(10)
+        for sample in samples:
+            same_samples = [s for s in samples if s == sample]
+            self.assertEqual(len(same_samples), 1)
+
 
 class SumUnitTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
@@ -220,6 +226,12 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         s2.probabilistic_circuit.add_weighted_edges_from([(s2, s3, 1.), (s3, u1, 1.)])
         s1.mount(s2)
         self.assertEqual(len(s1.probabilistic_circuit.nodes()), 4)
+
+    def test_sample_not_equal(self):
+        samples = self.model.sample(10)
+        for sample in samples:
+            same_samples = [s for s in samples if s == sample]
+            self.assertEqual(len(same_samples), 1)
 
 
 class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
@@ -348,6 +360,12 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
     def test_update_variables(self):
         self.model.update_variables(VariableMap({self.real: self.real3}))
         self.assertEqual(self.model.variables, (self.real2, self.real3))
+
+    def test_sample_not_equal(self):
+        samples = self.model.sample(10)
+        for sample in samples:
+            same_samples = [s for s in samples if s == sample]
+            self.assertEqual(len(same_samples), 1)
 
 
 class FactorizationTestCase(unittest.TestCase, ShowMixin):
@@ -485,6 +503,12 @@ class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
         simplified = self.model.probabilistic_circuit.simplify().root
         self.assertEqual(len(simplified.probabilistic_circuit.nodes()), len(self.model.probabilistic_circuit.nodes))
         self.assertEqual(len(simplified.probabilistic_circuit.edges()), len(self.model.probabilistic_circuit.edges))
+
+    def test_sample_not_equal(self):
+        samples = self.model.sample(10)
+        for sample in samples:
+            same_samples = [s for s in samples if s == sample]
+            self.assertEqual(len(same_samples), 1)
 
 
 class NormalizationTestCase(unittest.TestCase):
