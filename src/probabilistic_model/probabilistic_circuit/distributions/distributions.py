@@ -37,6 +37,9 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
     def simplify(self) -> Self:
         return self.__copy__()
 
+    def empty_copy(self) -> Self:
+        return self.__copy__()
+
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin):
 

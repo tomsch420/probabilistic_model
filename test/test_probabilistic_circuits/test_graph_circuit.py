@@ -510,6 +510,16 @@ class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
             same_samples = [s for s in samples if s == sample]
             self.assertEqual(len(same_samples), 1)
 
+    def test_serialization(self):
+        model = self.model.probabilistic_circuit
+        serialized_model = model.to_json()
+        deserialized_model = ProbabilisticCircuit.from_json(serialized_model)
+        self.assertIsInstance(deserialized_model, ProbabilisticCircuit)
+        self.assertEqual(len(model.nodes), len(deserialized_model.nodes))
+        self.assertEqual(len(model.edges), len(deserialized_model.edges))
+        event = Event({self.x: portion.closed(-1, 1), self.y: portion.closed(-1, 1)})
+        self.assertEqual(model.probability(event), deserialized_model.probability(event))
+
 
 class NormalizationTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")

@@ -1139,12 +1139,44 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return self.root == other.root
 
     def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "root": self.root.to_json()}
+
+        # get super result
+        result = super().to_json()
+
+        hash_to_node_map = dict()
+
+        for node in self.nodes:
+            node_json = node.empty_copy().to_json()
+            hash_to_node_map[hash(node)] = node_json
+
+        unweighted_edges = [(hash(source), hash(target)) for source, target
+                            in self.unweighted_edges]
+        weighted_edges = [(hash(source), hash(target), weight)
+                          for source, target, weight in self.weighted_edges]
+        result["hash_to_node_map"] = hash_to_node_map
+        result["unweighted_edges"] = unweighted_edges
+        result["weighted_edges"] = weighted_edges
+        return result
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
-        root = ProbabilisticCircuitMixin.from_json(data["root"])
-        return root.probabilistic_circuit
+        result = ProbabilisticCircuit()
+        hash_remap: Dict[int, ProbabilisticCircuitMixin] = dict()
+
+        for hash_, node_data in data["hash_to_node_map"].items():
+            node = ProbabilisticCircuitMixin.from_json(node_data)
+            hash_remap[hash_] = node
+            result.add_node(node)
+
+        for source_hash, target_hash in data["unweighted_edges"]:
+            result.add_edge(hash_remap[source_hash], hash_remap[target_hash])
+
+        for source_hash, target_hash, weight in data["weighted_edges"]:
+            result.add_edge(hash_remap[source_hash], hash_remap[target_hash], weight=weight)
+
+        return result
+
+
 
     def update_variables(self, new_variables: VariableMap):
         """
