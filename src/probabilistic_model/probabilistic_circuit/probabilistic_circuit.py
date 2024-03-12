@@ -406,10 +406,14 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         traces = []
 
         samples = self.sample(sample_amount)
+
+        likelihoods = [self.likelihood(sample) for sample in samples]
+
         x_values = [sample[0] for sample in samples]
         y_values = [sample[1] for sample in samples]
 
-        traces.append(go.Scatter(x=x_values, y=y_values, mode="markers", name="Samples"))
+        traces.append(go.Scatter(x=x_values, y=y_values, mode="markers", name="Samples",
+                                 marker=dict(color=likelihoods), hovertext=[f"Likelihood: {l}" for l in likelihoods]))
 
         expectation = self.expectation(self.variables)
         traces.append(go.Scatter(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
@@ -1275,3 +1279,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 unweighted_edges.append(edge)
 
         return unweighted_edges
+
+    def plot(self):
+        return self.root.plot()
+
+    def plotly_layout(self):
+        return self.root.plotly_layout()

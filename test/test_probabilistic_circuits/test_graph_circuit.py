@@ -481,6 +481,7 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
         assert len(traces) > 0
         # go.Figure(traces, self.model.plotly_layout()).show()
 
+
 class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
@@ -537,6 +538,26 @@ class NormalizationTestCase(unittest.TestCase):
         sum_unit.normalize()
         self.assertAlmostEqual(sum_unit.weights[0], 0.5/0.8)
         self.assertAlmostEqual(sum_unit.weights[1], 0.3/0.8)
+
+
+class MultivariateGaussianTestCase(unittest.TestCase):
+
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+    model: ProbabilisticCircuit
+
+    def setUp(self):
+        product = DecomposableProductUnit()
+        n1 = GaussianDistribution(self.x, 0, 1)
+        n2 = GaussianDistribution(self.y, 0.5, 2)
+        product.add_subcircuit(n1)
+        product.add_subcircuit(n2)
+        self.model = product.probabilistic_circuit
+
+    def test_plot_2d(self):
+        traces = self.model.plot()
+        assert len(traces) > 0
+        # go.Figure(traces, self.model.plotly_layout()).show()
 
 
 if __name__ == '__main__':
