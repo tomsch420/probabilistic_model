@@ -42,7 +42,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
 
     def test_mode(self):
         modes, likelihood = self.distribution.mode()
-        mode = modes[0]
+        mode = modes.events[0]
         self.assertEqual(mode[self.distribution.variable].lower, self.distribution.mean)
 
     def test_sample(self):

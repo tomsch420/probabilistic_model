@@ -6,7 +6,7 @@ from typing import Tuple, Iterable, TYPE_CHECKING
 
 import networkx as nx
 import portion
-from random_events.events import EncodedEvent, VariableMap, Event
+from random_events.events import EncodedEvent, VariableMap, Event, ComplexEvent
 from random_events.variables import Variable, Symbolic, Continuous
 from typing_extensions import List, Optional, Any, Self, Dict
 import plotly.graph_objects as go
@@ -109,16 +109,18 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return list(self.probabilistic_circuit.successors(self))
 
     @property
-    def domain(self) -> Event:
+    def domain(self) -> ComplexEvent:
         """
         The domain of the model. The domain describes all events that have :math:`P(event) > 0`.
 
         :return: An event describing the domain of the model.
         """
-        domain = Event()
-        for subcircuit in self.subcircuits:
+        domain = self.subcircuits[0].domain
+        for subcircuit in self.subcircuits[1:]:
             target_domain = subcircuit.domain
-            domain = domain | target_domain
+            print(domain, target_domain)
+            print(type(domain), type(target_domain))
+            domain = target_domain | domain
         return domain
 
     def update_variables(self, new_variables: VariableMap):

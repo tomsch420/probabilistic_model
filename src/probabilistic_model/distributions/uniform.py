@@ -3,7 +3,7 @@ from typing import Tuple, Optional
 
 import portion
 from plotly import graph_objects as go
-from random_events.events import Event, EncodedEvent, VariableMap
+from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent
 from random_events.variables import Continuous
 from typing_extensions import List, Dict, Any, Self
 
@@ -26,8 +26,8 @@ class UniformDistribution(ContinuousDistribution):
         self.interval = interval
 
     @property
-    def domain(self) -> Event:
-        return Event({self.variable: self.interval})
+    def domain(self) -> ComplexEvent:
+        return ComplexEvent([Event({self.variable: self.interval})])
 
     @property
     def lower(self) -> float:
@@ -77,7 +77,7 @@ class UniformDistribution(ContinuousDistribution):
         return probability
 
     def _mode(self):
-        return [self.domain.encode()], self.pdf_value()
+        return self.domain.encode(), self.pdf_value()
 
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.uniform(self.lower, self.upper)] for _ in range(amount)]

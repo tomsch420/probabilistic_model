@@ -7,7 +7,7 @@ from scipy.stats import gamma, expon
 
 
 import portion
-from random_events.events import Event, EncodedEvent, VariableMap
+from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent
 from random_events.variables import Continuous
 from typing_extensions import Self
 
@@ -36,8 +36,8 @@ class GaussianDistribution(ContinuousDistribution):
         self.scale = scale
 
     @property
-    def domain(self) -> Event:
-        return Event({self.variable: portion.open(-portion.inf, portion.inf)})
+    def domain(self) -> ComplexEvent:
+        return ComplexEvent([Event({self.variable: portion.open(-portion.inf, portion.inf)})])
 
     def _pdf(self, value: float) -> float:
         r"""
@@ -69,8 +69,8 @@ class GaussianDistribution(ContinuousDistribution):
             return 1
         return 0.5 * (1 + math.erf((value - self.mean) / math.sqrt(2 * self.scale)))
 
-    def _mode(self) -> Tuple[List[EncodedEvent], float]:
-        return [EncodedEvent({self.variable: portion.singleton(self.mean)})], self._pdf(self.mean)
+    def _mode(self) -> Tuple[ComplexEvent, float]:
+        return ComplexEvent([EncodedEvent({self.variable: portion.singleton(self.mean)})]), self._pdf(self.mean)
 
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.gauss(self.mean, self.scale)] for _ in range(amount)]
@@ -208,13 +208,14 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         else:
             return 1
 
-    def _mode(self) -> Tuple[List[EncodedEvent], float]:
+    def _mode(self) -> Tuple[ComplexEvent, float]:
         if self.mean in self.interval:
-            return [EncodedEvent({self.variable: portion.singleton(self.mean)})], self._pdf(self.mean)
+            mode, likelihood = [EncodedEvent({self.variable: portion.singleton(self.mean)})], self._pdf(self.mean)
         elif self.mean < self.lower:
-            return [EncodedEvent({self.variable: portion.singleton(self.lower)})], self._pdf(self.lower)
+            mode, likelihood = [EncodedEvent({self.variable: portion.singleton(self.lower)})], self._pdf(self.lower)
         else:
-            return [EncodedEvent({self.variable: portion.singleton(self.upper)})], self._pdf(self.upper)
+            mode, likelihood = [EncodedEvent({self.variable: portion.singleton(self.upper)})], self._pdf(self.upper)
+        return ComplexEvent(mode), likelihood
 
     def rejection_sample(self, amount: int) -> List[List[float]]:
         """
