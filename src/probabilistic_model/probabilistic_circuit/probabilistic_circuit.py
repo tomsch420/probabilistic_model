@@ -188,6 +188,43 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return variable_map.__class__(
             {variable: value for variable, value in variable_map.items() if variable in variables})
 
+    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
+
+        # skip trivial case
+        if len(event.events) == 0:
+            return None, 0
+
+        # if the event is easy, don't create a proxy node
+        elif len(event.events) == 1:
+            return self._conditional_from_single_event(event.events[0])
+
+        # construct the proxy node
+        result = DeterministicSumUnit()
+        total_probability = 0
+
+        for event_ in event.events:
+            conditional, probability = self._conditional_from_single_event(event_)
+
+            # skip if impossible
+            if probability == 0:
+                continue
+
+            total_probability += probability
+            result.add_subcircuit(conditional, probability)
+
+        if total_probability == 0:
+            return None, 0
+
+        result.normalize()
+
+        return result, total_probability
+
+    def _conditional_from_single_event(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+        """
+        :return: the conditional circuit from a single, encoded event
+        """
+        raise NotImplementedError
+
     @property
     def variables(self) -> Tuple[Variable, ...]:
         variables = set([variable for distribution in self.leaves for variable in distribution.variables])
@@ -545,7 +582,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         return result
 
     @cache_inference_result
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+    def _conditional_from_single_event(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
 
         subcircuit_probabilities = []
         conditional_subcircuits = []
@@ -554,7 +591,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         result = self.empty_copy()
 
         for weight, subcircuit in self.weighted_subcircuits:
-            conditional, subcircuit_probability = subcircuit._conditional(event)
+            conditional, subcircuit_probability = subcircuit._conditional_from_single_event(event)
 
             if subcircuit_probability == 0:
                 continue
@@ -930,7 +967,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         return mode, likelihood
 
     @cache_inference_result
-    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
+    def _conditional_from_single_event(self, event: EncodedEvent) -> Tuple[Self, float]:
         # initialize probability
         probability = 1.
 
@@ -940,7 +977,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         for subcircuit in self.subcircuits:
 
             # get conditional child and probability in pre-order
-            conditional_subcircuit, conditional_probability = subcircuit._conditional(event)
+            conditional_subcircuit, conditional_probability = subcircuit._conditional_from_single_event(event)
 
             # if any is 0, the whole probability is 0
             if conditional_probability == 0:

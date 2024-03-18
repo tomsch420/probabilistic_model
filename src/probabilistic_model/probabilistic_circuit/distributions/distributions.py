@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from random_events.events import EncodedEvent, Event
+from random_events.events import EncodedEvent, Event, ComplexEvent
 from random_events.variables import Variable
 from typing_extensions import Union, Tuple, Optional, Self
 
@@ -32,6 +32,11 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
 
     def __hash__(self):
         return ProbabilisticCircuitMixin.__hash__(self)
+
+    @cache_inference_result
+    def _conditional_from_single_event(self, event: EncodedEvent) -> \
+            Tuple[Optional[Union['ContinuousDistribution', 'DiracDeltaDistribution', DeterministicSumUnit]], float]:
+        return super().conditional(event)
 
     @cache_inference_result
     def simplify(self) -> Self:
@@ -84,11 +89,6 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, P
             Tuple['DiracDeltaDistribution', float]:
         conditional, probability = super().conditional_from_singleton(singleton)
         return DiracDeltaDistribution(conditional.variable, conditional.location, conditional.density_cap), probability
-
-    @cache_inference_result
-    def _conditional(self, event: EncodedEvent) -> \
-            Tuple[Optional[Union['ContinuousDistribution', 'DiracDeltaDistribution', DeterministicSumUnit]], float]:
-        return super()._conditional(event)
 
     @cache_inference_result
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:

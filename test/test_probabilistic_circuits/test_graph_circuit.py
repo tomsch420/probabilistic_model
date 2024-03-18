@@ -561,5 +561,33 @@ class MultivariateGaussianTestCase(unittest.TestCase):
         # go.Figure(traces, self.model.plotly_layout()).show()
 
 
+class ComplexInferenceTestCase(unittest.TestCase):
+
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+    model: ProbabilisticCircuit
+
+    e1: Event = Event({x: portion.closed(0, 1), y: portion.closedopen(0, 1)})
+    e2: Event = Event({x: portion.closed(1.5, 2), y: portion.closed(1.5, 2)})
+
+    event: ComplexEvent = e1 | e2
+
+    def setUp(self):
+        root = DecomposableProductUnit()
+        px = UniformDistribution(self.x, portion.closed(0, 2))
+        py = UniformDistribution(self.y, portion.closed(0, 3))
+        root.add_subcircuit(px)
+        root.add_subcircuit(py)
+        self.model = root.probabilistic_circuit
+
+    def test_complex_probability(self):
+        p = self.model.probability(self.event)
+        self.assertEqual(self.model.probability(self.e1) + self.model.probability(self.e2), p)
+
+    def test_complex_conditional(self):
+        conditional, probability = self.model.conditional(self.event)
+        self.assertAlmostEqual(conditional.probability(self.event), 1.)
+
+
 if __name__ == '__main__':
     unittest.main()

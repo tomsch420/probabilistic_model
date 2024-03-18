@@ -115,6 +115,7 @@ class BayesianNetworkMixin(ProbabilisticModel):
 class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
     """
     Class for Bayesian Networks that are rooted, tree shaped and have univariate inner nodes.
+    This class cannot perform inference, but can be converted to a probabilistic circuit which can.
     """
 
     def __init__(self):
@@ -160,14 +161,6 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         # calculate forward pass
         for node in nx.bfs_tree(self, self.root):
             node.forward_pass(event)
-
-    def _probability(self, event: EncodedEvent) -> float:
-        self.forward_pass(event)
-        result = 1.
-
-        for node in self.nodes:
-            result *= node.forward_probability
-        return result
 
     def brute_force_joint_distribution(self) -> MultinomialDistribution:
         """
