@@ -57,11 +57,11 @@ class GaussianDistributionConvolution(Convolution):
 
     def convolve_with_dirac_delta(self, other: DiracDeltaDistribution) -> GaussianDistribution:
         return GaussianDistribution(self.distribution.variable, self.distribution.mean + other.location,
-                                    self.distribution.variance)
+                                    self.distribution.scale)
 
     def convolve_with_gaussian(self, other: GaussianDistribution) -> GaussianDistribution:
         return GaussianDistribution(self.distribution.variable, self.distribution.mean + other.mean,
-                                    self.distribution.variance + other.variance)
+                                    self.distribution.scale + other.scale)
 
 
 class TruncatedGaussianDistributionConvolution(Convolution):
@@ -72,4 +72,4 @@ class TruncatedGaussianDistributionConvolution(Convolution):
         new_interval = self.distribution.interval.replace(lower=self.distribution.interval.lower + other.location,
                                                           upper=self.distribution.interval.upper + other.location)
         return TruncatedGaussianDistribution(self.distribution.variable, new_interval,
-                                             self.distribution.mean + other.location, self.distribution.variance)
+                                             self.distribution.mean + other.location, self.distribution.scale)

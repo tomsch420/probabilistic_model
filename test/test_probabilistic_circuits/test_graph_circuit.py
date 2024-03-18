@@ -598,7 +598,7 @@ class ConvolutionTestCase(unittest.TestCase, ShowMixin):
         self.variable = Continuous("x")
         self.interval = portion.closed(-1, 1)
         self.mean = 0
-        self.variance = 1
+        self.scale = 1
         self.location = 3
         self.density_cap = 1
 
@@ -618,23 +618,23 @@ class ConvolutionTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(result.location, self.location * 2)
 
     def test_gaussian_with_dirac_delta_convolution(self):
-        gaussian_distribution = GaussianDistribution(self.variable, self.mean, self.variance)
+        gaussian_distribution = GaussianDistribution(self.variable, self.mean, self.scale)
         dirac_delta_distribution = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
         convolution = GaussianDistributionConvolution(gaussian_distribution)
         result = convolution.convolve_with_dirac_delta(dirac_delta_distribution)
         self.assertEqual(result.mean, self.mean + self.location)
 
     def test_gaussian_with_gaussian_convolution(self):
-        gaussian_distribution1 = GaussianDistribution(self.variable, self.mean, self.variance)
-        gaussian_distribution2 = GaussianDistribution(self.variable, self.mean, self.variance)
+        gaussian_distribution1 = GaussianDistribution(self.variable, self.mean, self.scale)
+        gaussian_distribution2 = GaussianDistribution(self.variable, self.mean, self.scale)
         convolution = GaussianDistributionConvolution(gaussian_distribution1)
         result = convolution.convolve_with_gaussian(gaussian_distribution2)
         self.assertEqual(result.mean, self.mean * 2)
-        self.assertEqual(result.variance, self.variance * 2)
+        self.assertEqual(result.scale, self.scale * 2)
 
     def test_truncated_gaussian_with_dirac_delta_convolution(self):
         truncated_gaussian_distribution = TruncatedGaussianDistribution(self.variable, self.interval, self.mean,
-                                                                        self.variance)
+                                                                        self.scale)
         dirac_delta_distribution = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
         convolution = TruncatedGaussianDistributionConvolution(truncated_gaussian_distribution)
         result = convolution.convolve_with_dirac_delta(dirac_delta_distribution)
