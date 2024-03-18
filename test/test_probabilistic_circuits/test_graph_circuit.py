@@ -67,7 +67,8 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
     def test_mode(self):
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 1)
-        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1), self.y: portion.closed(3, 4)})])
+        self.assertEqual(mode.events,
+                         [Event({self.x: portion.closed(0, 1), self.y: portion.closed(3, 4)})])
 
     def test_sample(self):
         samples = self.model.sample(100)
@@ -103,7 +104,7 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertIsNone(marginal)
 
     def test_domain(self):
-        domain = self.model.domain
+        domain = self.model.domain.events[0]
         self.assertEqual(domain[self.x], portion.closed(0, 1))
         self.assertEqual(domain[self.y], portion.closed(3, 4))
 
@@ -151,7 +152,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
 
     def test_domain(self):
         domain = self.model.domain
-        self.assertEqual(domain[self.x], portion.closed(0, 1) | portion.closed(3, 4))
+        self.assertEqual(domain.events[0][self.x], portion.closed(0, 1) | portion.closed(3, 4))
 
     def test_weighted_subcircuits(self):
         weighted_subcircuits = self.model.weighted_subcircuits
@@ -200,7 +201,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
     def test_mode(self):
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 0.6)
-        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1)})])
+        self.assertEqual(mode.events[0], Event({self.x: portion.closed(0, 1)}))
 
     def test_serialization(self):
         serialized = self.model.to_json()
@@ -336,7 +337,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         marginal = self.model.marginal([self.real])
         mode, likelihood = marginal.mode()
         self.assertEqual(likelihood, 0.5)
-        self.assertEqual(mode, [Event({self.real: portion.closed(0, 1)})])
+        self.assertEqual(mode.events, [Event({self.real: portion.closed(0, 1)})])
 
     def test_mode_raising(self):
         with self.assertRaises(NotImplementedError):

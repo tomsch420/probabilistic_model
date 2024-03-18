@@ -168,8 +168,8 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         self.interval = interval
 
     @property
-    def domain(self) -> Event:
-        return Event({self.variable: self.interval})
+    def domain(self) -> ComplexEvent:
+        return ComplexEvent([Event({self.variable: self.interval})])
 
     @property
     def lower(self) -> float:

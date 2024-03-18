@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 import plotly.graph_objects as go
 import portion
-from random_events.events import Event, VariableMap
+from random_events.events import Event, VariableMap, ComplexEvent
 from random_events.variables import Continuous
 
 from probabilistic_model.distributions.gaussian import GaussianDistribution, TruncatedGaussianDistribution
@@ -17,7 +17,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
 
     def test_domain(self):
         self.assertEqual(self.distribution.domain,
-                         Event({self.distribution.variable: portion.closedopen(-portion.inf, portion.inf)}))
+                         ComplexEvent([Event({self.distribution.variable: portion.closedopen(-portion.inf, portion.inf)})]))
 
     def test_likelihood(self):
         self.assertEqual(self.distribution.likelihood([1]), self.distribution.pdf(1))
@@ -90,7 +90,8 @@ class GaussianDistributionTestCase(unittest.TestCase):
 
     def test_plot(self):
         fig = go.Figure(data=self.distribution.plot())
-        self.assertIsNotNone(fig)  # fig.show()
+        self.assertIsNotNone(fig)
+        # fig.show()
 
     def test_serialization(self):
         serialized = self.distribution.to_json()
@@ -177,7 +178,7 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
         self.assertEqual(len(samples), 100)
         for sample in samples:
             sample = sample[0]
-            self.assertTrue(sample in self.distribution.domain[self.distribution.variable])
+            self.assertTrue(sample in self.distribution.domain.events[0][self.distribution.variable])
             self.assertGreater(self.distribution.pdf(sample), 0)
 
     def test_plot(self):

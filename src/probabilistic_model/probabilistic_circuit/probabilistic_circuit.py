@@ -115,13 +115,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
 
         :return: An event describing the domain of the model.
         """
-        domain = self.subcircuits[0].domain
-        for subcircuit in self.subcircuits[1:]:
-            target_domain = subcircuit.domain
-            print(domain, target_domain)
-            print(type(domain), type(target_domain))
-            domain = target_domain | domain
-        return domain
+        raise NotImplementedError
 
     def update_variables(self, new_variables: VariableMap):
         """
@@ -333,7 +327,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         ys = []
 
         # for every mode
-        for mode in modes[0][self.variables[0]]:
+        for mode in modes.events[0][self.variables[0]]:
 
             # extend the x and y values
             xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
@@ -354,7 +348,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         samples = [sample[0] for sample in sorted(self.sample(sample_amount))]
 
         # get variable and domain
-        domain = self.domain
+        domain = self.domain.events[0]
         variable = list(domain.keys())[0]
         support: portion.Interval = domain[variable]
 
@@ -426,7 +420,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             x_mode_trace = []
             y_mode_trace = []
             modes, _ = self.mode()
-            for mode in modes:
+            for mode in modes.events:
                 for x_mode in mode[self.variables[0]]:
                     for y_mode in mode[self.variables[1]]:
                         x_mode_trace.extend([x_mode.lower, x_mode.upper, x_mode.upper, x_mode.lower, x_mode.lower, None])
@@ -514,6 +508,14 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         """
         self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
+
+    @property
+    def domain(self) -> ComplexEvent:
+        domain = self.subcircuits[0].domain
+        for subcircuit in self.subcircuits[1:]:
+            target_domain = subcircuit.domain
+            domain = (target_domain | domain)
+        return domain
 
     @property
     def weights(self) -> List[float]:
@@ -821,7 +823,7 @@ class DeterministicSumUnit(SmoothSumUnit):
         return [mode]
 
     @cache_inference_result
-    def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
+    def _mode(self) -> Tuple[ComplexEvent, float]:
         modes = []
         likelihoods = []
 
@@ -834,14 +836,14 @@ class DeterministicSumUnit(SmoothSumUnit):
         # get the most likely result
         maximum_likelihood = max(likelihoods)
 
-        result = []
+        mode_events = []
 
         # gather all results that are maximum likely
         for mode, likelihood in zip(modes, likelihoods):
             if likelihood == maximum_likelihood:
-                result.extend(mode)
+                mode_events.extend(mode.events)
 
-        modes = self.merge_modes_if_one_dimensional(result)
+        modes = ComplexEvent(mode_events)  # self.merge_modes_if_one_dimensional(result)
         return modes, maximum_likelihood
 
     def sub_circuit_index_of_sample(self, sample: Iterable) -> Optional[int]:
@@ -860,6 +862,18 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     """
 
     representation = "⊗"
+
+    @property
+    def domain(self) -> ComplexEvent:
+
+        # initialize domain
+        domain = self.subcircuits[0].domain
+
+        # gather all domains from the children
+        for subcircuit in self.subcircuits[1:]:
+            domain = domain & subcircuit.domain
+
+        return domain
 
     def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin):
         """
@@ -902,30 +916,18 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         return result
 
     @cache_inference_result
-    def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
+    def _mode(self) -> Tuple[ComplexEvent, float]:
 
-        modes = []
-        resulting_likelihood = 1.
+        # initialize mode and likelihood
+        mode, likelihood = self.subcircuits[0]._mode()
 
         # gather all modes from the children
-        for subcircuit in self.subcircuits:
-            mode, likelihood = subcircuit._mode()
-            modes.append(mode)
-            resulting_likelihood *= likelihood
+        for subcircuit in self.subcircuits[1:]:
+            subcircuit_mode, subcircuit_likelihood = subcircuit._mode()
+            mode = mode & subcircuit_mode
+            likelihood *= subcircuit_likelihood
 
-        result = []
-
-        # perform the cartesian product of all modes
-        for mode_combination in itertools.product(*modes):
-
-            # form the intersection of the modes inside one cartesian product mode
-            mode = mode_combination[0]
-            for mode_ in mode_combination[1:]:
-                mode = mode | mode_
-
-            result.append(mode)
-
-        return result, resulting_likelihood
+        return mode, likelihood
 
     @cache_inference_result
     def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:

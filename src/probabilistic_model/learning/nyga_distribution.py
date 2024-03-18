@@ -257,10 +257,6 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         else:
             return self._variables
 
-    @property
-    def domain(self) -> Event:
-        return ProbabilisticCircuitMixin.domain.fget(self)
-
     @cache_inference_result
     def _pdf(self, value: Union[float, int]) -> float:
         return sum([weight * subcircuit._pdf(value) for weight, subcircuit in self.weighted_subcircuits])
@@ -366,8 +362,9 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         """
         Create a plotly trace for the probability density function.
         """
-        domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
-        x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None]
+        domain = self.domain.events[0][self.variable]
+        domain_size = domain.upper - domain.lower
+        x = [domain.lower - domain_size * 0.05, domain.lower, None]
         y = [0, 0, None]
         for weight, subcircuit in self.weighted_subcircuits:
             uniform: UniformDistribution = subcircuit
@@ -377,7 +374,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
             x += [lower_value, upper_value, None]
             y += [pdf_value, pdf_value, None]
 
-        x.extend([self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05])
+        x.extend([domain.upper, domain.upper + domain_size * 0.05])
         y.extend([0, 0])
         return go.Scatter(x=x, y=y, mode='lines', name="PDF")
 
@@ -385,17 +382,18 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         """
         Create a plotly trace for the cumulative distribution function.
         """
-        domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
-        x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None]
+        domain = self.domain.events[0][self.variable]
+        domain_size = domain.upper - domain.lower
+        x = [domain.lower - domain_size * 0.05, domain.lower, None]
         y = [0, 0, None]
-        for subcircuit in self.subcircuits:
+        for subcircuit in sorted(self.subcircuits, key=lambda d: d.interval.lower):
             uniform: UniformDistribution = subcircuit
             lower_value = uniform.interval.lower
             upper_value = uniform.interval.upper
-            x += [lower_value, upper_value, None]
-            y += [self.cdf(lower_value), self.cdf(upper_value), None]
+            x += [lower_value, upper_value]
+            y += [self.cdf(lower_value), self.cdf(upper_value)]
 
-        x.extend([self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05])
+        x.extend([domain.upper, domain.upper + domain_size * 0.05])
         y.extend([1, 1])
         return go.Scatter(x=x, y=y, mode='lines', name="CDF")
 

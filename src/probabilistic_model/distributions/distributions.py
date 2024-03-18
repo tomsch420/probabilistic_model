@@ -175,7 +175,6 @@ class ContinuousDistribution(UnivariateDistribution):
 
         # simplify the event
         event = event.marginal_event(self.variables).simplify()
-
         # assert that this can only have at most 1 event
         assert len(event.events) <= 1
 
@@ -211,11 +210,11 @@ class ContinuousDistribution(UnivariateDistribution):
         samples = [sample[0] for sample in self.sample(1000)]
         samples.sort()
 
-        minimal_value = self.domain[self.variable].lower
+        minimal_value = self.domain.events[0][self.variable].lower
         if minimal_value <= -float("inf"):
             minimal_value = samples[0]
 
-        maximal_value = self.domain[self.variable].upper
+        maximal_value = self.domain.events[0][self.variable].upper
         if maximal_value >= float("inf"):
             maximal_value = samples[-1]
 

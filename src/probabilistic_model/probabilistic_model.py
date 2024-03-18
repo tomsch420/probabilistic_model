@@ -58,20 +58,21 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event to preprocess.
         :return: The preprocessed event.
         """
-
-        # load variables
         variables = self.variables
-        event.fill_missing_variables(variables)
         # if the event is a complex event
         if isinstance(event, ComplexEvent):
+            for simple_event in event.events:
+                simple_event.fill_missing_variables(variables)
             return event.encode()
 
         # if the event is a simple encoded event
         elif isinstance(event, EncodedEvent):
+            event.fill_missing_variables(variables)
             return ComplexEvent([event])
 
         # if the event is a simple event
         elif isinstance(event, Event):
+            event.fill_missing_variables(variables)
             return ComplexEvent([event.encode()])
 
         else:

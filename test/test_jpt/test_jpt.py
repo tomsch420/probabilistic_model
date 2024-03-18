@@ -253,7 +253,6 @@ class JPTTestCase(unittest.TestCase):
     def test_plot(self):
         self.model._min_samples_leaf = 10
         self.model.fit(self.data)
-        print(self.model.domain)
         fig = self.model.plot()
         self.assertIsNotNone(fig)  # fig.show()
 
