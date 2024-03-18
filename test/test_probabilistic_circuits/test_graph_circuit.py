@@ -70,7 +70,8 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
     def test_mode(self):
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 1)
-        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1), self.y: portion.closed(3, 4)})])
+        self.assertEqual(mode.events,
+                         [Event({self.x: portion.closed(0, 1), self.y: portion.closed(3, 4)})])
 
     def test_sample(self):
         samples = self.model.sample(100)
@@ -106,7 +107,7 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertIsNone(marginal)
 
     def test_domain(self):
-        domain = self.model.domain
+        domain = self.model.domain.events[0]
         self.assertEqual(domain[self.x], portion.closed(0, 1))
         self.assertEqual(domain[self.y], portion.closed(3, 4))
 
@@ -154,7 +155,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
 
     def test_domain(self):
         domain = self.model.domain
-        self.assertEqual(domain[self.x], portion.closed(0, 1) | portion.closed(3, 4))
+        self.assertEqual(domain.events[0][self.x], portion.closed(0, 1) | portion.closed(3, 4))
 
     def test_weighted_subcircuits(self):
         weighted_subcircuits = self.model.weighted_subcircuits
@@ -203,7 +204,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
     def test_mode(self):
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 0.6)
-        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1)})])
+        self.assertEqual(mode.events[0], Event({self.x: portion.closed(0, 1)}))
 
     def test_serialization(self):
         serialized = self.model.to_json()
@@ -339,7 +340,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         marginal = self.model.marginal([self.real])
         mode, likelihood = marginal.mode()
         self.assertEqual(likelihood, 0.5)
-        self.assertEqual(mode, [Event({self.real: portion.closed(0, 1)})])
+        self.assertEqual(mode.events, [Event({self.real: portion.closed(0, 1)})])
 
     def test_mode_raising(self):
         with self.assertRaises(NotImplementedError):
@@ -479,6 +480,11 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(len(simplified.probabilistic_circuit.nodes()), 7)
         self.assertEqual(len(simplified.probabilistic_circuit.edges()), 6)
 
+    def test_plot_2d(self):
+        traces = self.model.plot_2d()
+        assert len(traces) > 0
+        # go.Figure(traces, self.model.plotly_layout()).show()
+
 
 class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
@@ -536,6 +542,54 @@ class NormalizationTestCase(unittest.TestCase):
         sum_unit.normalize()
         self.assertAlmostEqual(sum_unit.weights[0], 0.5/0.8)
         self.assertAlmostEqual(sum_unit.weights[1], 0.3/0.8)
+
+
+class MultivariateGaussianTestCase(unittest.TestCase):
+
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+    model: ProbabilisticCircuit
+
+    def setUp(self):
+        product = DecomposableProductUnit()
+        n1 = GaussianDistribution(self.x, 0, 1)
+        n2 = GaussianDistribution(self.y, 0.5, 2)
+        product.add_subcircuit(n1)
+        product.add_subcircuit(n2)
+        self.model = product.probabilistic_circuit
+
+    def test_plot_2d(self):
+        traces = self.model.plot()
+        assert len(traces) > 0
+        # go.Figure(traces, self.model.plotly_layout()).show()
+
+
+class ComplexInferenceTestCase(unittest.TestCase):
+
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+    model: ProbabilisticCircuit
+
+    e1: Event = Event({x: portion.closed(0, 1), y: portion.closedopen(0, 1)})
+    e2: Event = Event({x: portion.closed(1.5, 2), y: portion.closed(1.5, 2)})
+
+    event: ComplexEvent = e1 | e2
+
+    def setUp(self):
+        root = DecomposableProductUnit()
+        px = UniformDistribution(self.x, portion.closed(0, 2))
+        py = UniformDistribution(self.y, portion.closed(0, 3))
+        root.add_subcircuit(px)
+        root.add_subcircuit(py)
+        self.model = root.probabilistic_circuit
+
+    def test_complex_probability(self):
+        p = self.model.probability(self.event)
+        self.assertEqual(self.model.probability(self.e1) + self.model.probability(self.e2), p)
+
+    def test_complex_conditional(self):
+        conditional, probability = self.model.conditional(self.event)
+        self.assertAlmostEqual(conditional.probability(self.event), 1.)
 
 
 class ConvolutionTestCase(unittest.TestCase, ShowMixin):

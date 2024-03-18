@@ -4,7 +4,7 @@ from typing import Iterable, List, Optional, Tuple, Dict
 import numpy as np
 
 from random_events.variables import Discrete, Integer, Symbolic, Variable
-from random_events.events import EncodedEvent
+from random_events.events import EncodedEvent, ComplexEvent
 
 from ..probabilistic_model import ProbabilisticModel
 from ..utils import SubclassJSONSerializer
@@ -56,11 +56,11 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
         return MultinomialDistribution(variables, probabilities)
 
-    def _mode(self) -> Tuple[List[EncodedEvent], float]:
+    def _mode(self) -> Tuple[ComplexEvent, float]:
         likelihood = np.max(self.probabilities)
         events = np.transpose(np.asarray(self.probabilities == likelihood).nonzero())
         mode = [EncodedEvent(zip(self.variables, event)) for event in events.tolist()]
-        return mode, likelihood
+        return ComplexEvent(mode).simplify(), likelihood
 
     def __copy__(self) -> 'MultinomialDistribution':
         """
@@ -101,12 +101,29 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
     def _likelihood(self, event: List[int]) -> float:
         return float(self.probabilities[tuple(event)])
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
+        probabilities = np.zeros_like(self.probabilities)
+
+        for simple_event in event.events:
+            probabilities += self._probabilities_from_simple_event(simple_event)
+
+        sum_of_probabilities = probabilities.sum()
+        if sum_of_probabilities == 0:
+            return None, 0
+        else:
+            return MultinomialDistribution(self.variables, probabilities), sum_of_probabilities
+
+    def _probabilities_from_simple_event(self, event: EncodedEvent) -> np.ndarray:
+        """
+        Calculate the probabilities array for a simple event.
+        :param event: The simple event.
+        :return: The array of probabilities that apply to this event.
+        """
         indices = tuple(event[variable] for variable in self.variables)
         indices = np.ix_(*indices)
         probabilities = np.zeros_like(self.probabilities)
         probabilities[indices] = self.probabilities[indices]
-        return MultinomialDistribution(self.variables, probabilities), self.probabilities[indices].sum()
+        return probabilities
 
     def normalize(self) -> Self:
         """

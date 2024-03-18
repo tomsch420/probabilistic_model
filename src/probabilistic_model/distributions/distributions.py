@@ -4,7 +4,7 @@ from typing import Optional
 
 import portion
 import random_events.utils
-from random_events.events import EncodedEvent, Event, VariableMap
+from random_events.events import EncodedEvent, Event, VariableMap, ComplexEvent
 from random_events.variables import Variable, Continuous, Discrete, Symbolic, Integer
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 import plotly.graph_objects as go
@@ -23,7 +23,7 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
         super().__init__([variable])
 
     @property
-    def domain(self) -> Event:
+    def domain(self) -> ComplexEvent:
         """
         The domain of this distribution.
         :return: The domain (support) of this distribution as event.
@@ -170,11 +170,21 @@ class ContinuousDistribution(UnivariateDistribution):
     def conditional_from_complex_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
         raise NotImplementedError()
 
-    def _conditional(self, event: EncodedEvent) -> \
+    def _conditional(self, event: ComplexEvent) -> \
             Tuple[Optional[Union['ContinuousDistribution', 'DiracDeltaDistribution', ProbabilisticModel]], float]:
 
+        # simplify the event
+        event = event.marginal_event(self.variables).simplify()
+        # assert that this can only have at most 1 event
+        assert len(event.events) <= 1
+
+        # if event is empty, return None
+        if event.is_empty():
+            return None, 0
+
+        event = event.events[0]
         # form intersection of event and domain
-        intersection: portion.Interval = event[self.variable].intersection(self.domain[self.variable])
+        intersection: portion.Interval = event[self.variable].intersection(self.domain.events[0][self.variable])
 
         # if intersection is empty
         if intersection.empty:
@@ -200,11 +210,11 @@ class ContinuousDistribution(UnivariateDistribution):
         samples = [sample[0] for sample in self.sample(1000)]
         samples.sort()
 
-        minimal_value = self.domain[self.variable].lower
+        minimal_value = self.domain.events[0][self.variable].lower
         if minimal_value <= -float("inf"):
             minimal_value = samples[0]
 
-        maximal_value = self.domain[self.variable].upper
+        maximal_value = self.domain.events[0][self.variable].upper
         if maximal_value >= float("inf"):
             maximal_value = samples[-1]
 
@@ -234,7 +244,7 @@ class ContinuousDistribution(UnivariateDistribution):
 
         xs = []
         ys = []
-        for mode in modes:
+        for mode in modes.events:
             mode = mode[self.variable]
             xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
             ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
@@ -263,9 +273,9 @@ class DiscreteDistribution(UnivariateDistribution):
             raise ValueError("The number of weights has to be equal to the number of values of the variable.")
 
     @property
-    def domain(self) -> Event:
-        return Event(
-            {self.variable: [value for value, weight in zip(self.variable.domain, self.weights) if weight > 0]})
+    def domain(self) -> ComplexEvent:
+        return ComplexEvent([Event({self.variable: [value for value, weight in
+                                                    zip(self.variable.domain, self.weights) if weight > 0]})])
 
     @property
     def variable(self) -> Discrete:
@@ -282,14 +292,19 @@ class DiscreteDistribution(UnivariateDistribution):
     def _probability(self, event: EncodedEvent) -> float:
         return sum(self._pdf(value) for value in event[self.variable])
 
-    def _mode(self) -> Tuple[List[EncodedEvent], float]:
+    def _mode(self) -> Tuple[ComplexEvent, float]:
         maximum_weight = max(self.weights)
         mode = EncodedEvent(
             {self.variable: [index for index, weight in enumerate(self.weights) if weight == maximum_weight]})
-        return [mode], maximum_weight
+        return ComplexEvent([mode]), maximum_weight
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Self, float]:
-        unnormalized_weights = [weight if index in event[self.variable] else 0. for index, weight in
+    def _conditional(self, event: ComplexEvent) -> Tuple[Self, float]:
+
+        if event.is_empty():
+            return None, 0
+
+        assert len(event.events) <= 1
+        unnormalized_weights = [weight if index in event.events[0][self.variable] else 0. for index, weight in
                                 enumerate(self.weights)]
         probability = sum(unnormalized_weights)
 
@@ -340,7 +355,7 @@ class DiscreteDistribution(UnivariateDistribution):
         """
 
         mode, likelihood = self.mode()
-        mode = mode[0][self.variable]
+        mode = mode.events[0][self.variable]
 
         traces = list()
         traces.append(go.Bar(x=[value for value in self.variable.domain if value not in mode], y=self.weights,
@@ -460,16 +475,16 @@ class DiracDeltaDistribution(ContinuousDistribution):
             return 0
 
     def _mode(self):
-        return [self.domain.encode()], self.density_cap
+        return ComplexEvent([self.domain.encode()]), self.density_cap
 
     def sample(self, amount: int) -> List[List[float]]:
         return [[self.location] for _ in range(amount)]
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
-        if self.location in event[self.variable]:
-            return self.__copy__(), 1
-        else:
-            return None, 0
+    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
+        for event in event.events:
+            if self.location in event[self.variable]:
+                return self.__copy__(), 1
+        return None, 0
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         order = order[self.variable]

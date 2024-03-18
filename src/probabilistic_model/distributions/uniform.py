@@ -3,7 +3,7 @@ from typing import Tuple, Optional
 
 import portion
 from plotly import graph_objects as go
-from random_events.events import Event, EncodedEvent, VariableMap
+from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent
 from random_events.variables import Continuous
 from typing_extensions import List, Dict, Any, Self
 
@@ -26,8 +26,8 @@ class UniformDistribution(ContinuousDistribution):
         self.interval = interval
 
     @property
-    def domain(self) -> Event:
-        return Event({self.variable: self.interval})
+    def domain(self) -> ComplexEvent:
+        return ComplexEvent([Event({self.variable: self.interval})])
 
     @property
     def lower(self) -> float:
@@ -77,7 +77,7 @@ class UniformDistribution(ContinuousDistribution):
         return probability
 
     def _mode(self):
-        return [self.domain.encode()], self.pdf_value()
+        return self.domain.encode(), self.pdf_value()
 
     def sample(self, amount: int) -> List[List[float]]:
         return [[random.uniform(self.lower, self.upper)] for _ in range(amount)]
@@ -126,10 +126,11 @@ class UniformDistribution(ContinuousDistribution):
         return cls(variable, interval)
 
     def plot(self) -> List:
-        domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
-        x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None,
-             self.domain[self.variable].lower, self.domain[self.variable].upper, None, self.domain[self.variable].upper,
-             self.domain[self.variable].upper + domain_size * 0.05]
+        domain = self.domain.events[0][self.variable]
+        domain_size = domain.upper - domain.lower
+        x = [domain.lower - domain_size * 0.05, domain.lower, None,
+             domain.lower, domain.upper, None, domain.upper,
+             domain.upper + domain_size * 0.05]
 
         pdf_values = [0, 0, None, self.pdf_value(), self.pdf_value(), None, 0, 0]
         pdf_trace = go.Scatter(x=x, y=pdf_values, mode='lines', name="Probability Density Function")
@@ -138,7 +139,7 @@ class UniformDistribution(ContinuousDistribution):
         cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name="Cumulative Distribution Function")
 
         mode, maximum_likelihood = self.mode()
-        mode = mode[0][self.variable]
+        mode = mode.events[0][self.variable]
 
         expectation = self.expectation([self.variable])[self.variable]
         mode_trace = (go.Scatter(x=[mode.lower, mode.lower, mode.upper, mode.upper, ],

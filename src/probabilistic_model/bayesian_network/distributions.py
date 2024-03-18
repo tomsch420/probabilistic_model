@@ -1,6 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from random_events.events import Event, EncodedEvent, VariableMap
+from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent
 from typing_extensions import Tuple, Dict, Iterable, List, Type, Union, Optional, Self
 
 from .bayesian_network import BayesianNetworkMixin
@@ -23,7 +23,7 @@ class DiscreteDistribution(BayesianNetworkMixin, PCDiscreteDistribution):
 
     forward_message: Optional[PCDiscreteDistribution]
 
-    def forward_pass(self, event: EncodedEvent):
+    def forward_pass(self, event: ComplexEvent):
         self.forward_message, self.forward_probability = self._conditional(event)
 
     def joint_distribution_with_parent(self) -> DeterministicSumUnit:
@@ -71,7 +71,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         node_event = tuple(event[1:])
         return self.conditional_probability_distributions[parent_event]._likelihood(node_event)
 
-    def forward_pass(self, event: EncodedEvent):
+    def forward_pass(self, event: ComplexEvent):
 
         # if the parent distribution is None, the forward message is None since it is an impossible event
         if self.parent.forward_message is None:
@@ -86,7 +86,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         forward_probability = 0
 
         # for every parent state
-        for parent_state in event[self.parent.variable]:
+        for parent_state in event.marginal_event(self.parent.variables).simplify().events[0][self.parent.variable]:
 
             # wrap the parent state
             parent_state = (parent_state,)
@@ -94,9 +94,12 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
             # calculate the probability of said state
             parent_state_probability = self.parent.forward_message.likelihood(parent_state)
 
+            event_for_parent = ComplexEvent([Event({self.parent.variable: parent_state})])
             # construct the conditional distribution
-            conditional, current_probability = (self.conditional_probability_distributions[parent_state]
-                                                ._conditional(event))
+            # conditional, current_probability = (self.conditional_probability_distributions[parent_state]
+            #                                     ._conditional(event))
+
+            conditional, current_probability = self.conditional_probability_distributions[parent_state].conditional(event_for_parent)
 
             # if the conditional is None, skip
             if conditional is None:
@@ -205,7 +208,7 @@ class ConditionalProbabilisticCircuit(ConditionalProbabilityTable):
         self.conditional_probability_distributions = dict()
 
     def forward_pass(self, event: EncodedEvent):
-        forward_message, self.forward_probability = self.joint_distribution_with_parent()._conditional(event)
+        forward_message, self.forward_probability = self.joint_distribution_with_parent()._conditional_from_single_event(event)
         self.forward_message = forward_message.marginal(self.variables)
 
     def joint_distribution_with_parent(self) -> DeterministicSumUnit:

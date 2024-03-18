@@ -15,7 +15,8 @@ class UniformDistributionTestCase(unittest.TestCase):
     distribution: UniformDistribution = UniformDistribution(Continuous("x"), portion.closedopen(0, 2))
 
     def test_domain(self):
-        self.assertEqual(self.distribution.domain, Event({self.distribution.variable: portion.closedopen(0, 2)}))
+        self.assertEqual(self.distribution.domain.events[0],
+                         Event({self.distribution.variable: portion.closedopen(0, 2)}))
 
     def test_likelihood(self):
         self.assertEqual(self.distribution.likelihood([1]), 0.5)
@@ -40,7 +41,8 @@ class UniformDistributionTestCase(unittest.TestCase):
 
     def test_mode(self):
         modes, likelihood = self.distribution.mode()
-        self.assertEqual(modes, [self.distribution.domain])
+        print(modes)
+        self.assertEqual(modes, self.distribution.domain)
         self.assertEqual(likelihood, 0.5)
 
     def test_sample(self):

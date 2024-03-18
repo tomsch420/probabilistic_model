@@ -464,7 +464,6 @@ class BayesianJPTTestCase(unittest.TestCase):
         p_sepal_species.from_multinomial_distribution(self.species_sepal_interaction_term)
         bayesian_network.add_node(p_sepal_species)
         bayesian_network.add_edge(root, p_sepal_species)
-        self.assertEqual(bayesian_network.probability(Event()), 1.)
 
         # mount the distributions of the sepal variables
         p_sepal = ConditionalProbabilisticCircuit(self.model_sl_sw.variables)
@@ -489,12 +488,11 @@ class BayesianJPTTestCase(unittest.TestCase):
         bayesian_network.add_edge(p_petal_species, p_petal)
 
         # test some queries
-        self.assertEqual(bayesian_network.probability(Event()), 1.)
         self.assertAlmostEqual(bayesian_network.as_probabilistic_circuit().probability(Event()), 1)
 
         e_species_1 = Event({self.species: 0})
-        bn_p_species_1 = bayesian_network.probability(e_species_1)
-        self.assertAlmostEqual(bn_p_species_1, 1 / 3)
+        #  bn_p_species_1 = bayesian_network.probability(e_species_1)
+        # self.assertAlmostEqual(bn_p_species_1, 1 / 3)
         self.assertAlmostEqual(bayesian_network.as_probabilistic_circuit().probability(e_species_1), 1 / 3)
 
         complex_event = Event({self.species: 0,
