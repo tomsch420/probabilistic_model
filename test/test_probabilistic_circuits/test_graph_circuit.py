@@ -1,16 +1,19 @@
-import random
 import unittest
-
 import numpy as np
 import portion
 from matplotlib import pyplot as plt
 from random_events.variables import Integer, Continuous
 from typing_extensions import Union
-
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
+from probabilistic_model.probabilistic_circuit.convolution.convolution import (UniformDistributionConvolution,
+                                                                               GaussianDistributionConvolution,
+                                                                               TruncatedGaussianDistributionConvolution,
+                                                                               DiracDeltaDistributionConvolution)
 from probabilistic_model.probabilistic_circuit.distributions.distributions import (ContinuousDistribution,
                                                                                    UniformDistribution,
-                                                                                   GaussianDistribution)
+                                                                                   GaussianDistribution,
+                                                                                   DiracDeltaDistribution,
+                                                                                   TruncatedGaussianDistribution)
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
 
 
@@ -533,6 +536,57 @@ class NormalizationTestCase(unittest.TestCase):
         sum_unit.normalize()
         self.assertAlmostEqual(sum_unit.weights[0], 0.5/0.8)
         self.assertAlmostEqual(sum_unit.weights[1], 0.3/0.8)
+
+
+class ConvolutionTestCase(unittest.TestCase, ShowMixin):
+
+    def setUp(self):
+        self.variable = Continuous("x")
+        self.interval = portion.closed(-1, 1)
+        self.mean = 0
+        self.variance = 1
+        self.location = 3
+        self.density_cap = 1
+
+    def test_uniform_with_dirac_delta_convolution(self):
+        uniform_distribution = UniformDistribution(self.variable, self.interval)
+        dirac_delta_distribution = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        convolution = UniformDistributionConvolution(uniform_distribution)
+        result = convolution.convolve_with_dirac_delta(dirac_delta_distribution)
+        self.assertEqual(result.interval, portion.closed(self.interval.lower + self.location,
+                                                         self.interval.upper + self.location))
+
+    def test_dirac_delta_with_dirac_delta_convolution(self):
+        dirac_delta_distribution1 = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        dirac_delta_distribution2 = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        convolution = DiracDeltaDistributionConvolution(dirac_delta_distribution1)
+        result = convolution.convolve_with_dirac_delta(dirac_delta_distribution2)
+        self.assertEqual(result.location, self.location * 2)
+
+    def test_gaussian_with_dirac_delta_convolution(self):
+        gaussian_distribution = GaussianDistribution(self.variable, self.mean, self.variance)
+        dirac_delta_distribution = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        convolution = GaussianDistributionConvolution(gaussian_distribution)
+        result = convolution.convolve_with_dirac_delta(dirac_delta_distribution)
+        self.assertEqual(result.mean, self.mean + self.location)
+
+    def test_gaussian_with_gaussian_convolution(self):
+        gaussian_distribution1 = GaussianDistribution(self.variable, self.mean, self.variance)
+        gaussian_distribution2 = GaussianDistribution(self.variable, self.mean, self.variance)
+        convolution = GaussianDistributionConvolution(gaussian_distribution1)
+        result = convolution.convolve_with_gaussian(gaussian_distribution2)
+        self.assertEqual(result.mean, self.mean * 2)
+        self.assertEqual(result.variance, self.variance * 2)
+
+    def test_truncated_gaussian_with_dirac_delta_convolution(self):
+        truncated_gaussian_distribution = TruncatedGaussianDistribution(self.variable, self.interval, self.mean,
+                                                                        self.variance)
+        dirac_delta_distribution = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        convolution = TruncatedGaussianDistributionConvolution(truncated_gaussian_distribution)
+        result = convolution.convolve_with_dirac_delta(dirac_delta_distribution)
+        self.assertEqual(result.interval, portion.closed(self.interval.lower + self.location,
+                                                         self.interval.upper + self.location))
+        self.assertEqual(result.mean, self.mean + self.location)
 
 
 if __name__ == '__main__':
