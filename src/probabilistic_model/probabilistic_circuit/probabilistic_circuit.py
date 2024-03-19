@@ -5,6 +5,7 @@ import random
 from typing import Tuple, Iterable, TYPE_CHECKING
 
 import networkx as nx
+import numpy as np
 import portion
 from random_events.events import EncodedEvent, VariableMap, Event, ComplexEvent
 from random_events.variables import Variable, Symbolic, Continuous
@@ -164,6 +165,12 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     @property
     def cache_result(self) -> bool:
         return self._cache_result
+
+    def is_deterministic(self) -> bool:
+        """
+        :return: Rather this node is deterministic or not.
+        """
+        raise NotImplementedError
 
     @cache_result.setter
     def cache_result(self, value: bool):
@@ -452,24 +459,15 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         traces.append(go.Scatter(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
                                  mode="markers", name="Expectation"))
 
-        mode_trace = None
+        mode_traces = None
         try:
-            x_mode_trace = []
-            y_mode_trace = []
             modes, _ = self.mode()
-            for mode in modes.events:
-                for x_mode in mode[self.variables[0]]:
-                    for y_mode in mode[self.variables[1]]:
-                        x_mode_trace.extend([x_mode.lower, x_mode.upper, x_mode.upper, x_mode.lower, x_mode.lower, None])
-                        y_mode_trace.extend([y_mode.lower, y_mode.lower, y_mode.upper, y_mode.upper, y_mode.lower, None])
-                        x_mode_trace.extend([x_mode.lower, x_mode.upper, x_mode.upper, x_mode.lower, x_mode.lower, None])
-                        y_mode_trace.extend([y_mode.lower, y_mode.lower, y_mode.upper, y_mode.upper, y_mode.lower, None])
-            mode_trace = go.Scatter(x=x_mode_trace, y=y_mode_trace, mode="lines+markers", name="Mode", fill="toself")
+            mode_traces = modes.plot()
         except NotImplementedError:
             ...
 
-        if mode_trace:
-            traces.append(mode_trace)
+        if mode_traces:
+            traces.extend(mode_traces)
 
         return traces
 
@@ -833,6 +831,19 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         for subcircuit in self.subcircuits:
             self.probabilistic_circuit.edges[self, subcircuit]["weight"] /= total_weight
 
+    def is_deterministic(self) -> bool:
+
+        # for every unique combination of subcircuits
+        for index, subcircuit in enumerate(self.subcircuits):
+            for subcircuit_ in self.subcircuits[index+1:]:
+
+                # if they intersect, the sum is not deterministic
+                if not subcircuit_.domain.intersection(subcircuit.domain).is_empty():
+                    return False
+
+        # if none intersect, the subcircuit is deterministic
+        return True
+
 
 class DeterministicSumUnit(SmoothSumUnit):
     """
@@ -891,6 +902,9 @@ class DeterministicSumUnit(SmoothSumUnit):
             if subcircuit.likelihood(sample) > 0:
                 return index
         return None
+
+    def is_deterministic(self) -> bool:
+        return True
 
 
 class DecomposableProductUnit(ProbabilisticCircuitMixin):
@@ -951,6 +965,9 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             result *= subcircuit._probability(subcircuit_event)
 
         return result
+
+    def is_deterministic(self) -> bool:
+        return True
 
     @cache_inference_result
     def _mode(self) -> Tuple[ComplexEvent, float]:
@@ -1277,8 +1294,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return result
 
-
-
     def update_variables(self, new_variables: VariableMap):
         """
         Update the variables of this unit and its descendants.
@@ -1326,3 +1341,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def plotly_layout(self):
         return self.root.plotly_layout()
+
+    def is_deterministic(self) -> bool:
+        """
+        :return: Rather this circuit is deterministic or not.
+        """
+        return all(node.is_deterministic() for node in self.nodes if isinstance(node, SmoothSumUnit))

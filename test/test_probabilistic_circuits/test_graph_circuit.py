@@ -124,6 +124,9 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
             same_samples = [s for s in samples if s == sample]
             self.assertEqual(len(same_samples), 1)
 
+    def test_determinism(self):
+        self.assertTrue(self.model.is_deterministic())
+
 
 class SumUnitTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
@@ -233,6 +236,9 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         for sample in samples:
             same_samples = [s for s in samples if s == sample]
             self.assertEqual(len(same_samples), 1)
+
+    def test_determinism(self):
+        self.assertTrue(self.model.is_deterministic())
 
 
 class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
@@ -368,6 +374,9 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
             same_samples = [s for s in samples if s == sample]
             self.assertEqual(len(same_samples), 1)
 
+    def test_determinism(self):
+        self.assertFalse(self.model.is_deterministic())
+
 
 class FactorizationTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
@@ -480,7 +489,7 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
     def test_plot_2d(self):
         traces = self.model.plot_2d()
         assert len(traces) > 0
-        # go.Figure(traces, self.model.plotly_layout()).show()
+        #  go.Figure(traces, self.model.plotly_layout()).show()
 
 
 class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
@@ -557,8 +566,8 @@ class MultivariateGaussianTestCase(unittest.TestCase):
 
     def test_plot_2d(self):
         traces = self.model.plot()
-        assert len(traces) > 0
-        # go.Figure(traces, self.model.plotly_layout()).show()
+        # assert len(traces) > 0
+        go.Figure(traces, self.model.plotly_layout()).show()
 
 
 class ComplexInferenceTestCase(unittest.TestCase):
