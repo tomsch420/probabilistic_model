@@ -307,6 +307,18 @@ class TruncatedGaussianSamplingTestCase(unittest.TestCase):
             self.assertGreater(model.likelihood(sample), 0)
         self.assertAlmostEqual(model.expectation(model.variables)[model.variable], np.array(samples).mean(), delta=0.1)
 
+    def test_non_standard_sampling(self):
+        model = TruncatedGaussianDistribution(self.x, portion.closed(-portion.inf, -0.1), 0.5, 2)
+        #  go.Figure(model.plot()).show()
+        samples = model.robert_rejection_sample(1000)
+        self.assertAlmostEqual(max(samples), -0.1, delta=0.01)
+
+        for sample in samples:
+            self.assertGreater(model.pdf(sample), 0)
+
+        self.assertAlmostEqual(model.expectation(model.variables)[model.variable], np.array(samples).mean(), delta=0.1)
+
+
 
 if __name__ == '__main__':
     unittest.main()

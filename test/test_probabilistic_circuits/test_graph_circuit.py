@@ -553,7 +553,7 @@ class NormalizationTestCase(unittest.TestCase):
         self.assertAlmostEqual(sum_unit.weights[1], 0.3/0.8)
 
 
-class MultivariateGaussianTestCase(unittest.TestCase):
+class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
 
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
@@ -569,8 +569,44 @@ class MultivariateGaussianTestCase(unittest.TestCase):
 
     def test_plot_2d(self):
         traces = self.model.plot()
-        # assert len(traces) > 0
-        go.Figure(traces, self.model.plotly_layout()).show()
+        assert len(traces) > 0
+        # go.Figure(traces, self.model.plotly_layout()).show()
+
+    def test_truncation(self):
+        event = Event({self.x: portion.open(-0.1, 0.1), self.y: portion.open(-0.1, 0.1)})
+        outer_event = event.complement()
+
+        # first truncation
+        conditional, probability = self.model.conditional(outer_event)
+
+        self.assertEqual(outer_event, conditional.domain)
+
+        # go.Figure(conditional.plot(), conditional.plotly_layout()).show()
+        samples = list(conditional.sample(500))
+
+        for sample in samples:
+            self.assertTrue(conditional.likelihood(sample) > 0)
+            self.assertFalse(sample[0] in event[self.x] and sample[1] in event[self.y])
+
+        # second truncation
+        limiting_event = Event({self.x: portion.open(-2, 2), self.y: portion.open(-2, 2)})
+
+        conditional, probability = conditional.conditional(limiting_event)
+        #  self.show(conditional)
+        #  go.Figure(conditional.domain.plot()).show()
+        self.assertEqual(len(conditional.sample(500)), 500)
+
+        # go.Figure(conditional.plot(), conditional.plotly_layout()).show()
+
+        domain = outer_event & limiting_event
+        self.assertEqual(domain, conditional.domain)
+
+    def test_open_closed_set_bug(self):
+        tg1 = TruncatedGaussianDistribution(self.y, portion.open(-0.1, 0.1), 0, 1)
+        event = Event({self.x: portion.open(-2, 2), self.y: portion.open(-2, 2)})
+        r, _ = tg1.conditional(event)
+
+        self.assertIsNotNone(r)
 
 
 class ComplexInferenceTestCase(unittest.TestCase):

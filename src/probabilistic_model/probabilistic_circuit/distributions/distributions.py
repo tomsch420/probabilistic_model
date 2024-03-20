@@ -126,7 +126,12 @@ class GaussianDistribution(ContinuousDistribution, PMGaussianDistribution):
 
     def conditional_from_simple_interval(self, interval: portion.Interval) -> (
             Tuple)[Optional[TruncatedGaussianDistribution], float]:
-        conditional, probability = PMGaussianDistribution.conditional_from_simple_interval(self, interval)
+
+        conditional, probability = super().conditional_from_simple_interval(interval)
+
+        if probability == 0:
+            return None, 0
+
         return TruncatedGaussianDistribution(conditional.variable, conditional.interval,
                                              conditional.mean, conditional.scale), probability
 

@@ -195,6 +195,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return variable_map.__class__(
             {variable: value for variable, value in variable_map.items() if variable in variables})
 
+    # @cache_inference_result
     def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
 
         # skip trivial case
@@ -210,6 +211,10 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         total_probability = 0
 
         for event_ in event.events:
+
+            # reset cache
+            self.reset_result_of_current_query()
+
             conditional, probability = self._conditional_from_single_event(event_)
 
             # skip if impossible
@@ -226,6 +231,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
 
         return result, total_probability
 
+    @cache_inference_result
     def _conditional_from_single_event(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
         """
         :return: the conditional circuit from a single, encoded event

@@ -79,7 +79,7 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
             return None
 
     def __eq__(self, other: Self):
-        return self.variables == other.variables
+        return self.variables == other.variables and isinstance(other, self.__class__)
 
     def to_json(self) -> Dict[str, Any]:
         return {
