@@ -469,6 +469,9 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         try:
             modes, _ = self.mode()
             mode_traces = modes.plot()
+            for trace in mode_traces:
+                trace.update(name="Mode")
+
         except NotImplementedError:
             ...
 

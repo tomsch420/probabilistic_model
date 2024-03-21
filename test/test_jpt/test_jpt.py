@@ -31,6 +31,7 @@ from probabilistic_model.probabilistic_circuit.distributions.distributions impor
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
     DeterministicSumUnit, ProbabilisticCircuit
 
+import plotly.graph_objects as go
 
 class ShowMixin:
     model: JPT
@@ -511,21 +512,28 @@ class BayesianJPTTestCase(unittest.TestCase):
         self.assertLess(len(pc_m.weighted_edges), math.prod([len(v.domain) for v in bayesian_network.variables]))
 
 
-#  @unittest.skip("This test requires a file on your disk.")
+@unittest.skip("This test requires a file on your disk.")
 class MaxProblemTestCase(unittest.TestCase):
 
     model: ProbabilisticCircuit
+    relative_x: Continuous
+    relative_y: Continuous
 
     @classmethod
     def setUpClass(cls):
         with open(os.path.join(os.path.expanduser("~"), "Documents", "move_and_pick_up.pm"),  "r") as file:
             loaded_json = json.load(file)
             cls.model = ProbabilisticCircuit.from_json(loaded_json)
+        cls.relative_x = [var for var in cls.model.variables if var.name == "relative_x"][0]
+        cls.relative_y = [var for var in cls.model.variables if var.name == "relative_y"][0]
 
     def test_inference(self):
-        event = Event()
+        event1 = Event({self.relative_x: portion.closed(0.1, 0.2),
+                        self.relative_y: portion.closed(0.1, 0.2)})
+        event2 = Event({self.relative_x: portion.closed(0.5, 1.),
+                        self.relative_y: portion.closed(0.5, 1.)})
+        event = event1 | event2
+
         conditional, probability = self.model.conditional(event)
-        cpe = [var for var in self.model.variables if var.name == "relative_x"][0]
-        self.assertIsInstance(cpe, Continuous)
-        event[cpe] = portion.closed(0.0225, 0.0528)
-        print(conditional.probability(event))
+        p_xy = conditional.marginal([self.relative_x, self.relative_y])
+        go.Figure(p_xy.domain.plot()).show()
