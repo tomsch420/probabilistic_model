@@ -15,7 +15,7 @@ from jpt import infer_from_dataframe as old_infer_from_dataframe
 from jpt.learning.impurity import Impurity
 from jpt.trees import JPT as OldJPT, Leaf
 from matplotlib import pyplot as plt
-from random_events.events import Event
+from random_events.events import Event, ComplexEvent
 from random_events.variables import Variable
 
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
@@ -32,6 +32,7 @@ from probabilistic_model.probabilistic_circuit.probabilistic_circuit import Deco
     DeterministicSumUnit, ProbabilisticCircuit
 
 import plotly.graph_objects as go
+
 
 class ShowMixin:
     model: JPT
@@ -337,6 +338,12 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         model = ProbabilisticCircuit.from_json(json_dict)
         self.assertAlmostEqual(model.probability(Event()), 1.)
 
+    def test_marginal_conditional_chain(self):
+        model = self.model.probabilistic_circuit
+        marginal = model.marginal(self.model.variables[:2])
+        x, y = self.model.variables[:2]
+        conditional, probability = model.conditional(Event({x: portion.closed(0, 10)}))
+
 
 class MNISTTestCase(unittest.TestCase):
     model: JPT
@@ -518,22 +525,21 @@ class MaxProblemTestCase(unittest.TestCase):
     model: ProbabilisticCircuit
     relative_x: Continuous
     relative_y: Continuous
+    event: ComplexEvent
 
     @classmethod
     def setUpClass(cls):
         with open(os.path.join(os.path.expanduser("~"), "Documents", "move_and_pick_up.pm"),  "r") as file:
             loaded_json = json.load(file)
             cls.model = ProbabilisticCircuit.from_json(loaded_json)
+
+        with open(os.path.join(os.path.expanduser("~"), "Documents", "complex.event"),  "r") as file:
+            loaded_json = json.load(file)
+            cls.event = ComplexEvent.from_json(loaded_json)
         cls.relative_x = [var for var in cls.model.variables if var.name == "relative_x"][0]
         cls.relative_y = [var for var in cls.model.variables if var.name == "relative_y"][0]
 
     def test_inference(self):
-        event1 = Event({self.relative_x: portion.closed(0.1, 0.2),
-                        self.relative_y: portion.closed(0.1, 0.2)})
-        event2 = Event({self.relative_x: portion.closed(0.5, 1.),
-                        self.relative_y: portion.closed(0.5, 1.)})
-        event = event1 | event2
-
-        conditional, probability = self.model.conditional(event)
-        p_xy = conditional.marginal([self.relative_x, self.relative_y])
-        go.Figure(p_xy.domain.plot()).show()
+        p_xy = self.model.marginal([self.relative_x, self.relative_y])
+        conditional, probability = self.model.conditional(self.event)
+        print(conditional)

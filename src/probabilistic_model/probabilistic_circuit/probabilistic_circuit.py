@@ -658,6 +658,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
 
         return result
 
+    @cache_inference_result
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
 
         # if this node has no variables that are required in the marginal, remove it.
@@ -1057,6 +1058,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
         return result
 
+    @cache_inference_result
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         # if this node has no variables that are required in the marginal, remove it.
         if set(self.variables).intersection(set(variables)) == set():
