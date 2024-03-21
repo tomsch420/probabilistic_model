@@ -1289,7 +1289,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         for hash_, node_data in data["hash_to_node_map"].items():
             node = ProbabilisticCircuitMixin.from_json(node_data)
-            hash_remap[hash_] = node
+            hash_remap[int(hash_)] = node
             result.add_node(node)
 
         for source_hash, target_hash in data["unweighted_edges"]:

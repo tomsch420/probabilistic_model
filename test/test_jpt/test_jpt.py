@@ -511,21 +511,21 @@ class BayesianJPTTestCase(unittest.TestCase):
         self.assertLess(len(pc_m.weighted_edges), math.prod([len(v.domain) for v in bayesian_network.variables]))
 
 
-@unittest.skip("This test requires a file on your disk.")
+#  @unittest.skip("This test requires a file on your disk.")
 class MaxProblemTestCase(unittest.TestCase):
 
     model: ProbabilisticCircuit
 
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(os.path.expanduser("~"), "Documents", "boob_cancer_jpt.json"),  "r") as file:
+        with open(os.path.join(os.path.expanduser("~"), "Documents", "move_and_pick_up.pm"),  "r") as file:
             loaded_json = json.load(file)
             cls.model = ProbabilisticCircuit.from_json(loaded_json)
 
     def test_inference(self):
         event = Event()
         conditional, probability = self.model.conditional(event)
-        cpe = [var for var in self.model.variables if var.name == "concave points error"][0]
+        cpe = [var for var in self.model.variables if var.name == "relative_x"][0]
         self.assertIsInstance(cpe, Continuous)
         event[cpe] = portion.closed(0.0225, 0.0528)
         print(conditional.probability(event))
