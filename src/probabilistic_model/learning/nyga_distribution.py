@@ -320,7 +320,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         smooth_sum_unit = DeterministicSumUnit()._from_json(data)
-        result = cls(smooth_sum_unit.variables[0],
+        result = cls([],
                      min_samples_per_quantile=data["min_samples_per_quantile"],
                      min_likelihood_improvement=data["min_likelihood_improvement"])
         for weight, subcircuit in smooth_sum_unit.weighted_subcircuits:

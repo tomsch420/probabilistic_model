@@ -331,6 +331,11 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         marginal = self.model.marginal(variables, as_deterministic_sum=True)
         self.assertIsInstance(marginal, DeterministicSumUnit)
 
+    def test_serialization_of_circuit(self):
+        json_dict = self.model.probabilistic_circuit.to_json()
+        model = ProbabilisticCircuit.from_json(json_dict)
+        self.assertAlmostEqual(model.probability(Event()), 1.)
+
 
 class MNISTTestCase(unittest.TestCase):
     model: JPT
@@ -514,7 +519,8 @@ class MaxProblemTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with open(os.path.join(os.path.expanduser("~"), "Documents", "boob_cancer_jpt.json"),  "r") as file:
-            cls.model = ProbabilisticCircuit.from_json(json.load(file))
+            loaded_json = json.load(file)
+            cls.model = ProbabilisticCircuit.from_json(loaded_json)
 
     def test_inference(self):
         event = Event()
