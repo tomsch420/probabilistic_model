@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import tempfile
 import unittest
 from datetime import datetime
@@ -28,7 +29,7 @@ from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
     SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
-    DeterministicSumUnit
+    DeterministicSumUnit, ProbabilisticCircuit
 
 
 class ShowMixin:
@@ -503,3 +504,22 @@ class BayesianJPTTestCase(unittest.TestCase):
 
         self.assertAlmostEqual(pc_m.probability(complex_event), 0.2333333)
         self.assertLess(len(pc_m.weighted_edges), math.prod([len(v.domain) for v in bayesian_network.variables]))
+
+
+@unittest.skip("This test requires a file on your disk.")
+class MaxProblemTestCase(unittest.TestCase):
+
+    model: ProbabilisticCircuit
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(os.path.expanduser("~"), "Documents", "boob_cancer_jpt.json"),  "r") as file:
+            cls.model = ProbabilisticCircuit.from_json(json.load(file))
+
+    def test_inference(self):
+        event = Event()
+        conditional, probability = self.model.conditional(event)
+        cpe = [var for var in self.model.variables if var.name == "concave points error"][0]
+        self.assertIsInstance(cpe, Continuous)
+        event[cpe] = portion.closed(0.0225, 0.0528)
+        print(conditional.probability(event))

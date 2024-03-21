@@ -318,6 +318,13 @@ class TruncatedGaussianSamplingTestCase(unittest.TestCase):
 
         self.assertAlmostEqual(model.expectation(model.variables)[model.variable], np.array(samples).mean(), delta=0.1)
 
+    def test_with_zero_in_bound(self):
+        model = TruncatedGaussianDistribution(self.x, portion.open(-0.62, 0.0), 0.0, 0.5)
+        samples = model.sample(1000)
+        self.assertEqual(len(samples), 1000)
+        mean = np.array(samples).mean()
+        expectation = model.expectation(model.variables)[model.variable]
+        self.assertAlmostEqual(mean, expectation, delta=0.1)
 
 
 if __name__ == '__main__':

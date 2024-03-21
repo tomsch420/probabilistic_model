@@ -362,11 +362,11 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             limiting_function = np.exp((uniform_samples ** 2) / -2)
 
         # if the mean is below the interval
-        elif self.interval.upper < 0:
+        elif self.interval.upper <= 0:
             limiting_function = np.exp((self.interval.upper ** 2 - uniform_samples ** 2) / 2)
 
         # if the mean is above the interval
-        elif self.interval.lower > 0:
+        elif self.interval.lower >= 0:
             limiting_function = np.exp((self.interval.lower ** 2 - uniform_samples ** 2) / 2)
         else:
             raise ValueError("This should never happen")
@@ -386,4 +386,6 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         return accepted_samples
 
     def sample(self, amount: int) -> List[List[float]]:
+        if self.interval.upper >= portion.inf and self.interval.lower <= -portion.inf:
+            return super().sample(amount)
         return self.robert_rejection_sample(amount).reshape(-1, 1).tolist()
