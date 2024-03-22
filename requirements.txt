@@ -1,4 +1,4 @@
-random-events>=2.0.5
+random-events>=2.0.7
 networkx>=3.0
 portion>=2.4.2
 plotly>=5.19.0
