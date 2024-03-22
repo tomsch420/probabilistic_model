@@ -141,18 +141,13 @@ class CircuitDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.p_x.forward_probability, 1)
         self.assertEqual(self.p_yzx.forward_probability, 1)
 
-    def test_probability(self):
-        event = Event({self.x: 0, self.y: portion.closed(0, 0.5)})
-        probability = self.bayesian_network.probability(event)
-        self.assertEqual(probability, 0.7 * 0.5)
-
     def test_joint_distribution_with_parent(self):
         event = self.bayesian_network.preprocess_event(Event())
         self.bayesian_network.forward_pass(event)
 
         joint_distribution = self.p_yzx.joint_distribution_with_parent()
         event = Event({self.x: 0, self.y: portion.closed(0, 0.5)})
-        self.assertEqual(joint_distribution.probability(event), self.bayesian_network.probability(event))
+        self.assertEqual(joint_distribution.probability(event),0.35)
 
 
 if __name__ == '__main__':

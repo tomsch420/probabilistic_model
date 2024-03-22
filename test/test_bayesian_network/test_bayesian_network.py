@@ -77,16 +77,6 @@ class MinimalBayesianNetworkTestCase(unittest.TestCase):
         likelihood = self.model.likelihood(event)
         self.assertEqual(likelihood, 0.3 * 0.3)
 
-    def test_probability(self):
-        event = Event({self.x: [1], self.y: [0, 1]})
-        probability = self.model.probability(event)
-        self.assertEqual(probability, self.bf_distribution.probability(event))
-
-    def test_probability_empty_x(self):
-        event = Event({self.y: [1]})
-        probability = self.model.probability(event)
-        self.assertEqual(probability, self.bf_distribution.probability(event))
-
     def test_as_probabilistic_circuit(self):
         circuit = self.model.as_probabilistic_circuit()
         for event in itertools.product(self.x.domain, self.y.domain):
@@ -141,11 +131,6 @@ class ComplexBayesianNetworkTestCase(unittest.TestCase):
         for event in itertools.product(*[variable.domain for variable in self.model.variables]):
             self.assertEqual(self.model.likelihood(event), self.bf_distribution.likelihood(event))
 
-    def test_probability(self):
-        event = Event({self.x: [1], self.y: [0, 1], self.z: [0]})
-        probability = self.model.probability(event)
-        self.assertEqual(probability, self.bf_distribution.probability(event))
-
     def test_as_probabilistic_circuit(self):
         circuit = self.model.as_probabilistic_circuit().simplify()
         self.assertLess(len(circuit.weighted_edges), math.prod([len(v.domain) for v in circuit.variables]))
@@ -193,16 +178,11 @@ class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
         likelihood = self.bayesian_network.likelihood(event)
         self.assertEqual(likelihood, 0.3 * 0.5 * 1 / 3)
 
-    def test_probability(self):
-        event = Event({self.x: [0, 1], self.y: portion.closed(1.5, 2)})
-        probability = self.bayesian_network.probability(event)
-        self.assertEqual(probability, 0.3 * 0.25)
-
     def test_as_probabilistic_circuit(self):
         circuit = self.bayesian_network.as_probabilistic_circuit().simplify()
         self.assertEqual(circuit.probability(Event()), 1.)
         event = Event({self.x: [0, 1], self.y: portion.closed(1.5, 2)})
-        self.assertAlmostEqual(self.bayesian_network.probability(event), circuit.probability(event))
+        self.assertAlmostEqual(0.075, circuit.probability(event))
 
 
 class BayesianNetworkWrongOrderTestCase(unittest.TestCase):

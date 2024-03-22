@@ -121,21 +121,6 @@ class JPTTestCase(unittest.TestCase):
         self.real, self.integer, self.symbol = infer_variables_from_dataframe(self.data, scale_continuous_types=False)
         self.model = JPT([self.real, self.integer, self.symbol])
 
-    @unittest.skip("Scaled variables are kinda buggy.")
-    def test_preprocess_data(self):
-        preprocessed_data = self.model.preprocess_data(self.data)
-        mean = preprocessed_data[:, 1].mean()
-        std = preprocessed_data[:, 1].std(ddof=1)
-        self.assertEqual(self.real.mean, mean)
-        self.assertEqual(self.real.std, std)
-
-        # assert that this does not throw exceptions
-        for variable, column in zip(self.model.variables, preprocessed_data.T):
-            if isinstance(variable, random_events.variables.Discrete):
-                variable.decode_many(column.astype(int))
-            else:
-                variable.decode_many(column)
-
     def test_construct_impurity(self):
         impurity = self.model.construct_impurity()
         self.assertIsInstance(impurity, Impurity)
@@ -291,7 +276,7 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
 
         variables = infer_variables_from_dataframe(cls.data, scale_continuous_types=False)
 
-        cls.model = JPT(variables, min_samples_leaf=0.1)
+        cls.model = JPT(variables, min_samples_leaf=0.4)
         cls.model.fit(cls.data)
 
     def test_serialization(self):
@@ -343,6 +328,10 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         marginal = model.marginal(self.model.variables[:2])
         x, y = self.model.variables[:2]
         conditional, probability = model.conditional(Event({x: portion.closed(0, 10)}))
+
+    def test_mode(self):
+        mode, likelihood = self.model.mode()
+        self.assertGreater(len(mode.events), 0)
 
 
 class MNISTTestCase(unittest.TestCase):
@@ -525,21 +514,13 @@ class MaxProblemTestCase(unittest.TestCase):
     model: ProbabilisticCircuit
     relative_x: Continuous
     relative_y: Continuous
-    event: ComplexEvent
 
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(os.path.expanduser("~"), "Documents", "move_and_pick_up.pm"),  "r") as file:
+        with open(os.path.join(os.path.expanduser("~"), "Documents", "boob_cancer_jpt.json"),  "r") as file:
             loaded_json = json.load(file)
             cls.model = ProbabilisticCircuit.from_json(loaded_json)
 
-        with open(os.path.join(os.path.expanduser("~"), "Documents", "complex.event"),  "r") as file:
-            loaded_json = json.load(file)
-            cls.event = ComplexEvent.from_json(loaded_json)
-        cls.relative_x = [var for var in cls.model.variables if var.name == "relative_x"][0]
-        cls.relative_y = [var for var in cls.model.variables if var.name == "relative_y"][0]
-
     def test_inference(self):
-        p_xy = self.model.marginal([self.relative_x, self.relative_y])
-        conditional, probability = self.model.conditional(self.event)
-        print(conditional)
+        mode, _ = self.model.mode()
+        print(mode.events)

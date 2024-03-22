@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import itertools
 import random
 from typing import Tuple, Iterable, TYPE_CHECKING
 
 import networkx as nx
-import numpy as np
 import portion
 from random_events.events import EncodedEvent, VariableMap, Event, ComplexEvent
 from random_events.variables import Variable, Symbolic, Continuous
@@ -195,7 +193,6 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return variable_map.__class__(
             {variable: value for variable, value in variable_map.items() if variable in variables})
 
-    # @cache_inference_result
     def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
 
         # skip trivial case
@@ -882,6 +879,7 @@ class DeterministicSumUnit(SmoothSumUnit):
 
     @cache_inference_result
     def _mode(self) -> Tuple[ComplexEvent, float]:
+
         modes = []
         likelihoods = []
 
@@ -893,7 +891,6 @@ class DeterministicSumUnit(SmoothSumUnit):
 
         # get the most likely result
         maximum_likelihood = max(likelihoods)
-
         mode_events = []
 
         # gather all results that are maximum likely
@@ -979,6 +976,14 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     def is_deterministic(self) -> bool:
         return True
 
+    def is_decomposable(self):
+        for index, subcircuit in enumerate(self.subcircuits):
+            variables = subcircuit.variables
+            for subcircuit_ in self.subcircuits[index+1:]:
+                if len(set(subcircuit_.variables).intersection(set(variables))) > 0:
+                    return False
+        return True
+
     @cache_inference_result
     def _mode(self) -> Tuple[ComplexEvent, float]:
 
@@ -987,8 +992,10 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
         # gather all modes from the children
         for subcircuit in self.subcircuits[1:]:
+
             subcircuit_mode, subcircuit_likelihood = subcircuit._mode()
             mode = mode & subcircuit_mode
+
             likelihood *= subcircuit_likelihood
 
         return mode, likelihood
@@ -1096,27 +1103,6 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             result.mount(copied_subcircuit)
             result.probabilistic_circuit.add_edge(result, copied_subcircuit)
         return result
-
-    def is_decomposable(self) -> bool:
-        """
-        Check if only this product unit is decomposable.
-
-        A product mode is decomposable iff all children have disjoint scopes.
-
-        :return: if this product unit is decomposable
-        """
-        # for every child pair
-        for subcircuits_a, subcircuits_b in itertools.combinations(self.subcircuits, 2):
-
-            # form the intersection of the scopes
-            scope_intersection = set(subcircuits_a.variables) & set(subcircuits_b.variables)
-
-            # if this not empty, the product unit is not decomposable
-            if len(scope_intersection) > 0:
-                return False
-
-        # if every pairwise intersection is empty, the product unit is decomposable
-        return True
 
     @cache_inference_result
     def simplify(self) -> Self:
@@ -1234,7 +1220,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         root.reset_result_of_current_query()
         return result.probabilistic_circuit
 
-    # @graph_inference_caching_wrapper
     def sample(self, amount: int) -> Iterable:
         return self.root.sample(amount)
 

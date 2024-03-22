@@ -326,6 +326,11 @@ class TruncatedGaussianSamplingTestCase(unittest.TestCase):
         expectation = model.expectation(model.variables)[model.variable]
         self.assertAlmostEqual(mean, expectation, delta=0.1)
 
+    def test_with_far_right_interval(self):
+        model = TruncatedGaussianDistribution(self.x, portion.closed(11, float("inf")), 0, 1)
+        samples = model.sample(1000)
+        self.assertEqual(len(samples), 1000)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -94,12 +94,9 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
             # calculate the probability of said state
             parent_state_probability = self.parent.forward_message.likelihood(parent_state)
 
-            event_for_parent = ComplexEvent([Event({self.parent.variable: parent_state})])
             # construct the conditional distribution
-            # conditional, current_probability = (self.conditional_probability_distributions[parent_state]
-            #                                     ._conditional(event))
-
-            conditional, current_probability = self.conditional_probability_distributions[parent_state].conditional(event_for_parent)
+            conditional, current_probability = (self.conditional_probability_distributions[parent_state]
+                                                ._conditional(event))
 
             # if the conditional is None, skip
             if conditional is None:

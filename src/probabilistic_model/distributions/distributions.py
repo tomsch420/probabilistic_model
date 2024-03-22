@@ -453,8 +453,8 @@ class DiracDeltaDistribution(ContinuousDistribution):
         self.density_cap = density_cap
 
     @property
-    def domain(self) -> Event:
-        return Event({self.variable: portion.singleton(self.location)})
+    def domain(self) -> ComplexEvent:
+        return ComplexEvent([Event({self.variable: portion.singleton(self.location)})])
 
     def _pdf(self, value: float) -> float:
         if value == self.location:
@@ -474,8 +474,8 @@ class DiracDeltaDistribution(ContinuousDistribution):
         else:
             return 0
 
-    def _mode(self):
-        return ComplexEvent([self.domain.encode()]), self.density_cap
+    def _mode(self) -> Tuple[ComplexEvent, float]:
+        return self.domain.encode(), self.density_cap
 
     def sample(self, amount: int) -> List[List[float]]:
         return [[self.location] for _ in range(amount)]

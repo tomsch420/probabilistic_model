@@ -330,11 +330,13 @@ class TruncatedGaussianDistribution(GaussianDistribution):
 
         # enforce an upper bound if it is infinite
         if standard_distribution.interval.upper >= float("inf"):
-            standard_distribution.interval = standard_distribution.interval.replace(upper=10)
+            standard_distribution.interval = (standard_distribution.interval.
+                                              replace(upper=standard_distribution.interval.lower + 10))
 
         # enforce a lower bound if it is infinite
         if standard_distribution.interval.lower <= -float("inf"):
-            standard_distribution.interval = standard_distribution.interval.replace(lower=-10)
+            standard_distribution.interval = (standard_distribution.interval.
+                                              replace(lower=standard_distribution.interval.upper - 10))
 
         # sample from double truncated standard normal instead
         samples = standard_distribution.robert_rejection_sample_from_standard_normal_with_double_truncation(amount)
@@ -348,13 +350,28 @@ class TruncatedGaussianDistribution(GaussianDistribution):
     def robert_rejection_sample_from_standard_normal_with_double_truncation(self, amount: int) -> np.ndarray:
         """
         Use robert rejection sampling to sample from the truncated standard normal distribution.
+        Resamples as long as the amount of samples is not reached.
 
         :param amount: The amount of samples to generate
         :return: The samples
         """
         assert self.scale == 1 and self.mean == 0
         # sample from uniform distribution over this distribution's interval
+        accepted_samples = np.array([])
+        while len(accepted_samples) < amount:
+            accepted_samples = np.append(
+                accepted_samples,
+                self.robert_rejection_sample_from_standard_normal_with_double_truncation_helper(amount - len(accepted_samples)))
+        return accepted_samples
 
+    def robert_rejection_sample_from_standard_normal_with_double_truncation_helper(self, amount: int) -> np.ndarray:
+        """
+        Use robert rejection sampling to sample from the truncated standard normal distribution.
+
+        :param amount: The maximum number of samples to generate. The actual number of samples can be lower due to
+            rejection sampling.
+        :return: The samples
+        """
         uniform_samples = np.random.uniform(self.interval.lower, self.interval.upper, amount)
 
         # if the mean in the interval
@@ -371,18 +388,11 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         else:
             raise ValueError("This should never happen")
 
-        # generate standard uniform samples
-        different_uniform_samples = np.random.uniform(0, 1, amount)
+        # generate standard uniform samples as acceptance probabilities
+        acceptance_probabilities = np.random.uniform(0, 1, amount)
 
         # accept samples that are below the limiting function
-        accepted_samples = uniform_samples[different_uniform_samples <= limiting_function]
-
-        # if any got rejected
-        if len(accepted_samples) < amount:
-            # resample the rejected samples
-            accepted_samples = np.concatenate(
-                [accepted_samples, self.robert_rejection_sample(amount - len(accepted_samples))])
-
+        accepted_samples = uniform_samples[acceptance_probabilities <= limiting_function]
         return accepted_samples
 
     def sample(self, amount: int) -> List[List[float]]:
