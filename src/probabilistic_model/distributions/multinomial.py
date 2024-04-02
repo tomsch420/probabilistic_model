@@ -1,16 +1,21 @@
 import itertools
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple, Dict
 
 import numpy as np
 
-from random_events.variables import Discrete
-from random_events.events import EncodedEvent
+from random_events.variables import Discrete, Integer, Symbolic, Variable
+from random_events.events import EncodedEvent, ComplexEvent
 
 from ..probabilistic_model import ProbabilisticModel
-from typing_extensions import Self
+from ..utils import SubclassJSONSerializer
+from typing_extensions import Self, Any
+
+from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
+                                                          DecomposableProductUnit)
+from ..probabilistic_circuit.distributions.distributions import SymbolicDistribution, IntegerDistribution
 
 
-class MultinomialDistribution(ProbabilisticModel):
+class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """
     A multinomial distribution over discrete random variables.
     """
@@ -51,11 +56,11 @@ class MultinomialDistribution(ProbabilisticModel):
 
         return MultinomialDistribution(variables, probabilities)
 
-    def _mode(self) -> Tuple[List[EncodedEvent], float]:
+    def _mode(self) -> Tuple[ComplexEvent, float]:
         likelihood = np.max(self.probabilities)
         events = np.transpose(np.asarray(self.probabilities == likelihood).nonzero())
         mode = [EncodedEvent(zip(self.variables, event)) for event in events.tolist()]
-        return mode, likelihood
+        return ComplexEvent(mode).simplify(), likelihood
 
     def __copy__(self) -> 'MultinomialDistribution':
         """
@@ -96,12 +101,29 @@ class MultinomialDistribution(ProbabilisticModel):
     def _likelihood(self, event: List[int]) -> float:
         return float(self.probabilities[tuple(event)])
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
+        probabilities = np.zeros_like(self.probabilities)
+
+        for simple_event in event.events:
+            probabilities += self._probabilities_from_simple_event(simple_event)
+
+        sum_of_probabilities = probabilities.sum()
+        if sum_of_probabilities == 0:
+            return None, 0
+        else:
+            return MultinomialDistribution(self.variables, probabilities), sum_of_probabilities
+
+    def _probabilities_from_simple_event(self, event: EncodedEvent) -> np.ndarray:
+        """
+        Calculate the probabilities array for a simple event.
+        :param event: The simple event.
+        :return: The array of probabilities that apply to this event.
+        """
         indices = tuple(event[variable] for variable in self.variables)
         indices = np.ix_(*indices)
         probabilities = np.zeros_like(self.probabilities)
         probabilities[indices] = self.probabilities[indices]
-        return MultinomialDistribution(self.variables, probabilities), self.probabilities[indices].sum()
+        return probabilities
 
     def normalize(self) -> Self:
         """
@@ -110,3 +132,87 @@ class MultinomialDistribution(ProbabilisticModel):
         """
         normalized_probabilities = self.probabilities / np.sum(self.probabilities)
         return MultinomialDistribution(self.variables, normalized_probabilities)
+
+    def as_probabilistic_circuit(self) -> DeterministicSumUnit:
+        """
+        Convert this distribution to a probabilistic circuit. A deterministic sum unit with decomposable children is
+        used to describe every state. The size of the circuit is equal to the size of `self.probabilities`.
+
+        :return: The distribution as a probabilistic circuit.
+        """
+        # initialize the result as a deterministic sum unit
+        result = DeterministicSumUnit()
+
+        # iterate through all states of this distribution
+        for event in itertools.product(*[variable.domain for variable in self.variables]):
+
+            # create a product unit for the current state
+            product_unit = DecomposableProductUnit()
+
+            # iterate through all variables
+            for variable, value in zip(self.variables, event):
+
+                # create probabilities for the current variables state as one hot encoding
+                weights = [0.] * len(variable.domain)
+                weights[variable.encode(value)] = 1.
+
+                # create a distribution for the current variable
+                if isinstance(variable, Integer):
+                    distribution = IntegerDistribution(variable, weights)
+                elif isinstance(variable, Symbolic):
+                    distribution = SymbolicDistribution(variable, weights)
+                else:
+                    raise ValueError(f"Variable type {type(variable)} not supported.")
+
+                # mount the distribution to the product unit
+                product_unit.add_subcircuit(distribution)
+
+            # calculate the probability of the current state
+            probability = self.likelihood(event)
+
+            # mount the product unit to the result
+            result.add_subcircuit(product_unit, probability)
+
+        return result
+
+    def encode_full_evidence_event(self, event: Iterable) -> List[int]:
+        """
+        Encode a full evidence event into a list of integers.
+        :param event: The event to encode.
+        :return: The encoded event.
+        """
+        return [variable.encode(value) for variable, value in zip(self.variables, event)]
+
+    def fit(self, data: Iterable[Iterable[Any]]) -> Self:
+        """
+        Fit the distribution to the data.
+        :param data: The data to fit the distribution to.
+        :return: The fitted distribution.
+        """
+        encoded_data = np.zeros((len(data), len(self.variables)), dtype=int)
+        for index, sample in enumerate(data):
+            indices = self.encode_full_evidence_event(sample)
+            encoded_data[index] = indices
+
+        return self._fit(encoded_data)
+
+    def _fit(self, data: np.ndarray) -> Self:
+        probabilities = np.zeros_like(self.probabilities)
+        uniques, counts = np.unique(data, return_counts=True, axis=0)
+
+        for unique, count in zip(uniques.astype(int), counts):
+            probabilities[tuple(unique)] = count
+
+        self.probabilities = probabilities / probabilities.sum()
+        return self
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**SubclassJSONSerializer.to_json(self),
+                "variables": [variable.to_json() for variable in self.variables],
+                "probabilities": self.probabilities.tolist()}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variables = [Variable.from_json(variable) for variable in data["variables"]]
+        probabilities = np.array(data["probabilities"])
+        return cls(variables, probabilities)

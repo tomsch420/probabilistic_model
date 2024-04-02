@@ -6,7 +6,7 @@ from random_events.variables import Variable, Continuous as REContinuous, Intege
 from typing_extensions import Self
 
 
-def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: bool = True,
+def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: bool = False,
                                    min_likelihood_improvement: float = 0.1, min_samples_per_quantile: int = 10) \
         -> List[Variable]:
     """

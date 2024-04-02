@@ -95,7 +95,8 @@ class InductionStepTestCase(unittest.TestCase):
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
         domain = distribution.domain
-        self.assertEqual(domain[self.variable], portion.closed(min(data), max(data)))
+        self.assertEqual(len(domain.events), 1)
+        self.assertEqual(domain.events[0][self.variable], portion.closed(min(data), max(data)))
 
     def test_plot(self):
         np.random.seed(69)

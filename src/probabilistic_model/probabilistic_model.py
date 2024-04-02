@@ -1,7 +1,7 @@
 import abc
 from typing import Tuple, Iterable, List, Optional, Union, TYPE_CHECKING
 
-from random_events.events import Event, EncodedEvent, VariableMap
+from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent, EventType
 from random_events.variables import Variable, Integer, Continuous
 from typing_extensions import Self
 
@@ -49,7 +49,7 @@ class ProbabilisticModel(abc.ABC):
     def variables(self, variables: Iterable[Variable]):
         self._variables = tuple(sorted(variables))
 
-    def preprocess_event(self, event: Event) -> EncodedEvent:
+    def preprocess_event(self, event: EventType) -> ComplexEvent:
         """
         Preprocess an event to the internal representation of the model.
         Furthermore, all variables that are in this model are assigned to some value.
@@ -58,7 +58,25 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event to preprocess.
         :return: The preprocessed event.
         """
-        return (Event({variable: variable.domain for variable in self.variables}) & event).encode()
+        variables = self.variables
+        # if the event is a complex event
+        if isinstance(event, ComplexEvent):
+            for simple_event in event.events:
+                simple_event.fill_missing_variables(variables)
+            return event.encode()
+
+        # if the event is a simple encoded event
+        elif isinstance(event, EncodedEvent):
+            event.fill_missing_variables(variables)
+            return ComplexEvent([event])
+
+        # if the event is a simple event
+        elif isinstance(event, Event):
+            event.fill_missing_variables(variables)
+            return ComplexEvent([event.encode()])
+
+        else:
+            raise ValueError(f"Event {event} is not a valid event.")
 
     def _likelihood(self, event: Iterable) -> float:
         """
@@ -85,7 +103,6 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event is some iterable that represents a value for each variable in the model.
         :return: The likelihood of the event.
         """
-
         return self._likelihood([variable.encode(value) for variable, value in zip(self.variables, event)])
 
     def _probability(self, event: EncodedEvent) -> float:
@@ -97,7 +114,7 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def probability(self, event: Event) -> float:
+    def probability(self, event: EventType) -> float:
         """
         Calculate the probability of an event P(E).
         The event belongs to the class of marginal queries.
@@ -109,9 +126,10 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event to calculate the probability of.
         :return: The probability of the model.
         """
-        return self._probability(self.preprocess_event(event))
+        complex_event = self.preprocess_event(event)
+        return sum(self._probability(event) for event in complex_event.events)
 
-    def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
+    def _mode(self) -> Tuple[ComplexEvent, float]:
         """
         Calculate the mode of the model.
         As there may exist multiple modes, this method returns an Iterable of modes and their likelihood.
@@ -120,7 +138,7 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def mode(self) -> Tuple[List[Event], float]:
+    def mode(self) -> Tuple[ComplexEvent, float]:
         """
         Calculate the mode of the model.
         As there may exist multiple modes, this method returns an Iterable of modes and their likelihood.
@@ -133,7 +151,7 @@ class ProbabilisticModel(abc.ABC):
         :return: The mode of the model and the likelihood.
         """
         mode, likelihood = self._mode()
-        return list(event.decode() for event in mode), likelihood
+        return mode.decode(), likelihood
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         """
@@ -144,7 +162,7 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
         """
         Calculate the conditional distribution of the model given a preprocessed event.
 
@@ -155,7 +173,7 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+    def conditional(self, event: EventType) -> Tuple[Optional[Self], float]:
         """
         Calculate the conditional distribution of the model given an event.
 

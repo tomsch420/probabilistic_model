@@ -1,5 +1,8 @@
+-r ../requirements-dev.txt
 sphinx_rtd_theme
 sphinx-autoapi
 sphinxcontrib-bibtex
 nbsphinx
 sphinx-gallery
+myst-nb
+probabilistic_model

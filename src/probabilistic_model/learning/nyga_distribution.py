@@ -257,10 +257,6 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         else:
             return self._variables
 
-    @property
-    def domain(self) -> Event:
-        return ProbabilisticCircuitMixin.domain.fget(self)
-
     @cache_inference_result
     def _pdf(self, value: Union[float, int]) -> float:
         return sum([weight * subcircuit._pdf(value) for weight, subcircuit in self.weighted_subcircuits])
@@ -269,17 +265,18 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     def _cdf(self, value: Union[float, int]) -> float:
         return sum([weight * subcircuit._cdf(value) for weight, subcircuit in self.weighted_subcircuits])
 
-    def fit(self, data: List[float]):
-        return self._fit(list(self.variable.encode_many(data)))
-
-    def _fit(self, data: List[float]) -> Self:
+    def fit(self, data: List[float], weights: Optional[List[float]] = None) -> Self:
         """
         Fit the distribution to the data.
 
         :param data: The data to fit the distribution to.
+        :param weights: The optional weights of the data points.
 
         :return: The fitted distribution.
         """
+        return self._fit(list(self.variable.encode_many(data)), weights)
+
+    def _fit(self, data: List[float],  weights: Optional[List[float]] = None) -> Self:
 
         # sort the data and calculate the weights
         sorted_data = sorted(set(data))
@@ -289,7 +286,8 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
             self.probabilistic_circuit.add_edge(self, distribution, weight=1)
             return self
 
-        weights = [data.count(value) / len(data) for value in sorted_data]
+        if weights is None:
+            weights = [data.count(value) / len(data) for value in sorted_data]
 
         # construct the initial induction step
         initial_induction_step = InductionStep(data=sorted_data, total_number_of_samples=len(data), weights=weights,
@@ -322,7 +320,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         smooth_sum_unit = DeterministicSumUnit()._from_json(data)
-        result = cls(smooth_sum_unit.variables[0],
+        result = cls([],
                      min_samples_per_quantile=data["min_samples_per_quantile"],
                      min_likelihood_improvement=data["min_likelihood_improvement"])
         for weight, subcircuit in smooth_sum_unit.weighted_subcircuits:
@@ -364,8 +362,9 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         """
         Create a plotly trace for the probability density function.
         """
-        domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
-        x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None]
+        domain = self.domain.events[0][self.variable]
+        domain_size = domain.upper - domain.lower
+        x = [domain.lower - domain_size * 0.05, domain.lower, None]
         y = [0, 0, None]
         for weight, subcircuit in self.weighted_subcircuits:
             uniform: UniformDistribution = subcircuit
@@ -375,45 +374,35 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
             x += [lower_value, upper_value, None]
             y += [pdf_value, pdf_value, None]
 
-        x.extend([self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05])
+        x.extend([domain.upper, domain.upper + domain_size * 0.05])
         y.extend([0, 0])
-        return go.Scatter(x=x, y=y, mode='lines', name="Probability Density Function")
+        return go.Scatter(x=x, y=y, mode='lines', name="PDF")
 
     def cdf_trace(self) -> go.Scatter:
         """
         Create a plotly trace for the cumulative distribution function.
         """
-        domain_size = self.domain[self.variable].upper - self.domain[self.variable].lower
-        x = [self.domain[self.variable].lower - domain_size * 0.05, self.domain[self.variable].lower, None]
+        domain = self.domain.events[0][self.variable]
+        domain_size = domain.upper - domain.lower
+        x = [domain.lower - domain_size * 0.05, domain.lower, None]
         y = [0, 0, None]
-        for subcircuit in self.subcircuits:
+        for subcircuit in sorted(self.subcircuits, key=lambda d: d.interval.lower):
             uniform: UniformDistribution = subcircuit
             lower_value = uniform.interval.lower
             upper_value = uniform.interval.upper
-            x += [lower_value, upper_value, None]
-            y += [self.cdf(lower_value), self.cdf(upper_value), None]
+            x += [lower_value, upper_value]
+            y += [self.cdf(lower_value), self.cdf(upper_value)]
 
-        x.extend([self.domain[self.variable].upper, self.domain[self.variable].upper + domain_size * 0.05])
+        x.extend([domain.upper, domain.upper + domain_size * 0.05])
         y.extend([1, 1])
-        return go.Scatter(x=x, y=y, mode='lines', name="Cumulative Distribution Function")
-
-    def mode_trace(self) -> Tuple[go.Scatter, float]:
-        modes, maximum_likelihood = self.mode()
-        xs = []
-        ys = []
-        for mode in modes[0][self.variable]:
-            xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
-            ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
-
-        trace = go.Scatter(x=xs, y=ys, mode='lines+markers', name="Mode", fill="toself")
-        return trace, maximum_likelihood
+        return go.Scatter(x=x, y=y, mode='lines', name="CDF")
 
     def plot(self) -> List[go.Scatter]:
         """
         Plot the distribution with PDF, CDF, Expectation and Mode.
         """
         traces = [self.pdf_trace(), self.cdf_trace()]
-        mode_trace, maximum_likelihood = self.mode_trace()
+        mode_trace, maximum_likelihood = self.mode_trace_1d()
         self.reset_result_of_current_query()
 
         expectation = self.expectation([self.variable])[self.variable]

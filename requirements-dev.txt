@@ -1,7 +1,6 @@
 -r requirements.txt
-pyjpt >= 0.1.31
-numpy==1.26.3
-pandas==2.2.0
-graphviz~=0.20.1
-scikit-learn==1.4.0
-matplotlib>=3.8.2
+pyjpt
+pandas
+graphviz
+scikit-learn
+matplotlib

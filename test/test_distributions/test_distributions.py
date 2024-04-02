@@ -2,7 +2,7 @@ import unittest
 
 import plotly.graph_objects as go
 import portion
-from random_events.events import Event, VariableMap
+from random_events.events import Event, VariableMap, ComplexEvent
 from random_events.variables import Continuous, Integer, Discrete
 
 from probabilistic_model.distributions.distributions import (UnivariateDistribution, ContinuousDistribution,
@@ -55,7 +55,7 @@ class DiscreteTestCase(unittest.TestCase):
     def test_mode(self):
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 11 / 20)
-        self.assertEqual(mode, [Event({self.variable: 3})])
+        self.assertEqual(mode, ComplexEvent([Event({self.variable: 3})]))
 
     def test_conditional(self):
         event = Event({self.variable: (1, 2)})
@@ -67,6 +67,7 @@ class DiscreteTestCase(unittest.TestCase):
 
     def test_conditional_impossible(self):
         event = Event({self.variable: []})
+
         conditional, probability = self.model.conditional(event)
         self.assertIsNone(conditional)
         self.assertEqual(probability, 0)
@@ -89,12 +90,12 @@ class DiscreteTestCase(unittest.TestCase):
 
     def test_domain(self):
         domain = self.model.domain
-        self.assertEqual(domain, Event({self.variable: self.variable.domain}))
+        self.assertEqual(domain, ComplexEvent([Event({self.variable: self.variable.domain})]))
 
     def test_domain_if_weights_are_zero(self):
         distribution = DiscreteDistribution(self.variable, [0, 0, 1])
         domain = distribution.domain
-        self.assertEqual(domain, Event({distribution.variable: 3}))
+        self.assertEqual(domain.events[0], Event({distribution.variable: 3}))
 
     def test_plot(self):
         fig = go.Figure(self.model.plot())  # fig.show()
@@ -174,7 +175,7 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
-        self.assertEqual(mode, [Event({self.model.variable: 0})])
+        self.assertEqual(mode, ComplexEvent([Event({self.model.variable: 0})]))
         self.assertEqual(likelihood, 2)
 
     def test_sample(self):

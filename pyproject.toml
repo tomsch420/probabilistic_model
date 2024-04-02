@@ -8,7 +8,7 @@ authors = [
     { name="Tom Schierenbeck", email="tom_sch@uni-bremen.de" },
 
 ]
-description = "Factor Graphs for probabilistic reasoning"
+description = "Models for probabilistic reasoning"
 readme = "README.md"
 requires-python = ">=3.6"
 classifiers = [
@@ -21,7 +21,7 @@ keywords=["probabilistic models", "probabilistic machine learning", "probability
 dynamic = ["version", "dependencies"]
 
 [project.urls]
-"Source" = 'https://github.com/probabilistic_model/fglib2'
+"Source" = 'https://github.com/probabilistic_model/probabilistic_model'
 "Bug Tracker" = 'https://github.com/tomsch420/probabilistic_model/issues'
 
 [tool.setuptools.packages.find]

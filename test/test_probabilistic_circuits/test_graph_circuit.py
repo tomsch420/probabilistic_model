@@ -1,15 +1,21 @@
-import random
+import json
+import os.path
 import unittest
-
 import numpy as np
 import portion
 from matplotlib import pyplot as plt
 from random_events.variables import Integer, Continuous
 from typing_extensions import Union
-
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
+from probabilistic_model.probabilistic_circuit.convolution.convolution import (UniformDistributionConvolution,
+                                                                               GaussianDistributionConvolution,
+                                                                               TruncatedGaussianDistributionConvolution,
+                                                                               DiracDeltaDistributionConvolution)
 from probabilistic_model.probabilistic_circuit.distributions.distributions import (ContinuousDistribution,
-                                                                                   UniformDistribution)
+                                                                                   UniformDistribution,
+                                                                                   GaussianDistribution,
+                                                                                   DiracDeltaDistribution,
+                                                                                   TruncatedGaussianDistribution)
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
 
 
@@ -66,7 +72,8 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
     def test_mode(self):
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 1)
-        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1), self.y: portion.closed(3, 4)})])
+        self.assertEqual(mode.events,
+                         [Event({self.x: portion.closed(0, 1), self.y: portion.closed(3, 4)})])
 
     def test_sample(self):
         samples = self.model.sample(100)
@@ -102,7 +109,7 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertIsNone(marginal)
 
     def test_domain(self):
-        domain = self.model.domain
+        domain = self.model.domain.events[0]
         self.assertEqual(domain[self.x], portion.closed(0, 1))
         self.assertEqual(domain[self.y], portion.closed(3, 4))
 
@@ -115,6 +122,15 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         copy = self.model.__copy__()
         self.assertEqual(self.model, copy)
         self.assertNotEqual(id(copy), id(self.model))
+
+    def test_sample_not_equal(self):
+        samples = self.model.sample(10)
+        for sample in samples:
+            same_samples = [s for s in samples if s == sample]
+            self.assertEqual(len(same_samples), 1)
+
+    def test_determinism(self):
+        self.assertTrue(self.model.is_deterministic())
 
 
 class SumUnitTestCase(unittest.TestCase, ShowMixin):
@@ -144,7 +160,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
 
     def test_domain(self):
         domain = self.model.domain
-        self.assertEqual(domain[self.x], portion.closed(0, 1) | portion.closed(3, 4))
+        self.assertEqual(domain.events[0][self.x], portion.closed(0, 1) | portion.closed(3, 4))
 
     def test_weighted_subcircuits(self):
         weighted_subcircuits = self.model.weighted_subcircuits
@@ -193,7 +209,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
     def test_mode(self):
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 0.6)
-        self.assertEqual(mode, [Event({self.x: portion.closed(0, 1)})])
+        self.assertEqual(mode.events[0], Event({self.x: portion.closed(0, 1)}))
 
     def test_serialization(self):
         serialized = self.model.to_json()
@@ -219,6 +235,15 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         s2.probabilistic_circuit.add_weighted_edges_from([(s2, s3, 1.), (s3, u1, 1.)])
         s1.mount(s2)
         self.assertEqual(len(s1.probabilistic_circuit.nodes()), 4)
+
+    def test_sample_not_equal(self):
+        samples = self.model.sample(10)
+        for sample in samples:
+            same_samples = [s for s in samples if s == sample]
+            self.assertEqual(len(same_samples), 1)
+
+    def test_determinism(self):
+        self.assertTrue(self.model.is_deterministic())
 
 
 class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
@@ -323,7 +348,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         marginal = self.model.marginal([self.real])
         mode, likelihood = marginal.mode()
         self.assertEqual(likelihood, 0.5)
-        self.assertEqual(mode, [Event({self.real: portion.closed(0, 1)})])
+        self.assertEqual(mode.events, [Event({self.real: portion.closed(0, 1)})])
 
     def test_mode_raising(self):
         with self.assertRaises(NotImplementedError):
@@ -347,6 +372,15 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
     def test_update_variables(self):
         self.model.update_variables(VariableMap({self.real: self.real3}))
         self.assertEqual(self.model.variables, (self.real2, self.real3))
+
+    def test_sample_not_equal(self):
+        samples = self.model.sample(10)
+        for sample in samples:
+            same_samples = [s for s in samples if s == sample]
+            self.assertEqual(len(same_samples), 1)
+
+    def test_determinism(self):
+        self.assertFalse(self.model.is_deterministic())
 
 
 class FactorizationTestCase(unittest.TestCase, ShowMixin):
@@ -401,7 +435,6 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
 
 
 class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
-
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
 
@@ -433,7 +466,6 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
             self.assertNotEqual(samples[0], samples[1])
 
     def test_sample(self):
-        samples: List = self.model.probabilistic_circuit.sample(2)
         samples: List = self.model.sample(2)
         self.assertEqual(len(samples), 2)
 
@@ -443,6 +475,220 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
         samples = self.model.probabilistic_circuit.sample(1) + self.model.probabilistic_circuit.sample(1)
         self.assertEqual(len(samples), 2)
         self.assertNotEqual(samples[0], samples[1])
+
+    def test_plot_non_deterministic(self):
+        gaussian_1 = GaussianDistribution(Continuous("x"), 0, 1)
+        gaussian_2 = GaussianDistribution(Continuous("x"), 5, 0.5)
+        mixture = SmoothSumUnit()
+        mixture.add_subcircuit(gaussian_1, 0.5)
+        mixture.add_subcircuit(gaussian_2, 0.5)
+        traces = mixture.plot()
+        self.assertGreater(len(traces), 0)
+        # go.Figure(mixture.plot(), mixture.plotly_layout()).show()
+
+    def test_simplify(self):
+        simplified = self.model.simplify()
+        self.assertEqual(len(simplified.probabilistic_circuit.nodes()), 7)
+        self.assertEqual(len(simplified.probabilistic_circuit.edges()), 6)
+
+    def test_plot_2d(self):
+        traces = self.model.plot_2d()
+        assert len(traces) > 0
+        #  go.Figure(traces, self.model.plotly_layout()).show()
+
+
+class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+
+    probabilities = np.array([[0.9, 0.1],
+                              [0.3, 0.7]])
+    model: DeterministicSumUnit
+
+    def setUp(self):
+        random.seed(69)
+        model = DeterministicSumUnit()
+        model.add_subcircuit(UniformDistribution(self.x, portion.closed(-1.5, -0.5)), 0.5)
+        model.add_subcircuit(UniformDistribution(self.x, portion.closed(0.5, 1.5)), 0.5)
+        next_model = model.__copy__()
+        for leaf in next_model.leaves:
+            leaf._variables = (self.y,)
+
+        transition_model = MultinomialDistribution([model.latent_variable, next_model.latent_variable],
+                                                   self.probabilities)
+        next_model.mount_with_interaction_terms(model, transition_model)
+        self.model = next_model
+
+    def test_simplify(self):
+        simplified = self.model.probabilistic_circuit.simplify().root
+        self.assertEqual(len(simplified.probabilistic_circuit.nodes()), len(self.model.probabilistic_circuit.nodes))
+        self.assertEqual(len(simplified.probabilistic_circuit.edges()), len(self.model.probabilistic_circuit.edges))
+
+    def test_sample_not_equal(self):
+        samples = self.model.sample(10)
+        for sample in samples:
+            same_samples = [s for s in samples if s == sample]
+            self.assertEqual(len(same_samples), 1)
+
+    def test_serialization(self):
+        model = self.model.probabilistic_circuit
+        serialized_model = model.to_json()
+        deserialized_model = ProbabilisticCircuit.from_json(serialized_model)
+        self.assertIsInstance(deserialized_model, ProbabilisticCircuit)
+        self.assertEqual(len(model.nodes), len(deserialized_model.nodes))
+        self.assertEqual(len(model.edges), len(deserialized_model.edges))
+        event = Event({self.x: portion.closed(-1, 1), self.y: portion.closed(-1, 1)})
+        self.assertEqual(model.probability(event), deserialized_model.probability(event))
+
+
+class NormalizationTestCase(unittest.TestCase):
+    x: Continuous = Continuous("x")
+
+    def test_normalization(self):
+        u1 = UniformDistribution(self.x, portion.closed(0, 1))
+        u2 = UniformDistribution(self.x, portion.closed(3, 4))
+        sum_unit = DeterministicSumUnit()
+        sum_unit.add_subcircuit(u1, 0.5)
+        sum_unit.add_subcircuit(u2, 0.3)
+        sum_unit.normalize()
+        self.assertAlmostEqual(sum_unit.weights[0], 0.5/0.8)
+        self.assertAlmostEqual(sum_unit.weights[1], 0.3/0.8)
+
+
+class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
+
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+    model: ProbabilisticCircuit
+
+    def setUp(self):
+        product = DecomposableProductUnit()
+        n1 = GaussianDistribution(self.x, 0, 1)
+        n2 = GaussianDistribution(self.y, 0.5, 2)
+        product.add_subcircuit(n1)
+        product.add_subcircuit(n2)
+        self.model = product.probabilistic_circuit
+
+    def test_plot_2d(self):
+        traces = self.model.plot()
+        assert len(traces) > 0
+        # go.Figure(traces, self.model.plotly_layout()).show()
+
+    def test_truncation(self):
+        event = Event({self.x: portion.open(-0.1, 0.1), self.y: portion.open(-0.1, 0.1)})
+        outer_event = event.complement()
+
+        # first truncation
+        conditional, probability = self.model.conditional(outer_event)
+
+        self.assertEqual(outer_event, conditional.domain)
+
+        # go.Figure(conditional.plot(), conditional.plotly_layout()).show()
+        samples = list(conditional.sample(500))
+
+        for sample in samples:
+            self.assertTrue(conditional.likelihood(sample) > 0)
+            self.assertFalse(sample[0] in event[self.x] and sample[1] in event[self.y])
+
+        # second truncation
+        limiting_event = Event({self.x: portion.open(-2, 2), self.y: portion.open(-2, 2)})
+
+        conditional, probability = conditional.conditional(limiting_event)
+        #  self.show(conditional)
+        #  go.Figure(conditional.domain.plot()).show()
+        self.assertEqual(len(conditional.sample(500)), 500)
+
+        # go.Figure(conditional.plot(), conditional.plotly_layout()).show()
+
+        domain = outer_event & limiting_event
+        self.assertEqual(domain, conditional.domain)
+
+    def test_open_closed_set_bug(self):
+        tg1 = TruncatedGaussianDistribution(self.y, portion.open(-0.1, 0.1), 0, 1)
+        event = Event({self.x: portion.open(-2, 2), self.y: portion.open(-2, 2)})
+        r, _ = tg1.conditional(event)
+
+        self.assertIsNotNone(r)
+
+
+class ComplexInferenceTestCase(unittest.TestCase):
+
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+    model: ProbabilisticCircuit
+
+    e1: Event = Event({x: portion.closed(0, 1), y: portion.closedopen(0, 1)})
+    e2: Event = Event({x: portion.closed(1.5, 2), y: portion.closed(1.5, 2)})
+
+    event: ComplexEvent = e1 | e2
+
+    def setUp(self):
+        root = DecomposableProductUnit()
+        px = UniformDistribution(self.x, portion.closed(0, 2))
+        py = UniformDistribution(self.y, portion.closed(0, 3))
+        root.add_subcircuit(px)
+        root.add_subcircuit(py)
+        self.model = root.probabilistic_circuit
+
+    def test_complex_probability(self):
+        p = self.model.probability(self.event)
+        self.assertEqual(self.model.probability(self.e1) + self.model.probability(self.e2), p)
+
+    def test_complex_conditional(self):
+        conditional, probability = self.model.conditional(self.event)
+        self.assertAlmostEqual(conditional.probability(self.event), 1.)
+
+
+class ConvolutionTestCase(unittest.TestCase, ShowMixin):
+
+    def setUp(self):
+        self.variable = Continuous("x")
+        self.interval = portion.closed(-1, 1)
+        self.mean = 0
+        self.scale = 1
+        self.location = 3
+        self.density_cap = 1
+
+    def test_uniform_with_dirac_delta_convolution(self):
+        uniform_distribution = UniformDistribution(self.variable, self.interval)
+        dirac_delta_distribution = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        convolution = UniformDistributionConvolution(uniform_distribution)
+        result = convolution.convolve_with_dirac_delta(dirac_delta_distribution)
+        self.assertEqual(result.interval, portion.closed(self.interval.lower + self.location,
+                                                         self.interval.upper + self.location))
+
+    def test_dirac_delta_with_dirac_delta_convolution(self):
+        dirac_delta_distribution1 = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        dirac_delta_distribution2 = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        convolution = DiracDeltaDistributionConvolution(dirac_delta_distribution1)
+        result = convolution.convolve_with_dirac_delta(dirac_delta_distribution2)
+        self.assertEqual(result.location, self.location * 2)
+
+    def test_gaussian_with_dirac_delta_convolution(self):
+        gaussian_distribution = GaussianDistribution(self.variable, self.mean, self.scale)
+        dirac_delta_distribution = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        convolution = GaussianDistributionConvolution(gaussian_distribution)
+        result = convolution.convolve_with_dirac_delta(dirac_delta_distribution)
+        self.assertEqual(result.mean, self.mean + self.location)
+
+    def test_gaussian_with_gaussian_convolution(self):
+        gaussian_distribution1 = GaussianDistribution(self.variable, self.mean, self.scale)
+        gaussian_distribution2 = GaussianDistribution(self.variable, self.mean, self.scale)
+        convolution = GaussianDistributionConvolution(gaussian_distribution1)
+        result = convolution.convolve_with_gaussian(gaussian_distribution2)
+        self.assertEqual(result.mean, self.mean * 2)
+        self.assertEqual(result.scale, self.scale * 2)
+
+    def test_truncated_gaussian_with_dirac_delta_convolution(self):
+        truncated_gaussian_distribution = TruncatedGaussianDistribution(self.variable, self.interval, self.mean,
+                                                                        self.scale)
+        dirac_delta_distribution = DiracDeltaDistribution(self.variable, self.location, self.density_cap)
+        convolution = TruncatedGaussianDistributionConvolution(truncated_gaussian_distribution)
+        result = convolution.convolve_with_dirac_delta(dirac_delta_distribution)
+        self.assertEqual(result.interval, portion.closed(self.interval.lower + self.location,
+                                                         self.interval.upper + self.location))
+        self.assertEqual(result.mean, self.mean + self.location)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -99,14 +99,14 @@ class MultinomialInferenceTestCase(unittest.TestCase):
 
     def test_random_mode(self):
         mode, probability = self.random_distribution.mode()
-        mode = mode[0]
+        mode = mode.events[0]
         self.assertEqual(probability, self.random_distribution.probabilities.max())
         self.assertEqual(mode["X"], (0,))
         self.assertEqual(mode["Y"], (0,))
 
     def test_crafted_mode(self):
         mode, probability = self.crafted_distribution.mode()
-        mode = mode[0]
+        mode = mode.events[0]
         self.assertEqual(probability, self.crafted_distribution.probabilities.max())
         self.assertEqual(mode["X"], (1,))
         self.assertEqual(mode["Y"], (0,))
@@ -115,11 +115,11 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         distribution = MultinomialDistribution([self.x, self.y], np.array([[0.1, 0.7, 0.3], [0.7, 0.4, 0.1]]), )
         mode, likelihood = distribution.mode()
         self.assertEqual(likelihood, 0.7)
-        self.assertEqual(len(mode), 2)
-        self.assertEqual(mode[0]["X"], (0,))
-        self.assertEqual(mode[0]["Y"], (1,))
-        self.assertEqual(mode[1]["X"], (1,))
-        self.assertEqual(mode[1]["Y"], (0,))
+        self.assertEqual(len(mode.events), 2)
+        self.assertEqual(mode.events[0]["X"], (0,))
+        self.assertEqual(mode.events[0]["Y"], (1,))
+        self.assertEqual(mode.events[1]["X"], (1,))
+        self.assertEqual(mode.events[1]["Y"], (0,))
 
     def test_crafted_probability(self):
         distribution = self.crafted_distribution.normalize()
@@ -158,6 +158,21 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         self.assertAlmostEqual(conditional.probability(event), 1)
         self.assertAlmostEqual(conditional.probability(Event()), 1.)
         self.assertEqual(conditional.probability(Event({self.y: 2})), 0.)
+
+    def test_as_probabilistic_circuit(self):
+        distribution = self.random_distribution.normalize()
+        circuit = distribution.as_probabilistic_circuit()
+
+        for event in itertools.product(self.x.domain, self.y.domain, self.z.domain):
+            event = Event(zip([self.x, self.y, self.z], event))
+            self.assertAlmostEqual(distribution.probability(event),
+                                   circuit.probability(event))
+
+    def test_serialization(self):
+        distribution = self.random_distribution
+        serialized = distribution.to_json()
+        deserialized = MultinomialDistribution.from_json(serialized)
+        self.assertEqual(distribution, deserialized)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import tempfile
 import unittest
 from datetime import datetime
@@ -7,22 +8,30 @@ from datetime import datetime
 import networkx as nx
 import numpy as np
 import pandas as pd
+import portion
 import random_events
 import sklearn.datasets
 from jpt import infer_from_dataframe as old_infer_from_dataframe
 from jpt.learning.impurity import Impurity
 from jpt.trees import JPT as OldJPT, Leaf
 from matplotlib import pyplot as plt
-from random_events.events import Event
+from random_events.events import Event, ComplexEvent
 from random_events.variables import Variable
 
+from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
+from probabilistic_model.bayesian_network.distributions import (DiscreteDistribution, ConditionalProbabilisticCircuit,
+                                                                ConditionalProbabilityTable)
+from probabilistic_model.distributions.multinomial import MultinomialDistribution
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic, Continuous)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
     SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
+    DeterministicSumUnit, ProbabilisticCircuit
+
+import plotly.graph_objects as go
 
 
 class ShowMixin:
@@ -77,7 +86,7 @@ class InferFromDataFrameTestCase(unittest.TestCase):
         self.assertEqual(self.data.dtypes.iloc[2], object)
 
     def test_infer_from_dataframe_with_scaling(self):
-        real, integer, symbol = infer_variables_from_dataframe(self.data)
+        real, integer, symbol = infer_variables_from_dataframe(self.data, scale_continuous_types=True)
         self.assertEqual(real.name, "real")
         self.assertIsInstance(real, ScaledContinuous)
         self.assertEqual(integer.name, "integer")
@@ -111,21 +120,6 @@ class JPTTestCase(unittest.TestCase):
         self.data = data
         self.real, self.integer, self.symbol = infer_variables_from_dataframe(self.data, scale_continuous_types=False)
         self.model = JPT([self.real, self.integer, self.symbol])
-
-    @unittest.skip("Scaled variables are kinda buggy.")
-    def test_preprocess_data(self):
-        preprocessed_data = self.model.preprocess_data(self.data)
-        mean = preprocessed_data[:, 1].mean()
-        std = preprocessed_data[:, 1].std(ddof=1)
-        self.assertEqual(self.real.mean, mean)
-        self.assertEqual(self.real.std, std)
-
-        # assert that this does not throw exceptions
-        for variable, column in zip(self.model.variables, preprocessed_data.T):
-            if isinstance(variable, random_events.variables.Discrete):
-                variable.decode_many(column.astype(int))
-            else:
-                variable.decode_many(column)
 
     def test_construct_impurity(self):
         impurity = self.model.construct_impurity()
@@ -273,16 +267,16 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         data = sklearn.datasets.load_breast_cancer(as_frame=True)
 
         df = data.data
-        target = data.target
-        target[target == 1] = "malignant"
-        target[target == 0] = "friendly"
+        target = data.target.astype(str)
+        target[target == "1"] = "malignant"
+        target[target == "0"] = "friendly"
 
         df["malignant"] = target
         cls.data = df
 
         variables = infer_variables_from_dataframe(cls.data, scale_continuous_types=False)
 
-        cls.model = JPT(variables, min_samples_leaf=0.1)
+        cls.model = JPT(variables, min_samples_leaf=0.4)
         cls.model.fit(cls.data)
 
     def test_serialization(self):
@@ -319,6 +313,26 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         marginal = self.model.marginal(variables)
         self.assertIsInstance(marginal, SymbolicDistribution)
 
+    def test_univariate_symbolic_marginal_as_sum_unit(self):
+        variables = [v for v in self.model.variables if v.name == "malignant"]
+        marginal = self.model.marginal(variables, as_deterministic_sum=True)
+        self.assertIsInstance(marginal, DeterministicSumUnit)
+
+    def test_serialization_of_circuit(self):
+        json_dict = self.model.probabilistic_circuit.to_json()
+        model = ProbabilisticCircuit.from_json(json_dict)
+        self.assertAlmostEqual(model.probability(Event()), 1.)
+
+    def test_marginal_conditional_chain(self):
+        model = self.model.probabilistic_circuit
+        marginal = model.marginal(self.model.variables[:2])
+        x, y = self.model.variables[:2]
+        conditional, probability = model.conditional(Event({x: portion.closed(0, 10)}))
+
+    def test_mode(self):
+        mode, likelihood = self.model.mode()
+        self.assertGreater(len(mode.events), 0)
+
 
 class MNISTTestCase(unittest.TestCase):
     model: JPT
@@ -350,3 +364,163 @@ class MNISTTestCase(unittest.TestCase):
         model_ = JPT.from_json(model_)
         self.assertEqual(model, model_)
         file.close()
+
+
+class BayesianJPTTestCase(unittest.TestCase):
+    model_sl_sw: JPT
+    model_pl_pw: JPT
+    model_species: JPT
+
+    sl: Continuous
+    sw: Continuous
+    pl: Continuous
+    pw: Continuous
+    species: Integer
+
+    species_sepal_interaction_term: MultinomialDistribution
+    species_petal_interaction_term: MultinomialDistribution
+
+    subcircuit_indices: pd.DataFrame
+
+    species_latent_variable: random_events.variables.Discrete
+    sepal_latent_variable: random_events.variables.Discrete
+    petal_latent_variable: random_events.variables.Discrete
+
+    @classmethod
+    def setUpClass(cls):
+        iris = sklearn.datasets.load_iris(as_frame=True)
+        df = iris.data
+        target = iris.target
+        df["species"] = target
+
+        variables = infer_variables_from_dataframe(df, scale_continuous_types=False, min_likelihood_improvement=0.1)
+
+        cls.sl, cls.sw, cls.pl, cls.pw, cls.species = variables
+
+        model_sl_sw = JPT(variables, min_samples_leaf=0.4, features=[cls.sl, cls.sw], targets=variables)
+        model_sl_sw.fit(df)
+
+        cls.model_sl_sw = model_sl_sw.marginal([cls.sl, cls.sw])
+
+        model_pl_pw = JPT(variables, min_samples_leaf=0.4, features=[cls.pl, cls.pw], targets=variables)
+        model_pl_pw.fit(df)
+        cls.model_pl_pw = model_pl_pw.marginal([cls.pl, cls.pw])
+
+        model_species = JPT(variables, min_samples_leaf=0.3, features=[cls.species], targets=variables)
+        model_species.fit(df)
+        cls.model_species = model_species.marginal([cls.species], simplify_if_univariate=False)
+
+        subcircuit_indices = np.zeros((len(df), 3))
+        for index, sample in enumerate(df.values):
+            sl, sw, pl, pw, species = sample
+            subcircuit_indices[index, 0] = cls.model_sl_sw.sub_circuit_index_of_sample((sl, sw))
+            subcircuit_indices[index, 1] = cls.model_pl_pw.sub_circuit_index_of_sample((pl, pw))
+            subcircuit_indices[index, 2] = cls.model_species.sub_circuit_index_of_sample((species,))
+
+        cls.subcircuit_indices = pd.DataFrame(subcircuit_indices, columns=["sl_sw", "pl_pw", "species"])
+
+        cls.species_latent_variable = random_events.variables.Discrete("species.latent",
+                                                                       range(len(cls.model_species.subcircuits)))
+        cls.sepal_latent_variable = random_events.variables.Discrete("sepal.latent",
+                                                                     range(len(cls.model_sl_sw.subcircuits)))
+        cls.petal_latent_variable = random_events.variables.Discrete("petal.latent",
+                                                                     range(len(cls.model_sl_sw.subcircuits)))
+
+        cls.species_sepal_interaction_term = MultinomialDistribution(
+            [cls.sepal_latent_variable, cls.species_latent_variable])
+        cls.species_sepal_interaction_term._fit(subcircuit_indices[:, (0, 2)])
+
+        cls.species_petal_interaction_term = MultinomialDistribution(
+            [cls.petal_latent_variable, cls.species_latent_variable])
+        cls.species_petal_interaction_term._fit(subcircuit_indices[:, (1, 2)])
+
+    def test_setup(self):
+        self.assertEqual(self.model_sl_sw.variables, (self.sl, self.sw))
+        self.assertEqual(self.model_pl_pw.variables, (self.pl, self.pw))
+        self.assertEqual(self.model_species.variables, (self.species,))
+
+        self.assertGreater(len(self.model_sl_sw.subcircuits), 1)
+        self.assertGreater(len(self.model_pl_pw.subcircuits), 1)
+        self.assertGreater(len(self.model_species.subcircuits), 1)
+
+        self.assertFalse(self.subcircuit_indices.isna().any().any())
+
+        self.assertEqual(self.species_petal_interaction_term.probabilities.sum(), 1.)
+        self.assertEqual(self.species_sepal_interaction_term.probabilities.sum(), 1.)
+
+    def test_to_bayesian_network(self):
+
+        # create bayesian network with root node
+        bayesian_network = BayesianNetwork()
+        root = DiscreteDistribution(self.species_latent_variable, self.model_species.weights)
+        self.assertEqual(root.weights, [1 / 3] * 3)
+        bayesian_network.add_node(root)
+
+        p_species = ConditionalProbabilisticCircuit(self.model_species.variables)
+        p_species.from_unit(self.model_species)
+        bayesian_network.add_node(p_species)
+        bayesian_network.add_edge(root, p_species)
+
+
+        # mount the interaction term with the latent variable of the sepal distribution
+        p_sepal_species = ConditionalProbabilityTable(self.sepal_latent_variable)
+        p_sepal_species.from_multinomial_distribution(self.species_sepal_interaction_term)
+        bayesian_network.add_node(p_sepal_species)
+        bayesian_network.add_edge(root, p_sepal_species)
+
+        # mount the distributions of the sepal variables
+        p_sepal = ConditionalProbabilisticCircuit(self.model_sl_sw.variables)
+        p_sepal.from_unit(self.model_sl_sw)
+        [self.assertIsInstance(circuit.root, DecomposableProductUnit) for circuit in
+         p_sepal.conditional_probability_distributions.values()]
+        bayesian_network.add_node(p_sepal)
+        bayesian_network.add_edge(p_sepal_species, p_sepal)
+
+        # mount the interaction term with the latent variable of the petal distribution
+        p_petal_species = ConditionalProbabilityTable(self.petal_latent_variable)
+        p_petal_species.from_multinomial_distribution(self.species_petal_interaction_term)
+        bayesian_network.add_node(p_petal_species)
+        bayesian_network.add_edge(root, p_petal_species)
+
+        # mount the distributions of the petal variables
+        p_petal = ConditionalProbabilisticCircuit(self.model_pl_pw.variables)
+        p_petal.from_unit(self.model_pl_pw)
+        [self.assertIsInstance(circuit.root, DecomposableProductUnit) for circuit in
+         p_petal.conditional_probability_distributions.values()]
+        bayesian_network.add_node(p_petal)
+        bayesian_network.add_edge(p_petal_species, p_petal)
+
+        # test some queries
+        self.assertAlmostEqual(bayesian_network.as_probabilistic_circuit().probability(Event()), 1)
+
+        e_species_1 = Event({self.species: 0})
+        #  bn_p_species_1 = bayesian_network.probability(e_species_1)
+        # self.assertAlmostEqual(bn_p_species_1, 1 / 3)
+        self.assertAlmostEqual(bayesian_network.as_probabilistic_circuit().probability(e_species_1), 1 / 3)
+
+        complex_event = Event({self.species: 0,
+                               self.sl: portion.closed(4.5, 5.5)})
+        pc = bayesian_network.as_probabilistic_circuit()
+        pc_m = pc.marginal([v for v in pc.variables if not v.name.endswith(".latent")]).simplify()
+        self.assertEqual(pc_m.variables, (self.pl, self.pw, self.sl, self.sw, self.species))
+
+        self.assertAlmostEqual(pc_m.probability(complex_event), 0.2333333)
+        self.assertLess(len(pc_m.weighted_edges), math.prod([len(v.domain) for v in bayesian_network.variables]))
+
+
+@unittest.skip("This test requires a file on your disk.")
+class MaxProblemTestCase(unittest.TestCase):
+
+    model: ProbabilisticCircuit
+    relative_x: Continuous
+    relative_y: Continuous
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(os.path.expanduser("~"), "Documents", "boob_cancer_jpt.json"),  "r") as file:
+            loaded_json = json.load(file)
+            cls.model = ProbabilisticCircuit.from_json(loaded_json)
+
+    def test_inference(self):
+        mode, _ = self.model.mode()
+        print(mode.events)

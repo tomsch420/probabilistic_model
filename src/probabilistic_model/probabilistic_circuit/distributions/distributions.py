@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from typing import Iterable
 
-from random_events.events import EncodedEvent
+from random_events.events import EncodedEvent, Event, ComplexEvent
 from random_events.variables import Variable
 from typing_extensions import Union, Tuple, Optional, Self
 
@@ -30,6 +32,18 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
 
     def __hash__(self):
         return ProbabilisticCircuitMixin.__hash__(self)
+
+    @cache_inference_result
+    def _conditional_from_single_event(self, event: EncodedEvent) -> \
+            Tuple[Optional[Union['ContinuousDistribution', 'DiracDeltaDistribution', DeterministicSumUnit]], float]:
+        return super().conditional(event)
+
+    @cache_inference_result
+    def simplify(self) -> Self:
+        return self.__copy__()
+
+    def empty_copy(self) -> Self:
+        return self.__copy__()
 
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin):
@@ -77,17 +91,27 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, P
         return DiracDeltaDistribution(conditional.variable, conditional.location, conditional.density_cap), probability
 
     @cache_inference_result
-    def _conditional(self, event: EncodedEvent) -> \
-            Tuple[Optional[Union['ContinuousDistribution', 'DiracDeltaDistribution', DeterministicSumUnit]], float]:
-        return super()._conditional(event)
-
-    @cache_inference_result
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         return PMContinuousDistribution.marginal(self, variables)
 
 
 class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, ProbabilisticCircuitMixin):
-    ...
+
+    def as_deterministic_sum(self) -> DeterministicSumUnit:
+        """
+        Convert this distribution to a deterministic sum unit that encodes the same distribution.
+        The result has as many children as the domain of the variable and each child encodes the value of the variable.
+
+        :return: A deterministic sum unit that encodes the same distribution.
+        """
+        result = DeterministicSumUnit()
+
+        for event in self.variable.domain:
+            event = Event({self.variable: event})
+            conditional, probability = self.conditional(event)
+            result.add_subcircuit(conditional, probability)
+
+        return result
 
 
 class DiracDeltaDistribution(ContinuousDistribution, PMDiracDeltaDistribution):
@@ -99,10 +123,20 @@ class UniformDistribution(ContinuousDistribution, PMUniformDistribution):
 
 
 class GaussianDistribution(ContinuousDistribution, PMGaussianDistribution):
-    ...
+
+    def conditional_from_simple_interval(self, interval: portion.Interval) -> (
+            Tuple)[Optional[TruncatedGaussianDistribution], float]:
+
+        conditional, probability = super().conditional_from_simple_interval(interval)
+
+        if probability == 0:
+            return None, 0
+
+        return TruncatedGaussianDistribution(conditional.variable, conditional.interval,
+                                             conditional.mean, conditional.scale), probability
 
 
-class TruncatedGaussianDistribution(ContinuousDistribution, PMTruncatedGaussianDistribution):
+class TruncatedGaussianDistribution(GaussianDistribution, ContinuousDistribution, PMTruncatedGaussianDistribution):
     ...
 
 

@@ -1,7 +1,7 @@
 import unittest
 from typing import Iterable
 
-from random_events.events import Event, EncodedEvent
+from random_events.events import Event, EncodedEvent, ComplexEvent
 from random_events.variables import Symbolic, Discrete, Continuous, Variable
 
 from probabilistic_model.probabilistic_model import (ProbabilisticModel)
@@ -22,8 +22,8 @@ class ProbabilisticModelTestDouble(ProbabilisticModel):
         return 1.0
 
     def _mode(self):
-        result = [EncodedEvent({self.variables[0]: 0, self.variables[1]: 0, self.variables[2]: 0}),
-                  EncodedEvent({self.variables[0]: 1, self.variables[1]: 1, self.variables[2]: 1})]
+        result = ComplexEvent([EncodedEvent({self.variables[0]: 0, self.variables[1]: 0, self.variables[2]: 0}),
+                  EncodedEvent({self.variables[0]: 1, self.variables[1]: 1, self.variables[2]: 1})])
         return result, 1.0
 
     def marginal(self, variables: Iterable[Variable]) -> 'ProbabilisticModel':
@@ -87,9 +87,9 @@ class ProbabilisticModelTestDoubleTestCase(unittest.TestCase):
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
-        self.assertEqual(len(mode), 2)
+        self.assertEqual(len(mode.events), 2)
         self.assertEqual(likelihood, 1.0)
-        [self.assertIsInstance(event, Event) for event in mode]
+        [self.assertIsInstance(event, Event) for event in mode.events]
 
     def test_marginal(self):
         self.assertEqual(self.model.variables, self.model.marginal(self.model.variables).variables)
