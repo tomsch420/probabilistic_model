@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import queue
 import random
 from typing import Tuple, Iterable, TYPE_CHECKING
 
@@ -530,6 +531,45 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             "height": 30,
             "label": self.representation
         }
+
+    def area_validation_metric(self, other: Self) -> float:
+        assert self.variables == other.variables, "The AVM can only be evaluated on models with the same variables"
+        avm = 0.
+        own_nodes_weights = nodes_weights(self)
+        other_nodes_weights = nodes_weights(other)
+
+        for own_leaf in self.leaves:
+            for other_leaf in other.leaves:
+                if own_leaf.variable == other_leaf.variable:
+                    p_own_leaf = sum(own_nodes_weights[hash(own_leaf)])
+                    p_other_leaf = sum(own_nodes_weights[hash(other_leaf)])
+                    avm += p_own_leaf * p_other_leaf * own_leaf.area_validation_metric(other_leaf)
+        return avm
+
+def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
+    node_weights = {hash(circuit.root): [1]}
+    seen_nodes = set()
+    seen_nodes.add(hash(circuit.root))
+    to_visit_nodes = queue.Queue()
+
+    to_visit_nodes.put(circuit.root)
+    while not to_visit_nodes.empty():
+        node = to_visit_nodes.get()
+        # sollte schon garantiert sein durch Beirten Suche
+        # if len([x for x in pc.predecessors(node) if x not in visted_nodes]) != 0:
+        #     to_visit_nodes.put(node)
+        #     continue
+        succ_iter = circuit.successors(node)
+        for succ in succ_iter:
+            if circuit.has_edge(node, succ):
+                weight = circuit.get_edge_data(node, succ)["weight"]
+                node_weights[hash(succ)] = [old * weight for old in node_weights[hash(node)]] + node_weights.get(
+                    hash(succ), [])
+                if hash(succ) not in seen_nodes:
+                    seen_nodes.add(hash(succ))
+                    to_visit_nodes.put(succ)
+    return node_weights
+
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
     label = 'shape=stencil(tZVtb4MgEMc/DW8XHmLSt43bvgdTOkkpEKBr9+2LoGvxgXULGqPh/tzPu5MDQGrbUc0Ahh0grwBjBKF/+vFlMqZWs8ZF44FfWRvN1hl1ZBfeugHAZccMd71K3gDc+zn9TepGSekJXEmbKA+6h1EuvS+8Rtjw7e9kpD3/xBwzQ4TRCvD789iXahsw2ijeFDtGXzzecuA0YrTVjysGRv/Hktpb1hY3qT9oc/w06izbudeqdlCGLQg/MhciNl4mzTihUUIZb4jvkAfABIYrX6bHzvbbwb3Dcd5P037iTBjlk/pi97pXk4VS5dgjQnC5jtg9hUijQOmqqrKVWY5i9xdE+PkrdRoLX6rCi1toPjMmBNf2N8b0gJgeIEVTD26zrgjWeIAFww0=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'

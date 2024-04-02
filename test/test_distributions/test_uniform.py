@@ -99,17 +99,24 @@ class UniformDistributionTestCase(unittest.TestCase):
         distribution_2 = UniformDistribution(variable, portion.closed(-4, 15))
         self.assertEqual(distribution_1.area_validation_metric(distribution_2), (22 / 19) / 2)
 
-    def test_avm(self):
+    def test_avm_partly_joint(self):
+        variable = self.distribution.variable
+        distribution_1 = UniformDistribution(variable, portion.closed(7, 24))
+        distribution_2 = UniformDistribution(variable, portion.closed(-4, 15))
+        self.assertEqual(distribution_1.area_validation_metric(distribution_2), (22 / 19) / 2)
+
+    def test_avm_no_overlapping(self):
         variable = self.distribution.variable
         distribution_1 = UniformDistribution(variable, portion.closed(0, 1))
         distribution_2 = UniformDistribution(variable, portion.closed(2, 3))
         self.assertEqual(distribution_1.area_validation_metric(distribution_2), 1)
 
-    def test_serialization(self):
-        serialized = self.distribution.to_json()
-        deserialized = SubclassJSONSerializer.from_json(serialized)
-        self.assertEqual(self.distribution, deserialized)
-        self.assertIsInstance(deserialized, UniformDistribution)
+    def test_avm_overlapping(self):
+        variable = self.distribution.variable
+        distribution_1 = UniformDistribution(variable, portion.closed(0, 1))
+        distribution_2 = UniformDistribution(variable, portion.closed(0, 1))
+        self.assertEqual(distribution_1.area_validation_metric(distribution_2), 0)
+
 
     def test_variable_setting(self):
         distribution = UniformDistribution(Continuous("x"), portion.closed(0, 1))

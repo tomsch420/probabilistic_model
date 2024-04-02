@@ -106,6 +106,17 @@ class DiscreteTestCase(unittest.TestCase):
         self.assertIsInstance(deserialized, DiscreteDistribution)
         self.assertEqual(deserialized, self.model)
 
+    def test_avm_same(self):
+        distribution1 = DiscreteDistribution(self.variable, [0, 4/12, 8/12])
+        distribution2 = DiscreteDistribution(self.variable, [0, 4/12, 8/12])
+        self.assertEqual(distribution1.area_validation_metric(distribution2), 0)
+
+    def test_avm_different(self):
+        distribution1 = DiscreteDistribution(self.variable, [8/12, 0, 4/12])
+        distribution2 = DiscreteDistribution(self.variable, [0, 4/12, 8/12])
+        self.assertEqual(distribution1.area_validation_metric(distribution2), 8/12)
+
+
 
 class IntegerDistributionTestCase(unittest.TestCase):
     variable = Integer("x", (1, 2, 4))

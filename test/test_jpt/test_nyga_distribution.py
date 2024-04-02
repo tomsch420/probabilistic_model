@@ -178,6 +178,23 @@ class NygaDistributionTestCase(unittest.TestCase):
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
         # fig.show()
+    def test_avm_one_leaf(self):
+        model1 = NygaDistribution(self.x)
+        model1.add_subcircuit(UniformDistribution(self.x, portion.closed(-1.5, -0.5)), 0.5)
+        y: Continuous = Continuous("y")
+        model2 = NygaDistribution(y)
+        model2.add_subcircuit(UniformDistribution(y, portion.closed(-1.5, -0.5)), 0.5)
+        self.assertEqual(model1.area_validation_metric(model2), 0.0)
+    def test_avm_two_leafs(self):
+        model1 = NygaDistribution(self.x)
+        model1.add_subcircuit(UniformDistribution(self.x, portion.closed(-1.5, -0.5)), 0.5)
+        model1.add_subcircuit(UniformDistribution(self.x, portion.closed(0.5, 1.5)), 0.5)
+        y: Continuous = Continuous("y")
+        model2 = NygaDistribution(y)
+        model2.add_subcircuit(UniformDistribution(y, portion.closed(-1.5, -0.5)), 0.5)
+        model2.add_subcircuit(UniformDistribution(y, portion.closed(0.5, 1.5)), 0.5)
+        self.assertEqual(model1.area_validation_metric(model2), 0.25)
+
 
 
 class FittedNygaDistributionTestCase(unittest.TestCase):
