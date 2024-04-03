@@ -19,13 +19,14 @@ from ..nyga_distribution import NygaDistribution
 from ...probabilistic_circuit.distributions.distributions import (DiracDeltaDistribution,
                                                                   SymbolicDistribution,
                                                                   IntegerDistribution)
-from ...probabilistic_circuit.probabilistic_circuit import DeterministicSumUnit, DecomposableProductUnit as DPU
+from ...probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit,
+                                                            DecomposableProductUnit as PMDecomposableProductUnit)
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
 
-class DecomposableProductUnit(DPU):
+class DecomposableProductUnit(PMDecomposableProductUnit):
 
     sample_indices: List[int]
     """
@@ -367,7 +368,7 @@ class JPT(DeterministicSumUnit):
                         n_num_vars_total, numeric_features, symbolic_features, symbols, max_variances,
                         dependency_indices)
 
-    def plot(self) -> go.Figure:
+    def plot(self, sample_amount: int = 5000) -> go.Figure:
         """
         Plot the model.
         """

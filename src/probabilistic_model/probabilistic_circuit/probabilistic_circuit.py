@@ -259,7 +259,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return id(self)
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and self.subcircuits == other.subcircuits)
+        return isinstance(other, self.__class__) and self.subcircuits == other.subcircuits
 
     def __copy__(self):
         raise NotImplementedError()
@@ -679,7 +679,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         return id(self)
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and self.weighted_subcircuits == other.weighted_subcircuits)
+        return isinstance(other, self.__class__) and self.weighted_subcircuits == other.weighted_subcircuits
 
     def to_json(self):
         return {**super().to_json(), "weighted_subcircuits": [(weight, subcircuit.to_json()) for weight, subcircuit in
