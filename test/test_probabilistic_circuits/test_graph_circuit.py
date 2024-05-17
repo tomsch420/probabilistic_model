@@ -689,6 +689,13 @@ class ConvolutionTestCase(unittest.TestCase, ShowMixin):
                                                          self.interval.upper + self.location))
         self.assertEqual(result.mean, self.mean + self.location)
 
+    def test_mode_of_symmetric_truncation(self):
+        interval = portion.open(-0.3, 0.3).complement()
+        g1 = GaussianDistribution(self.variable, 0, 1)
+        g2, _ = g1.conditional(Event({self.variable: interval}))
+        mode, _ = g2.mode()
+        self.assertEqual(len(mode.events), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -859,7 +859,7 @@ class DeterministicSumUnit(SmoothSumUnit):
 
     representation = "⊕"
 
-    def merge_modes_if_one_dimensional(self, modes: List[EncodedEvent]) -> List[EncodedEvent]:
+    def merge_modes_if_one_dimensional(self, modes: ComplexEvent) -> ComplexEvent:
         """
         Merge the modes in `modes` to one mode if the model is one dimensional.
 
@@ -870,12 +870,12 @@ class DeterministicSumUnit(SmoothSumUnit):
             return modes
 
         # merge modes
-        mode = modes[0]
+        mode = modes.events[0]
 
-        for mode_ in modes[1:]:
+        for mode_ in modes.events[1:]:
             mode = mode | mode_
 
-        return [mode]
+        return mode
 
     @cache_inference_result
     def _mode(self) -> Tuple[ComplexEvent, float]:
@@ -891,15 +891,14 @@ class DeterministicSumUnit(SmoothSumUnit):
 
         # get the most likely result
         maximum_likelihood = max(likelihoods)
-        mode_events = []
+        result = ComplexEvent([])
 
         # gather all results that are maximum likely
         for mode, likelihood in zip(modes, likelihoods):
             if likelihood == maximum_likelihood:
-                mode_events.extend(mode.events)
+                result = result.encode() | mode.encode()
 
-        modes = ComplexEvent(mode_events)  # self.merge_modes_if_one_dimensional(result)
-        return modes, maximum_likelihood
+        return result, maximum_likelihood
 
     def sub_circuit_index_of_sample(self, sample: Iterable) -> Optional[int]:
         """
@@ -994,7 +993,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         for subcircuit in self.subcircuits[1:]:
 
             subcircuit_mode, subcircuit_likelihood = subcircuit._mode()
-            mode = mode & subcircuit_mode
+            mode = mode.encode() & subcircuit_mode.encode()
 
             likelihood *= subcircuit_likelihood
 

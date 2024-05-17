@@ -2,6 +2,7 @@ import collections
 import dataclasses
 from typing import Optional, List, Deque, Union, Tuple, Dict, Any
 
+import numpy as np
 import plotly.graph_objects as go
 import portion
 from random_events.events import Event
@@ -9,8 +10,7 @@ from random_events.variables import Continuous, Variable
 from typing_extensions import Self
 
 from ..probabilistic_circuit.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
-from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit,
-                                                           cache_inference_result, ProbabilisticCircuitMixin)
+from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit, cache_inference_result)
 
 
 @dataclasses.dataclass
@@ -19,19 +19,14 @@ class InductionStep:
     Class for performing induction in the NygaDistributions.
     """
 
-    data: List[float]
+    data: np.array
     """
-    The entire sorted and unique data points.
-    """
-
-    total_number_of_samples: int
-    """
-    The total number of samples in the dataset.
+    The entire sorted and unique data points
     """
 
-    weights: List[float]
+    log_weights: np.array
     """
-    The weights of the samples in dataset.
+    The logarithmic weights of the samples in the dataset.
     """
 
     begin_index: int
@@ -75,6 +70,13 @@ class InductionStep:
         Calculate the left connecting point.
         """
         return self.left_connecting_point_from_index(self.begin_index)
+
+    @property
+    def number_of_samples(self):
+        """
+        The number of samples in the induction step.
+        """
+        return self.end_index - self.begin_index
 
     def left_connecting_point_from_index(self, index) -> float:
         """
@@ -131,7 +133,7 @@ class InductionStep:
         """
         Sum the weights from `begin_index` to `end_index`.
         """
-        return sum(self.weights[begin_index:end_index])
+        return self.log_weights[begin_index:end_index].sum()
 
     def sum_weights(self):
         """
@@ -140,45 +142,63 @@ class InductionStep:
         return self.sum_weights_from_indices(self.begin_index, self.end_index)
 
     def compute_best_split(self) -> Tuple[float, Optional[int]]:
+        """
+        Compute the best split of the data.
+
+        The best split of the data is computed by evaluating the log likelihood of every possible split and memorizing
+        the best one.
+
+        :return: The maximum log likelihood and the best split index.
+        """
 
         # initialize the maximum likelihood and the best split index
-        maximum_likelihood = 0
+        maximum_log_likelihood = -float("inf")
         best_split_index = None
 
         # calculate the connecting points
         right_connecting_point = self.right_connecting_point()
         left_connecting_point = self.left_connecting_point()
 
-        # calculate the number of samples that are involved in this partition
-        total_number_of_samples = self.sum_weights() * self.total_number_of_samples
-
         # for every possible splitting index
         for split_index in range(self.begin_index + self.min_samples_per_quantile,
                                  self.end_index - self.min_samples_per_quantile + 1):
 
-            # calculate the split value
-            split_value = (self.data[split_index - 1] + self.data[split_index]) / 2
-
-            # calculate left likelihood
-            weight_sum_left = self.sum_weights_from_indices(self.begin_index, split_index)
-            number_of_samples_left = self.total_number_of_samples * weight_sum_left
-            average_likelihood_left = weight_sum_left / (split_value - left_connecting_point) * number_of_samples_left
-
-            # calculate right sum of likelihoods
-            weight_sum_right = self.sum_weights_from_indices(split_index, self.end_index)
-            number_of_samples_right = self.total_number_of_samples * weight_sum_right
-            average_likelihood_right = (
-                        weight_sum_right / (right_connecting_point - split_value) * number_of_samples_right)
-
-            # calculate average likelihood
-            average_likelihood = (average_likelihood_left + average_likelihood_right) / total_number_of_samples
+            # calculate log likelihoods
+            log_likelihood_left = self.log_likelihood_of_split(split_index, left_connecting_point)
+            log_likelihood_right = self.log_likelihood_of_split(split_index, right_connecting_point)
+            log_likelihood = (log_likelihood_left + log_likelihood_right)
 
             # update the maximum likelihood and the best split index
-            if average_likelihood > maximum_likelihood:
-                maximum_likelihood = average_likelihood
+            if log_likelihood > maximum_log_likelihood:
+                maximum_log_likelihood = log_likelihood
                 best_split_index = split_index
 
-        return maximum_likelihood, best_split_index
+        return maximum_log_likelihood, best_split_index
+
+    def log_likelihood_of_split(self, split_index: int, connecting_point: float) -> float:
+        """
+        Calculate the log likelihood of the split.
+
+        :param split_index: The index of the split.
+        :param connecting_point: The connecting point.
+
+        :return: The log likelihood of the split.
+        """
+        split_value = (self.data[split_index - 1] + self.data[split_index]) / 2
+        density = split_value - connecting_point
+        is_left = density < 0
+
+        log_weight_sum_of_split = self.sum_weights_from_indices(self.begin_index, split_index) \
+            if is_left else self.sum_weights_from_indices(split_index, self.end_index)
+
+        number_of_samples = split_index - self.begin_index if is_left else self.end_index - split_index
+
+        log_density = -np.log(np.abs(density))
+
+        # calculate the weight of this uniform in the sum node
+        log_weight_of_this_partition = np.log(number_of_samples / self.number_of_samples)
+
+        return log_weight_sum_of_split + (log_density * number_of_samples) + log_weight_of_this_partition
 
     def construct_left_induction_step(self, split_index: int) -> Self:
         """
@@ -186,8 +206,7 @@ class InductionStep:
 
         :param split_index: The index of the split.
         """
-        return InductionStep(self.data, self.total_number_of_samples, self.weights, self.begin_index, split_index,
-                             self.nyga_distribution)
+        return InductionStep(self.data, self.log_weights, self.begin_index, split_index, self.nyga_distribution)
 
     def construct_right_induction_step(self, split_index: int) -> Self:
         """
@@ -195,8 +214,7 @@ class InductionStep:
 
         :param split_index: The index of the split.
         """
-        return InductionStep(self.data, self.total_number_of_samples, self.weights, split_index, self.end_index,
-                             self.nyga_distribution)
+        return InductionStep(self.data, self.log_weights, split_index, self.end_index, self.nyga_distribution)
 
     def induce(self) -> List[Self]:
         """
@@ -205,14 +223,15 @@ class InductionStep:
         :return: The (possibly empty) list of new induction steps.
         """
         # calculate the likelihood without splitting
-        average_likelihood_without_split = (
-                    (self.sum_weights()) / (self.right_connecting_point() - self.left_connecting_point()))
+        log_density_without_split = -np.log(self.right_connecting_point() - self.left_connecting_point())
+        log_likelihood_without_split = (self.number_of_samples * log_density_without_split) + self.sum_weights()
 
         # calculate the best likelihood with splitting
-        maximum_likelihood, best_split_index = self.compute_best_split()
+        maximum_log_likelihood, best_split_index = self.compute_best_split()
 
         # if the improvement is good enough
-        if maximum_likelihood > (1 + self.min_likelihood_improvement) * average_likelihood_without_split:
+        if (maximum_log_likelihood > log_likelihood_without_split +
+                np.log(self.nyga_distribution.min_likelihood_improvement)):
 
             # create the left and right induction steps
             left_induction_step = self.construct_left_induction_step(best_split_index)
@@ -221,10 +240,11 @@ class InductionStep:
 
         # if the improvement is not good enough
         else:
+
+            weight = np.sum(np.exp(self.log_weights[self.begin_index:self.end_index]))
             # mount a uniform distribution
             distribution = self.create_uniform_distribution()
-            self.nyga_distribution.probabilistic_circuit.add_edge(self.nyga_distribution, distribution,
-                                                                  weight=self.sum_weights())
+            self.nyga_distribution.add_subcircuit(distribution, weight)
             return []
 
 
@@ -244,7 +264,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     """
 
     def __init__(self, variable: Continuous, min_samples_per_quantile: Optional[int] = 1,
-                 min_likelihood_improvement: Optional[float] = 1.1):
+                 min_likelihood_improvement: Optional[float] = 0.1):
         DeterministicSumUnit.__init__(self)
         ContinuousDistribution.__init__(self, variable)
         self.min_samples_per_quantile = min_samples_per_quantile
@@ -265,7 +285,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     def _cdf(self, value: Union[float, int]) -> float:
         return sum([weight * subcircuit._cdf(value) for weight, subcircuit in self.weighted_subcircuits])
 
-    def fit(self, data: List[float], weights: Optional[List[float]] = None) -> Self:
+    def fit(self, data: np.array, weights: Optional[np.array] = None) -> Self:
         """
         Fit the distribution to the data.
 
@@ -276,22 +296,27 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         """
         return self._fit(list(self.variable.encode_many(data)), weights)
 
-    def _fit(self, data: List[float],  weights: Optional[List[float]] = None) -> Self:
+    def _fit(self, data: List[float], logarithmic_weights: Optional[List[float]] = None) -> Self:
 
-        # sort the data and calculate the weights
-        sorted_data = sorted(set(data))
+        # make the data unique and sort it
+        sorted_and_unique_data = np.array(sorted(set(data)))
 
-        if len(sorted_data) == 1:
-            distribution = DiracDeltaDistribution(self.variable, sorted_data[0])
+        # if the data contains only one value
+        if len(sorted_and_unique_data) == 1:
+            # mount a dirac delta distribution and return
+            distribution = DiracDeltaDistribution(self.variable, sorted_and_unique_data[0])
             self.probabilistic_circuit.add_edge(self, distribution, weight=1)
             return self
 
-        if weights is None:
-            weights = [data.count(value) / len(data) for value in sorted_data]
+        # if the weights are not given
+        if logarithmic_weights is None:
+            # calculate the weights as frequencies of the data points
+            logarithmic_weights = np.array([np.log(data.count(value)) for value in sorted_and_unique_data])
 
         # construct the initial induction step
-        initial_induction_step = InductionStep(data=sorted_data, total_number_of_samples=len(data), weights=weights,
-                                               begin_index=0, end_index=len(sorted_data), nyga_distribution=self)
+        initial_induction_step = InductionStep(data=sorted_and_unique_data, log_weights=logarithmic_weights,
+                                               begin_index=0, end_index=len(sorted_and_unique_data),
+                                               nyga_distribution=self)
         # initialize the queue
         induction_steps: Deque[InductionStep] = collections.deque([initial_induction_step])
 
@@ -301,11 +326,11 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
             new_induction_steps = induction_step.induce()
             induction_steps.extend(new_induction_steps)
 
+        self.normalize()
         return self
 
     def empty_copy(self) -> Self:
-        return NygaDistribution(self.variable,
-                                min_samples_per_quantile=self.min_samples_per_quantile,
+        return NygaDistribution(self.variable, min_samples_per_quantile=self.min_samples_per_quantile,
                                 min_likelihood_improvement=self.min_likelihood_improvement)
 
     def to_json(self) -> Dict[str, Any]:
@@ -320,8 +345,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         smooth_sum_unit = DeterministicSumUnit()._from_json(data)
-        result = cls([],
-                     min_samples_per_quantile=data["min_samples_per_quantile"],
+        result = cls([], min_samples_per_quantile=data["min_samples_per_quantile"],
                      min_likelihood_improvement=data["min_likelihood_improvement"])
         for weight, subcircuit in smooth_sum_unit.weighted_subcircuits:
             result.mount(subcircuit)

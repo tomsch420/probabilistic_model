@@ -5,7 +5,7 @@ import portion
 from plotly import graph_objects as go
 from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent
 from random_events.variables import Continuous
-from typing_extensions import List, Dict, Any, Self
+from typing_extensions import List, Dict, Any, Self, Union
 
 from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
 from .distributions import ContinuousDistribution
@@ -125,18 +125,29 @@ class UniformDistribution(ContinuousDistribution):
         interval = portion.from_data(data["interval"])
         return cls(variable, interval)
 
-    def plot(self) -> List:
+    def x_axis_points_for_plotly(self) -> List[Union[None, float]]:
         domain = self.domain.events[0][self.variable]
         domain_size = domain.upper - domain.lower
         x = [domain.lower - domain_size * 0.05, domain.lower, None,
              domain.lower, domain.upper, None, domain.upper,
              domain.upper + domain_size * 0.05]
+        return x
 
+    def pdf_trace(self) -> go.Scatter:
         pdf_values = [0, 0, None, self.pdf_value(), self.pdf_value(), None, 0, 0]
-        pdf_trace = go.Scatter(x=x, y=pdf_values, mode='lines', name="Probability Density Function")
+        pdf_trace = go.Scatter(x=self.x_axis_points_for_plotly(),
+                               y=pdf_values, mode='lines', name="Probability Density Function")
+        return pdf_trace
 
+    def cdf_trace(self) -> go.Scatter:
+        x = self.x_axis_points_for_plotly()
         cdf_values = [value if value is None else self.cdf(value) for value in x]
         cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name="Cumulative Distribution Function")
+        return cdf_trace
+
+    def plot(self) -> List:
+        pdf_trace = self.pdf_trace()
+        cdf_trace = self.cdf_trace()
 
         mode, maximum_likelihood = self.mode()
         mode = mode.events[0][self.variable]

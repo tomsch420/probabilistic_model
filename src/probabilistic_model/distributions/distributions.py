@@ -244,6 +244,7 @@ class ContinuousDistribution(UnivariateDistribution):
 
         xs = []
         ys = []
+
         for mode in modes.events:
             mode = mode[self.variable]
             xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
@@ -530,3 +531,17 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     def __repr__(self):
         return f"δ({self.variable.name}, {self.location}, {self.density_cap})"
+
+    def plot(self) -> List:
+        lower_border = self.location - 1
+        upper_border = self.location + 1
+        pdf_trace = go.Scatter(x=[lower_border, self.location, self.location, self.location, upper_border],
+                               y=[0, 0, self.density_cap, 0, 0], mode="lines", name="PDF")
+        cdf_trace = go.Scatter(x=[lower_border, self.location, self.location, upper_border],
+                               y=[0, 0, 1, 1], mode="lines", name="CDF")
+        expectation_trace = go.Scatter(x=[self.location, self.location], y=[0, self.density_cap * 1.05],
+                                       mode="lines+markers", name="Expectation")
+        mode_trace = go.Scatter(x=[self.location, self.location], y=[0, self.density_cap * 1.05],
+                                mode="lines+markers", name="Mode")
+        return [pdf_trace, cdf_trace, expectation_trace, mode_trace]
+
