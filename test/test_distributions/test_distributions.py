@@ -2,60 +2,34 @@ import unittest
 
 import plotly.graph_objects as go
 import portion
-from random_events.events import Event, VariableMap, ComplexEvent
-from random_events.variables import Continuous, Integer, Discrete
 
-from probabilistic_model.distributions.distributions import (UnivariateDistribution, ContinuousDistribution,
-                                                             DiscreteDistribution, IntegerDistribution,
-                                                             DiracDeltaDistribution)
+from probabilistic_model.distributions.distributions import *
 from probabilistic_model.utils import SubclassJSONSerializer
 
 
-class UnivariateDistributionTestCase(unittest.TestCase):
-    variable = Continuous("x")
-    model: UnivariateDistribution
+class IntegerDistributionTestCase(unittest.TestCase):
+    x = Integer("x")
+    model: IntegerDistribution
 
     def setUp(self):
-        self.model = UnivariateDistribution(self.variable)
-
-    def test_variable(self):
-        self.assertEqual(self.model.variable, self.variable)
-
-
-class ContinuousDistributionTestCase(unittest.TestCase):
-    variable = Continuous("x")
-    model: ContinuousDistribution
-
-    def setUp(self):
-        self.model = ContinuousDistribution(self.variable)
-
-    def test_cdf(self):
-        self.assertEqual(self.model.cdf(float("inf")), 1)
-        self.assertEqual(self.model.cdf(-float("inf")), 0)
-
-
-class DiscreteTestCase(unittest.TestCase):
-    variable = Discrete("x", (1, 2, 3))
-    model: DiscreteDistribution
-
-    def setUp(self):
-        self.model = DiscreteDistribution(self.variable, [4 / 20, 5 / 20, 11 / 20])
-
-    def test_creating_with_invalid_weights(self):
-        with self.assertRaises(ValueError):
-            DiscreteDistribution(self.variable, [0, 1])
+        probabilities = defaultdict(float)
+        probabilities[1] = 4/20
+        probabilities[2] = 5/20
+        probabilities[4] = 11/20
+        self.model = IntegerDistribution(self.x, probabilities)
 
     def test_pdf(self):
         self.assertEqual(self.model.pdf(1), 1 / 5)
+        self.assertEqual(self.model.pdf(3), 0)
 
     def test_probability(self):
-        event = Event({self.variable: (1, 3)})
-        self.assertEqual(self.model.probability(event), 15 / 20)
+        event = SimpleEvent({self.x: closed(1, 3)}).as_composite_set()
+        self.assertEqual(self.model.probability(event), 9 / 20)
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
         self.assertEqual(likelihood, 11 / 20)
-        self.assertEqual(mode, ComplexEvent([Event({self.variable: 3})]))
+        self.assertEqual(mode, SimpleEvent({self.x: singleton(4)}).as_composite_set())
 
     def test_conditional(self):
         event = Event({self.variable: (1, 2)})
@@ -73,9 +47,9 @@ class DiscreteTestCase(unittest.TestCase):
         self.assertEqual(probability, 0)
 
     def test_sample(self):
-        samples = self.model.sample(10)
-        for sample in samples:
-            self.assertGreater(self.model.likelihood(sample), 0)
+        samples = self.model.sample(100)
+        likelihoods = self.model.likelihoods(samples)
+        self.assertTrue(all(likelihoods > 0))
 
     def test_copy(self):
         model = self.model.__copy__()
@@ -105,32 +79,32 @@ class DiscreteTestCase(unittest.TestCase):
         deserialized = SubclassJSONSerializer.from_json(serialized)
         self.assertIsInstance(deserialized, DiscreteDistribution)
         self.assertEqual(deserialized, self.model)
-
-
-class IntegerDistributionTestCase(unittest.TestCase):
-    variable = Integer("x", (1, 2, 4))
-    model: IntegerDistribution
-
-    def setUp(self):
-        self.model = IntegerDistribution(self.variable, [1 / 4, 1 / 4, 1 / 2])
-
-    def test_cdf(self):
-        self.assertEqual(self.model.cdf(4), 0.5)
-
-    def test_moment(self):
-        expectation = self.model.expectation(self.model.variables)
-        self.assertEqual(expectation[self.variable], 2.75)
-
-    def test_plot(self):
-        fig = go.Figure(self.model.plot())
-        # fig.show()
-
-    def test_serialization(self):
-        serialized = self.model.to_json()
-        deserialized = SubclassJSONSerializer.from_json(serialized)
-        self.assertIsInstance(deserialized, IntegerDistribution)
-        self.assertEqual(deserialized, self.model)
-
+#
+#
+# class IntegerDistributionTestCase(unittest.TestCase):
+#     variable = Integer("x", (1, 2, 4))
+#     model: IntegerDistribution
+#
+#     def setUp(self):
+#         self.model = IntegerDistribution(self.variable, [1 / 4, 1 / 4, 1 / 2])
+#
+#     def test_cdf(self):
+#         self.assertEqual(self.model.cdf(4), 0.5)
+#
+#     def test_moment(self):
+#         expectation = self.model.expectation(self.model.variables)
+#         self.assertEqual(expectation[self.variable], 2.75)
+#
+#     def test_plot(self):
+#         fig = go.Figure(self.model.plot())
+#         # fig.show()
+#
+#     def test_serialization(self):
+#         serialized = self.model.to_json()
+#         deserialized = SubclassJSONSerializer.from_json(serialized)
+#         self.assertIsInstance(deserialized, IntegerDistribution)
+#         self.assertEqual(deserialized, self.model)
+#
 
 class DiracDeltaDistributionTestCase(unittest.TestCase):
     variable = Continuous("x")

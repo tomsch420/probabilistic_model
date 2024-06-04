@@ -62,7 +62,6 @@ class ProbabilisticModel(abc.ABC):
         The order of elements in the event has to correspond to the order of variables in the model.
 
         The event belongs to the class of full evidence queries.
-        Implementing a probabilistic model requires that either the likelihood, or the log_likelihood is overwritten.
 
         .. Note:: You can read more about queries of this class in Definition 1 in :cite:p:`choi2020probabilistic`
             or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=TAfIX2LmOWM-Fd2B&t=785>`_.
@@ -73,6 +72,7 @@ class ProbabilisticModel(abc.ABC):
         """
         return np.exp(self.log_likelihood(event))
 
+    @abstractmethod
     def log_likelihood(self, event: FullEvidenceType) -> float:
         """
         Calculate the log-likelihood of an event.
@@ -82,7 +82,7 @@ class ProbabilisticModel(abc.ABC):
         :param event: The full evidence event
         :return: The log-likelihood of the event.
         """
-        return np.log(self.likelihood(event))
+        raise NotImplementedError
 
     def likelihoods(self, events: np.array) -> np.array:
         """
@@ -137,8 +137,6 @@ class ProbabilisticModel(abc.ABC):
         Calculate the mode of the model.
         The mode is the **set** of most likely events.
 
-        Implementing a probabilistic model requires that either the mode, or the log_mode is overwritten.
-
         The calculation belongs to the map query class.
 
         .. Note:: You can read more about queries of this class in Definition 26 in :cite:p:`choi2020probabilistic`
@@ -150,6 +148,7 @@ class ProbabilisticModel(abc.ABC):
         mode, log_likelihood = self.log_mode()
         return mode, np.exp(log_likelihood)
 
+    @abstractmethod
     def log_mode(self) -> Tuple[Event, float]:
         """
         Calculate the mode of the model.
@@ -158,8 +157,7 @@ class ProbabilisticModel(abc.ABC):
 
         :return: The mode and its log-likelihood.
         """
-        mode, likelihood = self.mode()
-        return mode, np.exp(likelihood)
+        raise NotImplementedError
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         """
@@ -175,7 +173,6 @@ class ProbabilisticModel(abc.ABC):
         Calculate the conditional distribution P(*| event) and the probability of the event.
 
         If the event is impossible, the conditional distribution is None and the probability is 0.
-        Implementing a probabilistic model requires that either the conditional, or the log_conditional is overwritten.
 
         :param event: The event to condition on.
         :return: The conditional distribution and the probability of the event.
@@ -183,6 +180,7 @@ class ProbabilisticModel(abc.ABC):
         conditional, log_probability = self.log_conditional(event)
         return conditional, np.exp(log_probability)
 
+    @abstractmethod
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         """
         Calculate the conditional distribution P(*| event) and the probability of the event.
@@ -192,8 +190,7 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event to condition on.
         :return: The conditional distribution and the log-probability of the event.
         """
-        conditional, probability = self.conditional(event)
-        return conditional, np.log(probability)
+        raise NotImplementedError
 
     @abstractmethod
     def sample(self, amount: int) -> np.array:

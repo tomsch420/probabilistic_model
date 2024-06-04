@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import random
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Optional
 
-import numpy
 import numpy as np
-import portion
-from random_events.product_algebra import Event, SimpleEvent
+from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import *
 from random_events.interval import *
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple, DefaultDict
@@ -19,22 +16,38 @@ from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, Cen
 from ..utils import SubclassJSONSerializer
 
 
-class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer, ABC):
+class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """
     Abstract Base class for Univariate distributions.
     """
 
-    @property
-    @abstractmethod
-    def variable(self) -> Variable:
-        """
-        :return: The variable of the distribution.
-        """
-        raise NotImplementedError
+    variable: Variable
 
     @property
     def variables(self) -> Tuple[Variable, ...]:
         return (self.variable, )
+
+    def support(self) -> Event:
+        return SimpleEvent({self.variable: self.univariate_support}).as_composite_set()
+
+    @property
+    @abstractmethod
+    def univariate_support(self) -> AbstractCompositeSet:
+        """
+        :return: The univariate support of the distribution. This is not an Event.
+        """
+        raise NotImplementedError
+
+    def log_mode(self) -> Tuple[Event, float]:
+        mode, log_likelihood = self.univariate_log_mode()
+        return SimpleEvent({self.variable: mode}).as_composite_set(), log_likelihood
+
+    @abstractmethod
+    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
+        """
+        :return: The univariate mode of the distribution and its log-likelihood. The mode is not an Event.
+        """
+        raise NotImplementedError
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         if self.variable in variables:
@@ -73,24 +86,34 @@ class ContinuousDistribution(UnivariateDistribution):
     Abstract base class for continuous distributions.
     """
 
-    @property
-    @abstractmethod
-    def variable(self) -> Continuous:
-        """
-        :return: The variable of the distribution.
-        """
-        raise NotImplementedError
+    variable: Continuous
 
     @property
     @abstractmethod
-    def simple_support(self) -> SimpleInterval:
-        """
-        :return: The support of the distribution as simple Interval.
-        """
+    def univariate_support(self) -> Interval:
         raise NotImplementedError
 
-    def support(self) -> Event:
-        return SimpleEvent({self.variable: self.simple_support}).as_composite_set()
+    def log_likelihood(self, event: FullEvidenceType) -> float:
+        return self.log_pdf(event[0])
+
+    def log_likelihoods(self, events: np.array) -> np.array:
+        return self.log_pdfs(events[0, :])
+
+    def pdf(self, value: Union[float, int]) -> float:
+        """
+        Calculate the probability density function at `value`.
+        :param value: The value
+        :return: The probability.
+        """
+        return np.exp(self.log_pdf(value))
+
+    def pdfs(self, values: np.array) -> np.array:
+        """
+        Calculate the probability density function at `values`.
+        :param values: The array of values
+        :return: The array of densities.
+        """
+        return np.exp(self.log_pdfs(values))
 
     @abstractmethod
     def log_pdf(self, value: Union[float, int]) -> float:
@@ -107,6 +130,7 @@ class ContinuousDistribution(UnivariateDistribution):
         :param values: The array of values
         :return: The array of densities.
         """
+        return np.array([self.log_pdf(value) for value in values])
 
     @abstractmethod
     def cdf(self, value: Union[float, int]) -> float:
@@ -221,20 +245,22 @@ class SymbolicDistribution(DiscreteDistribution):
 
     variable: Symbolic
 
+    def univariate_log_mode(self) -> Tuple[Set, float]:
+        max_likelihood = max(self.probabilities.values())
+        mode = Set(key for key, value in self.probabilities.items() if value == max_likelihood)
+        return mode, np.log(max_likelihood)
+
+    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+        raise NotImplementedError
+
     def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
         return {element.name: self.pmf(element) for element in self.variable.domain.simple_sets}
 
-    def support(self) -> Event:
-        return (SimpleEvent({self.variable: Set(key for key, value in self.probabilities.items() if value > 0)}).
-                as_composite_set())
+    def univariate_support(self) -> Set:
+        return Set(key for key, value in self.probabilities.items() if value > 0)
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         return sum(self.pmf(key) for key in event[self.variable].simple_sets)
-
-    def mode(self) -> Tuple[Event, float]:
-        max_likelihood = max(self.probabilities.values())
-        mode = {key for key, value in self.probabilities.items() if value == max_likelihood}
-        return SimpleEvent({self.variable: mode}).as_composite_set(), max_likelihood
 
     def sample(self, amount: int) -> np.array:
         sample_space = np.array([key.value for key in self.probabilities.keys()])
@@ -246,42 +272,77 @@ class SymbolicDistribution(DiscreteDistribution):
         return f"Nominal{self.variable.domain}"
 
 
-class IntegerDistribution(DiscreteDistribution, ContinuousDistribution):
+class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
     """
     Abstract base class for integer distributions. Integer distributions also implement the methods of continuous
     distributions.
     """
-    variables: Tuple[Integer]
+
+    variable: Integer
+
+    def __init__(self, variable: Integer, probabilities: Optional[DefaultDict[Union[int, SetElement], float]]):
+        DiscreteDistribution.__init__(self, variable, probabilities)
+
+    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
+        max_likelihood = max(self.probabilities.values())
+        mode = Interval()
+        for key, value in self.probabilities.items():
+            if value == max_likelihood:
+                mode |= singleton(key)
+        return mode, np.log(max_likelihood)
+
+    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+        raise NotImplementedError
+
+    def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
+        return self.probabilities
 
     @property
-    def variable(self) -> Integer:
-        return self.variables[0]
+    def univariate_support(self) -> Interval:
+        result = Interval()
+        for key, value in self.probabilities.items():
+            if value > 0:
+                result |= singleton(key)
+        return result
+
+    def log_pdf(self, value: Union[float, int]) -> float:
+        return np.log(self.pmf(value))
+
+    def cdf(self, value: Union[float, int]) -> float:
+        result = 0
+
+        for x, p_x in self.probabilities.items():
+            if x <= value:
+                result += p_x
+            else:
+                break
+
+        return result
+
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        interval: Interval = event[self.variable]
+        result = 0
+
+        for x, p_x in self.probabilities.items():
+            if x in interval:
+                result += p_x
+
+        return result
+
+    def sample(self, amount: int) -> np.array:
+        sample_space = np.array(list(self.probabilities.keys()))
+        sample_probabilities = np.array([value for value in self.probabilities.values()])
+        return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
 
     @property
     def representation(self):
         return f"Ordinal{self.variable.domain}"
 
-    def _cdf(self, value: int) -> float:
-        """
-        Calculate the cumulative distribution function at `value`.
-        :param value: The value to evaluate the cdf on.
-        :return: The cumulative probability.
-        """
-        return sum(self._pdf(value) for value in range(value))
-
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         order = order[self.variable]
         center = center[self.variable]
-        result = sum([self.pdf(value) * (value - center) ** order for value in self.variable.domain])
+        result = sum([p_x * (x - center) ** order for x, p_x in self.probabilities.items()])
         return VariableMap({self.variable: result})
-
-    def plot(self) -> List[Union[go.Bar, go.Scatter]]:
-        traces = super().plot()
-        _, likelihood = self.mode()
-        expectation = self.expectation([self.variable])[self.variable]
-        traces.append(go.Scatter(x=[expectation, expectation], y=[0, likelihood * 1.05], mode="lines+markers",
-                                 name="Expectation"))
-        return traces
 
 
 class DiracDeltaDistribution(ContinuousDistribution):
@@ -289,6 +350,8 @@ class DiracDeltaDistribution(ContinuousDistribution):
     Class for Dirac delta distributions.
     The Dirac measure is used whenever evidence is given as a singleton instance.
     """
+
+    variable: Continuous
 
     location: float
     """
@@ -302,43 +365,22 @@ class DiracDeltaDistribution(ContinuousDistribution):
     """
 
     def __init__(self, variable: Continuous, location: float, density_cap: float = float("inf")):
-        super().__init__(variable)
+        self.variable = variable
         self.location = location
         self.density_cap = density_cap
 
+    def log_pdf(self, value: Union[float, int]) -> float:
+        return np.log(self.density_cap) if value == self.location else -float("inf")
+
+    def cdf(self, value: Union[float, int]) -> float:
+        return 1. if value > self.location else 0.
+
     @property
-    def domain(self) -> ComplexEvent:
-        return ComplexEvent([Event({self.variable: portion.singleton(self.location)})])
+    def univariate_support(self) -> Interval:
+        return singleton(self.location)
 
-    def _pdf(self, value: float) -> float:
-        if value == self.location:
-            return self.density_cap
-        else:
-            return 0
-
-    def _cdf(self, value: float) -> float:
-        if value < self.location:
-            return 0
-        else:
-            return 1
-
-    def _probability(self, event: EncodedEvent) -> float:
-        if self.location in event[self.variable]:
-            return 1
-        else:
-            return 0
-
-    def _mode(self) -> Tuple[ComplexEvent, float]:
-        return self.domain.encode(), self.density_cap
-
-    def sample(self, amount: int) -> List[List[float]]:
-        return [[self.location] for _ in range(amount)]
-
-    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
-        for event in event.events:
-            if self.location in event[self.variable]:
-                return self.__copy__(), 1
-        return None, 0
+    def sample(self, amount: int) -> np.array:
+        return np.full((amount, 1), self.location)
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         order = order[self.variable]
@@ -377,7 +419,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> 'SubclassJSONSerializer':
-        variable = Variable.from_json(data["variable"])
+        variable = Continuous.from_json(data["variable"])
         location = data["location"]
         density_cap = data["density_cap"]
         return cls(variable, location, density_cap)
