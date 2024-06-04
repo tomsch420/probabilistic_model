@@ -1,76 +1,40 @@
-import abc
+from __future__ import annotations
+
 import random
+from abc import ABC, abstractmethod
+from collections import defaultdict
 from typing import Optional
 
+import numpy
+import numpy as np
 import portion
-import random_events.utils
-from random_events.events import EncodedEvent, Event, VariableMap, ComplexEvent
-from random_events.variables import Variable, Continuous, Discrete, Symbolic, Integer
-from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
+from random_events.product_algebra import Event, SimpleEvent
+from random_events.variable import *
+from random_events.interval import *
+from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple, DefaultDict
 import plotly.graph_objects as go
 
 
-from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
+from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType, FullEvidenceType
 from ..utils import SubclassJSONSerializer
 
 
-class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
+class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer, ABC):
     """
     Abstract Base class for Univariate distributions.
     """
 
-    def __init__(self, variable: Variable):
-        super().__init__([variable])
-
     @property
-    def domain(self) -> ComplexEvent:
-        """
-        The domain of this distribution.
-        :return: The domain (support) of this distribution as event.
-        """
-        raise NotImplementedError
-
-    @property
-    def representation(self) -> str:
-        """
-        The symbol used to represent this distribution.
-        """
-        return self.__class__.__name__
-
-    @property
+    @abstractmethod
     def variable(self) -> Variable:
         """
-        The variable of this distribution.
-        """
-        return self.variables[0]
-
-    def _pdf(self, value: Union[float, int]) -> float:
-        """
-        Evaluate the probability density function at the encoded `value`.
-        :param value: The encoded value to evaluate the pdf on.
-        :return: The density
+        :return: The variable of the distribution.
         """
         raise NotImplementedError
 
-    def _likelihood(self, event: Iterable) -> float:
-        return self._pdf(list(event)[0])
-
-    def pdf(self, value: Any) -> float:
-        """
-        Evaluate the probability density function at `value`.
-        :param value: The value to evaluate the pdf on.
-        :return: The density
-        """
-        return self._pdf(self.variable.encode(value))
-
-    def likelihood(self, event: Iterable) -> float:
-        return self.pdf(list(event)[0])
-
-    def plot(self) -> List:
-        """
-        Generate a list of traces that can be used to plot the distribution in plotly figures.
-        """
-        raise NotImplementedError
+    @property
+    def variables(self) -> Tuple[Variable, ...]:
+        return (self.variable, )
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         if self.variable in variables:
@@ -87,12 +51,19 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
             "variable": self.variable.to_json()
         }
 
+    @abstractmethod
+    def plot(self) -> List:
+        """
+        Generate a list of traces that can be used to plot the distribution in plotly figures.
+        """
+        raise NotImplementedError
+
     def plotly_layout(self) -> Dict[str, Any]:
         """
         :return: The layout argument for plotly figures as dict
         """
         return {
-            "title": f"{self.__class__.__name__}",
+            "title": f"{self.representation}",
             "xaxis": {"title": self.variable.name}
         }
 
@@ -102,279 +73,145 @@ class ContinuousDistribution(UnivariateDistribution):
     Abstract base class for continuous distributions.
     """
 
-    variables: Tuple[Continuous]
-
     @property
+    @abstractmethod
     def variable(self) -> Continuous:
-        return self.variables[0]
-
-    def _cdf(self, value: float) -> float:
         """
-        Evaluate the cumulative distribution function at the encoded `value`.
-        :param value: The encoded value to evaluate the cdf on.
-        :return: The cumulative probability.
+        :return: The variable of the distribution.
         """
         raise NotImplementedError
 
-    def cdf(self, value: Any):
+    @property
+    @abstractmethod
+    def simple_support(self) -> SimpleInterval:
+        """
+        :return: The support of the distribution as simple Interval.
+        """
+        raise NotImplementedError
+
+    def support(self) -> Event:
+        return SimpleEvent({self.variable: self.simple_support}).as_composite_set()
+
+    @abstractmethod
+    def log_pdf(self, value: Union[float, int]) -> float:
+        """
+        Evaluate the logarithmic probability density function at `value`.
+        :param value: x
+        :return: p(x)
+        """
+        raise NotImplementedError
+
+    def log_pdfs(self, values: np.array) -> np.array:
+        """
+        Evaluate the logarithmic probability density function at `values`.
+        :param values: The array of values
+        :return: The array of densities.
+        """
+
+    @abstractmethod
+    def cdf(self, value: Union[float, int]) -> float:
         """
         Evaluate the cumulative distribution function at `value`.
-        :param value: The value to evaluate the cdf on.
-        :return: The cumulative probability.
+        :param value: The value
+        :return: The probability.
         """
-        if value <= -float("inf"):
-            return 0
-        if value >= float("inf"):
-            return 1
-        return self._cdf(self.variable.encode(value))
+        raise NotImplementedError
 
-    def _probability(self, event: EncodedEvent) -> float:
-        interval: portion.Interval = event[self.variable]
-        probability = 0.
-
-        for interval_ in interval:
-            probability += self.cdf(interval_.upper) - self.cdf(interval_.lower)
-
-        return probability
-
-    def conditional_from_singleton(self, singleton: portion.Interval) -> Tuple[Optional['DiracDeltaDistribution'], float]:
-        """
-        Create a conditional distribution from a singleton interval.
-
-        :return: A DiracDelta distribution at the point described by the singleton. The density cap is set
-        to the pdf value of this distribution at the point.
-        """
-        if singleton.lower != singleton.upper:
-            raise ValueError("This method can only be used with singletons.")
-
-        likelihood = self.pdf(singleton.lower)
-
-        if likelihood == 0:
-            return None, 0
-
-        else:
-            return DiracDeltaDistribution(self.variable, singleton.lower, density_cap=likelihood), likelihood
-
-    def conditional_from_simple_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
-        """
-        Create a conditional distribution from an interval that has length one and is not singleton.
-
-        This is the method that should be overloaded by subclasses.
-        The _conditional method will call this method if the interval is not singleton and has length one.
-
-        :param interval: The interval to condition on
-        :return: A conditional distribution and the probability.
-        """
-        raise NotImplementedError()
-
-    def conditional_from_complex_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
-        raise NotImplementedError()
-
-    def _conditional(self, event: ComplexEvent) -> \
-            Tuple[Optional[Union['ContinuousDistribution', 'DiracDeltaDistribution', ProbabilisticModel]], float]:
-
-        # simplify the event
-        event = event.marginal_event(self.variables).simplify()
-        # assert that this can only have at most 1 event
-        assert len(event.events) <= 1
-
-        # if event is empty, return None
-        if event.is_empty():
-            return None, 0
-
-        event = event.events[0]
-        # form intersection of event and domain
-        intersection: portion.Interval = event[self.variable].intersection(self.domain.events[0][self.variable])
-
-        # if intersection is empty
-        if intersection.empty:
-            return None, 0
-
-        # if intersection is singleton
-        elif intersection.lower == intersection.upper:
-            return self.conditional_from_singleton(intersection)
-
-        # if intersection is simple interval
-        elif len(intersection) == 1:
-            return self.conditional_from_simple_interval(intersection)
-
-        # if intersection is complex interval
-        return self.conditional_from_complex_interval(intersection)
-
-    def plot(self) -> List:
-        """
-        Generate a list of traces that can be used to plot the distribution in plotly figures.
-        """
-
-        traces = []
-        samples = [sample[0] for sample in self.sample(1000)]
-        samples.sort()
-
-        minimal_value = self.domain.events[0][self.variable].lower
-        if minimal_value <= -float("inf"):
-            minimal_value = samples[0]
-
-        maximal_value = self.domain.events[0][self.variable].upper
-        if maximal_value >= float("inf"):
-            maximal_value = samples[-1]
-
-        sample_range = maximal_value - minimal_value
-        minimal_value -= 0.05 * sample_range
-        maximal_value += 0.05 * sample_range
-
-        samples_with_padding = [minimal_value, samples[0]] + samples + [samples[-1], maximal_value]
-
-        pdf_values = [0, 0] + [self.pdf(sample) for sample in samples] + [0, 0]
-        traces.append(go.Scatter(x=samples_with_padding, y=pdf_values, mode="lines", name="PDF"))
-
-        cdf_values = [0, 0] + [self.cdf(sample) for sample in samples] + [1, 1]
-
-        traces.append(go.Scatter(x=samples_with_padding, y=cdf_values, mode="lines", name="CDF"))
-        mean = self.expectation([self.variable])[self.variable]
-
-        try:
-            modes, maximum_likelihood = self.mode()
-        except NotImplementedError:
-            modes = []
-            maximum_likelihood = max(pdf_values)
-
-        mean_trace = go.Scatter(x=[mean, mean], y=[0, maximum_likelihood * 1.05], mode="lines+markers",
-                                name="Expectation")
-        traces.append(mean_trace)
-
-        xs = []
-        ys = []
-
-        for mode in modes.events:
-            mode = mode[self.variable]
-            xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
-            ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
-        mode_trace = go.Scatter(x=xs, y=ys, mode="lines+markers", name="Mode", fill="toself")
-        traces.append(mode_trace)
-
-        return traces
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        interval: Interval = event[self.variable]
+        return sum(self.cdf(simple_interval.upper) - self.cdf(simple_interval.lower) for simple_interval
+                   in interval.simple_sets)
 
 
 class DiscreteDistribution(UnivariateDistribution):
     """
     Abstract base class for univariate discrete distributions.
     """
-    variables: Tuple[Discrete]
 
-    weights: List[float]
+    variable: Union[Symbolic, Integer]
+
+    probabilities: DefaultDict[Union[int, SetElement], float]
     """
-    The probability of each value in the domain of this distributions variable.
+    A dict that maps from elements of the variables domain to probabilities.
     """
 
-    def __init__(self, variable: Discrete, weights: Iterable[float]):
-        super().__init__(variable)
-        self.weights = list(weights)
+    def __init__(self, variable: Union[Symbolic, Integer],
+                 probabilities: Optional[DefaultDict[Union[int, SetElement], float]]):
+        self.variable = variable
 
-        if len(self.weights) != len(self.variable.domain):
-            raise ValueError("The number of weights has to be equal to the number of values of the variable.")
-
-    @property
-    def domain(self) -> ComplexEvent:
-        return ComplexEvent([Event({self.variable: [value for value, weight in
-                                                    zip(self.variable.domain, self.weights) if weight > 0]})])
-
-    @property
-    def variable(self) -> Discrete:
-        return self.variables[0]
-
-    def _pdf(self, value: int) -> float:
-        """
-        Calculate the probability of a value.
-        :param value: The index of the value to calculate the probability of.
-        :return: The probability of the value.
-        """
-        return self.weights[value]
-
-    def _probability(self, event: EncodedEvent) -> float:
-        return sum(self._pdf(value) for value in event[self.variable])
-
-    def _mode(self) -> Tuple[ComplexEvent, float]:
-        maximum_weight = max(self.weights)
-        mode = EncodedEvent(
-            {self.variable: [index for index, weight in enumerate(self.weights) if weight == maximum_weight]})
-        return ComplexEvent([mode]), maximum_weight
-
-    def _conditional(self, event: ComplexEvent) -> Tuple[Self, float]:
-
-        if event.is_empty():
-            return None, 0
-
-        assert len(event.events) <= 1
-        unnormalized_weights = [weight if index in event.events[0][self.variable] else 0. for index, weight in
-                                enumerate(self.weights)]
-        probability = sum(unnormalized_weights)
-
-        if probability == 0:
-            return None, 0
-
-        normalized_weights = [weight / probability for weight in unnormalized_weights]
-        return self.__class__(self.variable, normalized_weights), probability
-
-    def sample(self, amount: int) -> Iterable:
-        return [random.choices(self.variable.domain, self.weights) for _ in range(amount)]
+        if probabilities is None:
+            probabilities = defaultdict(float)
+        self.probabilities = probabilities
 
     def __copy__(self):
-        return self.__class__(self.variable, self.weights)
+        return self.__class__(self.variable, self.probabilities)
 
     def __eq__(self, other):
-        return (isinstance(other, DiscreteDistribution) and self.weights == other.weights and
+        return (isinstance(other, DiscreteDistribution) and self.probabilities == other.probabilities and
                 super().__eq__(other))
 
     def __hash__(self):
-        return hash((self.variable, tuple(self.weights)))
+        return hash((self.variable, tuple(self.probabilities.items())))
 
-    def _fit(self, data: List[int]) -> Self:
+    def log_likelihood(self, event: FullEvidenceType) -> float:
+        return np.log(self.pmf(event))
+
+    def pmf(self, value: Union[int, SetElement]) -> float:
         """
-        Fit the distribution to a list of encoded values
+        Calculate the probability mass function at `value`.
+        :param value: The value
+        :return: The probability.
+        """
+        return self.probabilities[value]
 
-        :param data: The encoded values
+    def fit(self, data: np.array) -> Self:
+        """
+        Fit the distribution to the data.
+
+        The probabilities are set equal to the frequencies in the data.
+
+        :param data: The data.
         :return: The fitted distribution
         """
-        weights = []
-        for value in range(len(self.variable.domain)):
-            weights.append(data.count(value) / len(data))
-        self.weights = weights
+        unique, counts = np.unique(data, return_counts=True)
+        probabilities = defaultdict(float)
+        for value, count in zip(unique, counts):
+            probabilities[value] = count / len(data)
+        self.probabilities = probabilities
         return self
 
-    def fit(self, data: Iterable[Any]) -> Self:
+    @abstractmethod
+    def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
         """
-        Fit the distribution to a list of raw values.
-
-        :param data: The not processed data.
-        :return: The fitted distribution
+        :return: The probabilities as dict that can be plotted.
         """
-        return self._fit(list(self.variable.encode_many(data)))
+        raise NotImplementedError
 
     def plot(self) -> List[go.Bar]:
         """
         Plot the distribution.
         """
+        probabilities = self.probabilities_for_plotting()
+        traces = [go.Bar(x=probabilities.keys(), y=probabilities.values(), name="Probability")]
 
-        mode, likelihood = self.mode()
-        mode = mode.events[0][self.variable]
-
-        traces = list()
-        traces.append(go.Bar(x=[value for value in self.variable.domain if value not in mode], y=self.weights,
-                             name="Probability"))
-        traces.append(go.Bar(x=mode, y=[likelihood] * len(mode), name="Mode"))
+        max_likelihood = max(probabilities.values())
+        mode = [key for key, value in probabilities.items() if value == max_likelihood]
+        traces.append(go.Bar(x=mode, y=[max_likelihood] * len(mode), name="Mode"))
         return traces
 
     def to_json(self) -> Dict[str, Any]:
         return {
             **super().to_json(),
-            "weights": self.weights
+            "probabilities": list(self.probabilities.items())
         }
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> 'SubclassJSONSerializer':
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable = Variable.from_json(data["variable"])
-        weights = data["weights"]
-        return cls(variable, weights)
+        probabilities = defaultdict(float)
+        for key, value in data["probabilities"]:
+            probabilities[key] = value
+        return cls(variable, probabilities)
 
 
 class SymbolicDistribution(DiscreteDistribution):
@@ -382,11 +219,27 @@ class SymbolicDistribution(DiscreteDistribution):
     Class for symbolic (categorical) distributions.
     """
 
-    variables: Tuple[Symbolic]
+    variable: Symbolic
 
-    @property
-    def variable(self) -> Symbolic:
-        return self.variables[0]
+    def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
+        return {element.name: self.pmf(element) for element in self.variable.domain.simple_sets}
+
+    def support(self) -> Event:
+        return (SimpleEvent({self.variable: Set(key for key, value in self.probabilities.items() if value > 0)}).
+                as_composite_set())
+
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        return sum(self.pmf(key) for key in event[self.variable].simple_sets)
+
+    def mode(self) -> Tuple[Event, float]:
+        max_likelihood = max(self.probabilities.values())
+        mode = {key for key, value in self.probabilities.items() if value == max_likelihood}
+        return SimpleEvent({self.variable: mode}).as_composite_set(), max_likelihood
+
+    def sample(self, amount: int) -> np.array:
+        sample_space = np.array([key.value for key in self.probabilities.keys()])
+        sample_probabilities = np.array([value for value in self.probabilities.values()])
+        return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
 
     @property
     def representation(self):

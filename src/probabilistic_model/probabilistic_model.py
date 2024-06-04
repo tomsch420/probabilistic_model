@@ -1,9 +1,15 @@
 import abc
-from typing import Tuple, Iterable, List, Optional, Union, TYPE_CHECKING
 
-from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent, EventType
-from random_events.variables import Variable, Integer, Continuous
-from typing_extensions import Self
+import numpy as np
+from typing_extensions import Tuple, Iterable, List, Optional, Union, TYPE_CHECKING, Self
+
+from random_events.sigma_algebra import *
+from random_events.product_algebra import *
+from random_events.variable import *
+from random_events.set import *
+
+# Type definitions
+FullEvidenceType = np.array  # [Union[float, int, SetElement]]
 
 # # Type hinting for Python 3.7 to 3.9
 if TYPE_CHECKING:
@@ -24,178 +30,178 @@ class ProbabilisticModel(abc.ABC):
     The definition of functions is motivated by the background knowledge provided in the probabilistic circuits.
 
     This class can be used as an interface to any kind of probabilistic model, tractable or not.
-    The methods follow the pattern that methods that begin with `_` use a preprocessed version of the original method.
-    This is useful to separating the process of parsing user inputs and the actual calculations.
+
     """
 
-    _variables: Tuple[Variable, ...]
-    """The variables involved in the model."""
-
-    def __init__(self, variables: Optional[Iterable[Variable]]):
+    @property
+    def representation(self) -> str:
         """
-        Initialize the model.
-
-        :param variables: The variables in the model.
+        The symbol used to represent this distribution.
         """
-
-        if variables is not None:
-            self._variables = tuple(sorted(variables))
+        return self.__class__.__name__
 
     @property
+    @abc.abstractmethod
     def variables(self) -> Tuple[Variable, ...]:
-        return self._variables
-
-    @variables.setter
-    def variables(self, variables: Iterable[Variable]):
-        self._variables = tuple(sorted(variables))
-
-    def preprocess_event(self, event: EventType) -> ComplexEvent:
         """
-        Preprocess an event to the internal representation of the model.
-        Furthermore, all variables that are in this model are assigned to some value.
-        If the value is specified in the event, the value is used; otherwise the domain of the variable is used.
-
-        :param event: The event to preprocess.
-        :return: The preprocessed event.
-        """
-        variables = self.variables
-        # if the event is a complex event
-        if isinstance(event, ComplexEvent):
-            for simple_event in event.events:
-                simple_event.fill_missing_variables(variables)
-            return event.encode()
-
-        # if the event is a simple encoded event
-        elif isinstance(event, EncodedEvent):
-            event.fill_missing_variables(variables)
-            return ComplexEvent([event])
-
-        # if the event is a simple event
-        elif isinstance(event, Event):
-            event.fill_missing_variables(variables)
-            return ComplexEvent([event.encode()])
-
-        else:
-            raise ValueError(f"Event {event} is not a valid event.")
-
-    def _likelihood(self, event: Iterable) -> float:
-        """
-        Calculate the likelihood of a preprocessed event.
-        The likelihood as a full evidence query, i.e., an assignment to all variables in the model
-
-        :param event: The event is some iterable that represents a value for each variable in the model.
-        :return: The likelihood of the event.
+        :return: The variables of the model.
         """
         raise NotImplementedError
 
-    def likelihood(self, event: Iterable) -> float:
+    @abstractmethod
+    def support(self) -> Event:
+        """
+        :return: The support of the model.
+        """
+        raise NotImplementedError
+
+    def likelihood(self, event: FullEvidenceType) -> float:
         """
         Calculate the likelihood of an event.
-        The likelihood is a full evidence query, i.e., an assignment to all variables in the model
+        The likelihood is a full evidence query, i.e., an assignment to all variables in the model.
+        The order of elements in the event has to correspond to the order of variables in the model.
 
         The event belongs to the class of full evidence queries.
+        Implementing a probabilistic model requires that either the likelihood, or the log_likelihood is overwritten.
 
         .. Note:: You can read more about queries of this class in Definition 1 in :cite:p:`choi2020probabilistic`
             or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=TAfIX2LmOWM-Fd2B&t=785>`_.
             :cite:p:`youtube2020probabilistic`
 
-
-        :param event: The event is some iterable that represents a value for each variable in the model.
+        :param event: The full evidence event
         :return: The likelihood of the event.
         """
-        return self._likelihood([variable.encode(value) for variable, value in zip(self.variables, event)])
+        return np.exp(self.log_likelihood(event))
 
-    def _probability(self, event: EncodedEvent) -> float:
+    def log_likelihood(self, event: FullEvidenceType) -> float:
         """
-        Calculate the probability of a preprocessed event P(E).
+        Calculate the log-likelihood of an event.
 
-        :param event: The event to calculate the probability of.
-        :return: The probability of the model.
-        """
-        raise NotImplementedError
+        Check the documentation of `likelihood` for more information.
 
-    def probability(self, event: EventType) -> float:
+        :param event: The full evidence event
+        :return: The log-likelihood of the event.
         """
-        Calculate the probability of an event P(E).
+        return np.log(self.likelihood(event))
+
+    def likelihoods(self, events: np.array) -> np.array:
+        """
+        Calculate the likelihood of multiple events.
+
+        Check the documentation of `likelihood` for more information.
+
+        :param events: The events
+        :return: The likelihoods of the events.
+        """
+        return np.exp(self.log_likelihoods(events))
+
+    def log_likelihoods(self, events: np.array) -> np.array:
+        """
+        Calculate the log-likelihood of multiple events.
+
+        Check the documentation of `likelihood` for more information.
+
+        :param events: The events
+        :return: The log-likelihoods of the events.
+        """
+        return np.array([self.log_likelihood(event) for event in events])
+
+    def probability(self, event: Event) -> float:
+        """
+        Calculate the probability of an event.
+        The event is richly described by the random_events package.
+
+        :param event: The event.
+        :return: The probability of the event.
+        """
+        return sum(self.probability_of_simple_event(simple_set) for simple_set in event.simple_sets)
+
+    @abstractmethod
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        """
+        Calculate the probability of a simple event.
+
         The event belongs to the class of marginal queries.
 
         .. Note:: You can read more about queries of this class in Definition 11 in :cite:p:`choi2020probabilistic`
             or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
             :cite:p:`youtube2020probabilistic`
 
-        :param event: The event to calculate the probability of.
-        :return: The probability of the model.
-        """
-        complex_event = self.preprocess_event(event)
-        return sum(self._probability(event) for event in complex_event.events)
-
-    def _mode(self) -> Tuple[ComplexEvent, float]:
-        """
-        Calculate the mode of the model.
-        As there may exist multiple modes, this method returns an Iterable of modes and their likelihood.
-
-        :return: The internal representation of the mode and the likelihood.
+        :param event: The event.
+        :return: The probability of the event.
         """
         raise NotImplementedError
 
-    def mode(self) -> Tuple[ComplexEvent, float]:
+    def mode(self) -> Tuple[Event, float]:
         """
         Calculate the mode of the model.
-        As there may exist multiple modes, this method returns an Iterable of modes and their likelihood.
-        The event belongs to the map query class.
+        The mode is the **set** of most likely events.
+
+        Implementing a probabilistic model requires that either the mode, or the log_mode is overwritten.
+
+        The calculation belongs to the map query class.
 
         .. Note:: You can read more about queries of this class in Definition 26 in :cite:p:`choi2020probabilistic`
             or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=FjREKNtAV0owm27A&t=1962>`_.
             :cite:p:`youtube2020probabilistic`
 
-        :return: The mode of the model and the likelihood.
+        :return: The mode and its likelihood.
         """
-        mode, likelihood = self._mode()
-        return mode.decode(), likelihood
+        mode, log_likelihood = self.log_mode()
+        return mode, np.exp(log_likelihood)
+
+    def log_mode(self) -> Tuple[Event, float]:
+        """
+        Calculate the mode of the model.
+
+        Check the documentation of `mode` for more information.
+
+        :return: The mode and its log-likelihood.
+        """
+        mode, likelihood = self.mode()
+        return mode, np.exp(likelihood)
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         """
         Calculate the marginal distribution of a set of variables.
 
         :param variables: The variables to calculate the marginal distribution on.
-        :return: The marginal distribution of the variables.
+        :return: The marginal distribution over the variables.
         """
         raise NotImplementedError
 
-    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
+    def conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         """
-        Calculate the conditional distribution of the model given a preprocessed event.
+        Calculate the conditional distribution P(*| event) and the probability of the event.
 
         If the event is impossible, the conditional distribution is None and the probability is 0.
+        Implementing a probabilistic model requires that either the conditional, or the log_conditional is overwritten.
 
         :param event: The event to condition on.
-        :return: The conditional distribution of the model and the probability of the event.
+        :return: The conditional distribution and the probability of the event.
         """
-        raise NotImplementedError
+        conditional, log_probability = self.log_conditional(event)
+        return conditional, np.exp(log_probability)
 
-    def conditional(self, event: EventType) -> Tuple[Optional[Self], float]:
+    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         """
-        Calculate the conditional distribution of the model given an event.
+        Calculate the conditional distribution P(*| event) and the probability of the event.
 
-        The event belongs to the class of marginal queries.
-
-        If the event is impossible, the conditional distribution is None and the probability is 0.
-
-        .. Note:: You can read more about queries of this class in Definition 11 in :cite:p:`choi2020probabilistic`_
-            or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
-            :cite:p:`youtube2020probabilistic`
+        Check the documentation of `conditional` for more information.
 
         :param event: The event to condition on.
-        :return: The conditional distribution of the model and the probability of the event.
+        :return: The conditional distribution and the log-probability of the event.
         """
-        return self._conditional(self.preprocess_event(event))
+        conditional, probability = self.conditional(event)
+        return conditional, np.log(probability)
 
-    def sample(self, amount: int) -> Iterable:
+    @abstractmethod
+    def sample(self, amount: int) -> np.array:
         """
         Sample from the model.
 
         :param amount: The number of samples to draw.
-        :return: The samples
+        :return: The samples.
         """
         raise NotImplementedError
 
@@ -238,45 +244,3 @@ class ProbabilisticModel(abc.ABC):
         order = VariableMap({variable: 2 for variable in variables})
         center = self.expectation(variables)
         return self.moment(order, center)
-
-
-class ProbabilisticModelWrapper:
-    """
-    Wrapper class for probabilistic models.
-    """
-
-    model: ProbabilisticModel
-    """The model that is wrapped."""
-
-    def likelihood(self, event: Iterable) -> float:
-        return self.model.likelihood(event)
-
-    def _likelihood(self, event: Iterable) -> float:
-        return self.model._likelihood(event)
-
-    def probability(self, event: Event) -> float:
-        return self.model.probability(event)
-
-    def _probability(self, event: EncodedEvent) -> float:
-        return self.model._probability(event)
-
-    def mode(self) -> Tuple[List[Event], float]:
-        return self.model.mode()
-
-    def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
-        return self.model._mode()
-
-    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
-        return self.model.marginal(variables)
-
-    def conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        return self.model.conditional(event)
-
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
-        return self.model._conditional(event)
-
-    def sample(self, amount: int) -> Iterable:
-        return self.model.sample(amount)
-
-    def moment(self, order: OrderType, center: CenterType) -> MomentType:
-        return self.model.moment(order, center)
