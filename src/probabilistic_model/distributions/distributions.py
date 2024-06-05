@@ -16,6 +16,14 @@ from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, Cen
 from ..utils import SubclassJSONSerializer
 
 
+class MissingDict(defaultdict):
+    """
+    A defaultdict that returns the default value when the key is missing and does **not** add the key to the dict.
+    """
+    def __missing__(self, key):
+        return self.default_factory()
+
+
 class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """
     Abstract Base class for Univariate distributions.
@@ -80,6 +88,20 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
             "xaxis": {"title": self.variable.name}
         }
 
+    def composite_set_from_event(self, event: Event) -> AbstractCompositeSet:
+        """
+        Extract the composite set from the event that is relevant for this distribution.
+        :param event: The event
+        :return: The composite set
+        """
+        if len(event.simple_sets) == 0:
+            return self.variable.domain.new_empty_set()
+
+        result = event.simple_sets[0][self.variable]
+        for simple_event in event.simple_sets[1:]:
+            result |= simple_event[self.variable]
+        return result
+
 
 class ContinuousDistribution(UnivariateDistribution):
     """
@@ -127,6 +149,10 @@ class ContinuousDistribution(UnivariateDistribution):
     def log_pdfs(self, values: np.array) -> np.array:
         """
         Evaluate the logarithmic probability density function at `values`.
+
+        While this implementation is not abstract, it is recommended to override it in subclasses for performance
+        reasons. This method is most commonly used in learning algorithms.
+
         :param values: The array of values
         :return: The array of densities.
         """
@@ -154,21 +180,17 @@ class DiscreteDistribution(UnivariateDistribution):
 
     variable: Union[Symbolic, Integer]
 
-    probabilities: DefaultDict[Union[int, SetElement], float]
+    probabilities: MissingDict[Union[int, SetElement], float] = MissingDict(float)
     """
     A dict that maps from elements of the variables domain to probabilities.
     """
 
     def __init__(self, variable: Union[Symbolic, Integer],
-                 probabilities: Optional[DefaultDict[Union[int, SetElement], float]]):
+                 probabilities: Optional[MissingDict[Union[int, SetElement], float]]):
         self.variable = variable
 
-        if probabilities is None:
-            probabilities = defaultdict(float)
-        self.probabilities = probabilities
-
-    def __copy__(self):
-        return self.__class__(self.variable, self.probabilities)
+        if probabilities is not None:
+            self.probabilities = probabilities
 
     def __eq__(self, other):
         return (isinstance(other, DiscreteDistribution) and self.probabilities == other.probabilities and
@@ -178,7 +200,14 @@ class DiscreteDistribution(UnivariateDistribution):
         return hash((self.variable, tuple(self.probabilities.items())))
 
     def log_likelihood(self, event: FullEvidenceType) -> float:
-        return np.log(self.pmf(event))
+        return np.log(self.pmf(event[0]))
+
+    def log_likelihoods(self, events: np.array) -> np.array:
+        events = events[0, :]
+        result = np.zeros(len(events))
+        for x, p in self.probabilities.items():
+            result[events == x] = np.log(p)
+        return result
 
     def pmf(self, value: Union[int, SetElement]) -> float:
         """
@@ -198,7 +227,7 @@ class DiscreteDistribution(UnivariateDistribution):
         :return: The fitted distribution
         """
         unique, counts = np.unique(data, return_counts=True)
-        probabilities = defaultdict(float)
+        probabilities = MissingDict(float)
         for value, count in zip(unique, counts):
             probabilities[value] = count / len(data)
         self.probabilities = probabilities
@@ -216,9 +245,10 @@ class DiscreteDistribution(UnivariateDistribution):
         Plot the distribution.
         """
         probabilities = self.probabilities_for_plotting()
-        traces = [go.Bar(x=probabilities.keys(), y=probabilities.values(), name="Probability")]
-
         max_likelihood = max(probabilities.values())
+        non_mode_trace = {x: p for x, p in probabilities.items() if p != max_likelihood}
+        traces = [go.Bar(x=list(non_mode_trace.keys()), y=list(non_mode_trace.values()), name="Probability")]
+
         mode = [key for key, value in probabilities.items() if value == max_likelihood]
         traces.append(go.Bar(x=mode, y=[max_likelihood] * len(mode), name="Mode"))
         return traces
@@ -232,10 +262,47 @@ class DiscreteDistribution(UnivariateDistribution):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable = Variable.from_json(data["variable"])
-        probabilities = defaultdict(float)
+        probabilities = MissingDict(float)
         for key, value in data["probabilities"]:
             probabilities[key] = value
         return cls(variable, probabilities)
+
+    def normalize(self):
+        """
+        Normalize the distribution.
+        """
+        total = sum(self.probabilities.values())
+        for key in self.probabilities:
+            self.probabilities[key] /= total
+
+    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+
+        # construct event
+        condition = self.composite_set_from_event(event)
+
+        # calculate new probabilities
+        new_probabilities = MissingDict(float)
+        for x, p_x in self.probabilities.items():
+            if x in condition:
+                new_probabilities[x] = p_x
+
+        # if the event is impossible, return None and 0
+        probability = sum(new_probabilities.values())
+
+        if probability == 0:
+            return None, -float("inf")
+
+        result = self.__class__(self.variable, new_probabilities)
+        result.normalize()
+        return result, np.log(probability)
+
+    def __copy__(self) -> Self:
+        return self.__class__(self.variable, self.probabilities)
+
+    def sample(self, amount: int) -> np.array:
+        sample_space = np.array(list(self.probabilities.keys()))
+        sample_probabilities = np.array([value for value in self.probabilities.values()])
+        return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
 
 
 class SymbolicDistribution(DiscreteDistribution):
@@ -247,11 +314,8 @@ class SymbolicDistribution(DiscreteDistribution):
 
     def univariate_log_mode(self) -> Tuple[Set, float]:
         max_likelihood = max(self.probabilities.values())
-        mode = Set(key for key, value in self.probabilities.items() if value == max_likelihood)
+        mode = Set(*(key for key, value in self.probabilities.items() if value == max_likelihood))
         return mode, np.log(max_likelihood)
-
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        raise NotImplementedError
 
     def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
         return {element.name: self.pmf(element) for element in self.variable.domain.simple_sets}
@@ -262,14 +326,9 @@ class SymbolicDistribution(DiscreteDistribution):
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         return sum(self.pmf(key) for key in event[self.variable].simple_sets)
 
-    def sample(self, amount: int) -> np.array:
-        sample_space = np.array([key.value for key in self.probabilities.keys()])
-        sample_probabilities = np.array([value for value in self.probabilities.values()])
-        return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
-
     @property
     def representation(self):
-        return f"Nominal{self.variable.domain}"
+        return f"Nominal({self.variable.name}, {self.variable.domain.simple_sets[0].all_elements.__name__})"
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
@@ -280,7 +339,7 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
 
     variable: Integer
 
-    def __init__(self, variable: Integer, probabilities: Optional[DefaultDict[Union[int, SetElement], float]]):
+    def __init__(self, variable: Integer, probabilities: Optional[MissingDict[Union[int, SetElement], float]]):
         DiscreteDistribution.__init__(self, variable, probabilities)
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
@@ -291,11 +350,8 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
                 mode |= singleton(key)
         return mode, np.log(max_likelihood)
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        raise NotImplementedError
-
     def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
-        return self.probabilities
+        return {x: p_x for x, p_x in self.probabilities.items() if p_x > 0}
 
     @property
     def univariate_support(self) -> Interval:
@@ -329,14 +385,9 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
 
         return result
 
-    def sample(self, amount: int) -> np.array:
-        sample_space = np.array(list(self.probabilities.keys()))
-        sample_probabilities = np.array([value for value in self.probabilities.values()])
-        return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
-
     @property
     def representation(self):
-        return f"Ordinal{self.variable.domain}"
+        return f"Ordinal({self.variable.name})"
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         order = order[self.variable]
@@ -344,11 +395,21 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
         result = sum([p_x * (x - center) ** order for x, p_x in self.probabilities.items()])
         return VariableMap({self.variable: result})
 
+    def plot_expectation(self) -> List:
+        expectation = self.expectation([self.variable])[self.variable]
+        height = max(self.probabilities.values()) * 1.1
+        return [go.Scatter(x=[expectation, expectation], y=[0, height], mode="lines+markers", name="Expectation")]
+
+    def plot(self) -> List[go.Bar]:
+        return super().plot() + self.plot_expectation()
+
 
 class DiracDeltaDistribution(ContinuousDistribution):
     """
     Class for Dirac delta distributions.
     The Dirac measure is used whenever evidence is given as a singleton instance.
+
+    https://en.wikipedia.org/wiki/Dirac_delta_function
     """
 
     variable: Continuous
@@ -372,12 +433,31 @@ class DiracDeltaDistribution(ContinuousDistribution):
     def log_pdf(self, value: Union[float, int]) -> float:
         return np.log(self.density_cap) if value == self.location else -float("inf")
 
+    def log_pdfs(self, values: np.array) -> np.array:
+        result = np.full(len(values), -float("inf"))
+        result[values == self.location] = np.log(self.density_cap)
+        return result
+
     def cdf(self, value: Union[float, int]) -> float:
-        return 1. if value > self.location else 0.
+        return 1. if value >= self.location else 0.
 
     @property
     def univariate_support(self) -> Interval:
         return singleton(self.location)
+
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        interval: Interval = event[self.variable]
+        return 1. if self.location in interval else 0.
+
+    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
+        return self.univariate_support, np.log(self.density_cap)
+
+    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+        probability = self.probability(event)
+        if probability > 0:
+            return self, np.log(probability)
+        else:
+            return None, -float("inf")
 
     def sample(self, amount: int) -> np.array:
         return np.full((amount, 1), self.location)
@@ -418,7 +498,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
             "density_cap": self.density_cap}
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> 'SubclassJSONSerializer':
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable = Continuous.from_json(data["variable"])
         location = data["location"]
         density_cap = data["density_cap"]
