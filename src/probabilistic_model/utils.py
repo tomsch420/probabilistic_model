@@ -3,10 +3,6 @@ from random_events.utils import get_full_class_name, recursive_subclasses
 import types
 
 
-if TYPE_CHECKING:
-    from .distributions.distributions import UnivariateDistribution
-
-
 def type_converter(abstract_type: Type, package: types.ModuleType):
     """
     Convert a type to a different type from a target sub-package that inherits from this type.

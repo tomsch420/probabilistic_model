@@ -10,6 +10,7 @@ from random_events.variable import *
 from random_events.interval import *
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple, DefaultDict
 import plotly.graph_objects as go
+from ...constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType, FullEvidenceType
@@ -397,7 +398,7 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
 
     def plot_expectation(self) -> List:
         expectation = self.expectation([self.variable])[self.variable]
-        height = max(self.probabilities.values()) * 1.1
+        height = max(self.probabilities.values()) * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
         return [go.Scatter(x=[expectation, expectation], y=[0, height], mode="lines+markers", name="Expectation")]
 
     def plot(self) -> List[go.Bar]:
@@ -514,9 +515,11 @@ class DiracDeltaDistribution(ContinuousDistribution):
                                y=[0, 0, self.density_cap, 0, 0], mode="lines", name="PDF")
         cdf_trace = go.Scatter(x=[lower_border, self.location, self.location, upper_border],
                                y=[0, 0, 1, 1], mode="lines", name="CDF")
-        expectation_trace = go.Scatter(x=[self.location, self.location], y=[0, self.density_cap * 1.05],
+        expectation_trace = go.Scatter(x=[self.location, self.location], y=[0, self.density_cap *
+                                                                            SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT],
                                        mode="lines+markers", name="Expectation")
-        mode_trace = go.Scatter(x=[self.location, self.location], y=[0, self.density_cap * 1.05],
+        mode_trace = go.Scatter(x=[self.location, self.location], y=[0, self.density_cap *
+                                                                     SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT],
                                 mode="lines+markers", name="Mode")
         return [pdf_trace, cdf_trace, expectation_trace, mode_trace]
 
