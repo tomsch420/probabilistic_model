@@ -173,6 +173,60 @@ class ContinuousDistribution(UnivariateDistribution):
         return sum(self.cdf(simple_interval.upper) - self.cdf(simple_interval.lower) for simple_interval
                    in interval.simple_sets)
 
+    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+        event = event & self.support()
+        interval = self.composite_set_from_event(event)
+
+        if interval.is_empty():
+            return None, -np.inf
+
+        elif len(interval.simple_sets) == 1:
+            return self.log_conditional_from_simple_interval(interval.simple_sets[0])
+
+        else:
+            return self.log_conditional_from_interval(interval)
+
+    def log_conditional_from_singleton(self, interval: SimpleInterval) -> Tuple[DiracDeltaDistribution, float]:
+        """
+        Calculate the conditional distribution given a singleton event with p(event) > 0.
+
+        In this case, the conditional distribution is a Dirac delta distribution and the log-likelihood is chosen
+        for the log-probability.
+
+        :param interval: The singleton event
+        :return: The conditional distribution and the log-probability of the event.
+        """
+        log_pdf_value = self.log_pdf(interval.lower)
+        return DiracDeltaDistribution(self.variable, interval.lower, np.exp(log_pdf_value)), log_pdf_value
+
+    def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
+        """
+        Calculate the conditional distribution given a simple interval with p(interval) > 0.
+        The interval could also be a singleton.
+
+        :param interval: The simple interval
+        :return: The conditional distribution and the log-probability of the interval.
+        """
+        if interval.lower == interval.upper:
+            return self.log_conditional_from_singleton(interval)
+        return self.log_conditional_from_non_singleton_simple_interval(interval)
+
+    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
+        """
+        Calculate the conditional distribution given a non-singleton, simple interval with p(interval) > 0.
+        :param interval: The simple interval.
+        :return: The conditional distribution and the log-probability of the interval.
+        """
+        raise NotImplementedError
+
+    def log_conditional_from_interval(self, interval) -> Tuple[Self, float]:
+        """
+        Calculate the conditional distribution given an interval with p(interval) > 0.
+        :param interval: The simple interval
+        :return: The conditional distribution and the log-probability of the interval.
+        """
+        raise NotImplementedError
+
 
 class DiscreteDistribution(UnivariateDistribution):
     """
@@ -291,7 +345,7 @@ class DiscreteDistribution(UnivariateDistribution):
         probability = sum(new_probabilities.values())
 
         if probability == 0:
-            return None, -float("inf")
+            return None, -np.inf
 
         result = self.__class__(self.variable, new_probabilities)
         result.normalize()
@@ -342,6 +396,9 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
 
     def __init__(self, variable: Integer, probabilities: Optional[MissingDict[Union[int, SetElement], float]]):
         DiscreteDistribution.__init__(self, variable, probabilities)
+
+    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+        return DiscreteDistribution.log_conditional(self, event)
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         max_likelihood = max(self.probabilities.values())
@@ -426,16 +483,16 @@ class DiracDeltaDistribution(ContinuousDistribution):
     This value will be used to replace infinity in likelihood.
     """
 
-    def __init__(self, variable: Continuous, location: float, density_cap: float = float("inf")):
+    def __init__(self, variable: Continuous, location: float, density_cap: float = np.inf):
         self.variable = variable
         self.location = location
         self.density_cap = density_cap
 
     def log_pdf(self, value: Union[float, int]) -> float:
-        return np.log(self.density_cap) if value == self.location else -float("inf")
+        return np.log(self.density_cap) if value == self.location else -np.inf
 
     def log_pdfs(self, values: np.array) -> np.array:
-        result = np.full(len(values), -float("inf"))
+        result = np.full(len(values), -np.inf)
         result[values == self.location] = np.log(self.density_cap)
         return result
 
@@ -452,13 +509,6 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         return self.univariate_support, np.log(self.density_cap)
-
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        probability = self.probability(event)
-        if probability > 0:
-            return self, np.log(probability)
-        else:
-            return None, -float("inf")
 
     def sample(self, amount: int) -> np.array:
         return np.full((amount, 1), self.location)

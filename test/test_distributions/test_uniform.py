@@ -1,19 +1,16 @@
 import unittest
 
-import plotly.graph_objects as go
 from random_events.interval import *
-from random_events.variable import Continuous
 from random_events.product_algebra import *
 
-from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.distributions.distributions import DiracDeltaDistribution
+from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.utils import SubclassJSONSerializer
 
 
 class UniformDistributionTestCase(unittest.TestCase):
-
-    distribution: UniformDistribution = UniformDistribution(Continuous("x"), SimpleInterval(0, 2, Bound.CLOSED,
-                                                                                            Bound.OPEN))
+    x: Continuous = Continuous("x")
+    distribution: UniformDistribution = UniformDistribution(x, SimpleInterval(0, 2, Bound.CLOSED, Bound.OPEN))
 
     def test_domain(self):
         self.assertEqual(self.distribution.univariate_support, self.distribution.interval.as_composite_set())
@@ -36,7 +33,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.cdf(3), 1)
 
     def test_probability(self):
-        event = SimpleEvent({self.distribution.variable: closed(0, 1) | closed(1.5, 2)}).as_composite_set()
+        event = SimpleEvent({self.x: closed(0, 1) | closed(1.5, 2)}).as_composite_set()
         self.assertEqual(self.distribution.probability(event), 0.75)
 
     def test_mode(self):
@@ -51,24 +48,23 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertTrue(all(likelihoods == 0.5))
 
     def test_conditional_no_intersection(self):
-        event = Event({self.distribution.variable: portion.closed(3, 4)})
+        event = SimpleEvent({self.x: closed(3, 4)}).as_composite_set()
         conditional, probability = self.distribution.conditional(event)
         self.assertIsNone(conditional)
         self.assertEqual(probability, 0)
 
     def test_conditional_singleton_intersection(self):
-        event = Event({self.distribution.variable: portion.singleton(1)})
+        event = SimpleEvent({self.distribution.variable: singleton(1)}).as_composite_set()
         conditional, probability = self.distribution.conditional(event)
-        self.assertEqual(conditional, DiracDeltaDistribution(self.distribution.variable, 1, 0.5))
+        self.assertEqual(conditional, DiracDeltaDistribution(self.x, 1, 0.5))
         self.assertEqual(probability, 0.5)
 
     def test_conditional_simple_intersection(self):
-        event = Event({self.distribution.variable: portion.closed(1, 2)})
+        event = SimpleEvent({self.distribution.variable: closed(1, 2)}).as_composite_set()
         conditional, probability = self.distribution.conditional(event)
-        self.assertIsInstance(conditional, UniformDistribution)
+        conditional_by_hand = UniformDistribution(self.x, SimpleInterval(1, 2, Bound.CLOSED, Bound.OPEN))
+        self.assertEqual(conditional, conditional_by_hand)
         self.assertEqual(probability, 0.5)
-        self.assertEqual(conditional.lower, 1)
-        self.assertEqual(conditional.upper, 2)
 
     def test_moment(self):
         expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}),
@@ -76,16 +72,6 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(expectation[self.distribution.variable], 1)
         variance = self.distribution.moment(VariableMap({self.distribution.variable: 2}), expectation)
         self.assertEqual(variance[self.distribution.variable], 1 / 3)
-
-    def test_inclusion_likelihood(self):
-        distribution = UniformDistribution(Continuous("x"), portion.closed(0, 1))
-        self.assertEqual(distribution.likelihood([1]), 1)
-        self.assertEqual(distribution.likelihood([0]), 1)
-
-    def test_exclusion_likelihood(self):
-        distribution = UniformDistribution(Continuous("x"), portion.open(0, 1))
-        self.assertEqual(distribution.likelihood([1]), 0)
-        self.assertEqual(distribution.likelihood([0]), 0)
 
     def test_plot(self):
         fig = go.Figure(data=self.distribution.plot())
@@ -99,7 +85,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertIsInstance(deserialized, UniformDistribution)
 
     def test_variable_setting(self):
-        distribution = UniformDistribution(Continuous("x"), portion.closed(0, 1))
+        distribution = UniformDistribution(Continuous("x"), closed(0, 1).simple_sets[0])
         self.assertEqual(distribution.variable, Continuous("x"))
-        distribution.variables = [Continuous("y")]
+        distribution.variable = Continuous("y")
         self.assertEqual(distribution.variable, Continuous("y"))

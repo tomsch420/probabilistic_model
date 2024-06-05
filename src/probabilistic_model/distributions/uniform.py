@@ -1,4 +1,3 @@
-import random
 from .distributions import *
 from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT
 
@@ -38,12 +37,9 @@ class UniformDistribution(ContinuousDistribution):
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         return self.interval.as_composite_set(), self.log_pdf_value()
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        probability = self.probability(event)
-        if probability == 0:
-            return None, -np.inf
-        else:
-            return self, np.log(probability)
+    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
+        probability = self.cdf(interval.upper) - self.cdf(interval.lower)
+        return self.__class__(self.variable, interval), np.log(probability)
 
     def sample(self, amount: int) -> np.array:
         return np.random.uniform(self.lower, self.upper, (amount, 1))

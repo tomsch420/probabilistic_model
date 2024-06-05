@@ -145,7 +145,7 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
         event = SimpleEvent({self.model.variable: closed(-1, 2)}).as_composite_set()
         conditional, probability = self.model.conditional(event)
         self.assertEqual(conditional, self.model)
-        self.assertEqual(probability, 1)
+        self.assertEqual(probability, 2)
 
     def test_conditional_impossible(self):
         event = SimpleEvent({self.model.variable: closed(1, 2)}).as_composite_set()
