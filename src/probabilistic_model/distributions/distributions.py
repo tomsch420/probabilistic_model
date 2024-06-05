@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections import defaultdict
 from typing import Optional
 
@@ -8,9 +8,9 @@ import numpy as np
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import *
 from random_events.interval import *
-from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple, DefaultDict
+from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 import plotly.graph_objects as go
-from ...constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
+from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType, FullEvidenceType

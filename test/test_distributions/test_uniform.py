@@ -1,9 +1,9 @@
 import unittest
 
 import plotly.graph_objects as go
-import portion
-from random_events.events import Event, VariableMap
-from random_events.variables import Continuous
+from random_events.interval import *
+from random_events.variable import Continuous
+from random_events.product_algebra import *
 
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.distributions.distributions import DiracDeltaDistribution
@@ -12,11 +12,11 @@ from probabilistic_model.utils import SubclassJSONSerializer
 
 class UniformDistributionTestCase(unittest.TestCase):
 
-    distribution: UniformDistribution = UniformDistribution(Continuous("x"), portion.closedopen(0, 2))
+    distribution: UniformDistribution = UniformDistribution(Continuous("x"), SimpleInterval(0, 2, Bound.CLOSED,
+                                                                                            Bound.OPEN))
 
     def test_domain(self):
-        self.assertEqual(self.distribution.domain.events[0],
-                         Event({self.distribution.variable: portion.closedopen(0, 2)}))
+        self.assertEqual(self.distribution.univariate_support, self.distribution.interval.as_composite_set())
 
     def test_likelihood(self):
         self.assertEqual(self.distribution.likelihood([1]), 0.5)
@@ -26,7 +26,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.likelihood([3]), 0.)
 
     def test_probability_of_domain(self):
-        self.assertEqual(self.distribution.probability(self.distribution.domain), 1)
+        self.assertEqual(self.distribution.probability(self.distribution.support()), 1)
 
     def test_cdf(self):
         self.assertEqual(self.distribution.cdf(1), 0.5)
@@ -36,20 +36,19 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.cdf(3), 1)
 
     def test_probability(self):
-        event = Event({self.distribution.variable: portion.closed(0, 1) | portion.closed(1.5, 2)})
+        event = SimpleEvent({self.distribution.variable: closed(0, 1) | closed(1.5, 2)}).as_composite_set()
         self.assertEqual(self.distribution.probability(event), 0.75)
 
     def test_mode(self):
         modes, likelihood = self.distribution.mode()
-        print(modes)
-        self.assertEqual(modes, self.distribution.domain)
+        self.assertEqual(modes, self.distribution.support())
         self.assertEqual(likelihood, 0.5)
 
     def test_sample(self):
         samples = self.distribution.sample(100)
         self.assertEqual(len(samples), 100)
-        for sample in samples:
-            self.assertGreaterEqual(self.distribution.likelihood(sample), 0)
+        likelihoods = self.distribution.likelihoods(samples)
+        self.assertTrue(all(likelihoods == 0.5))
 
     def test_conditional_no_intersection(self):
         event = Event({self.distribution.variable: portion.closed(3, 4)})
