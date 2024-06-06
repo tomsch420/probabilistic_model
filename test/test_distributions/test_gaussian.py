@@ -38,15 +38,15 @@ class GaussianDistributionTestCase(unittest.TestCase):
     def test_conditional_simple_intersection(self):
         event = SimpleEvent({self.distribution.variable: closed(1, 2)}).as_composite_set()
         conditional, probability = self.distribution.conditional(event)
-        # self.assertIsInstance(conditional, TruncatedGaussianDistribution)
-        # self.assertEqual(probability, self.distribution.cdf(2) - self.distribution.cdf(1))
-        # self.assertEqual(conditional.lower, 1)
-        # self.assertEqual(conditional.upper, 2)
+        self.assertIsInstance(conditional, TruncatedGaussianDistribution)
+        self.assertAlmostEqual(probability, self.distribution.cdf(2) - self.distribution.cdf(1))
+        self.assertEqual(conditional.lower, 1)
+        self.assertEqual(conditional.upper, 2)
 
     def test_raw_moment(self):
         self.assertEqual(self.distribution.raw_moment(0), 1)
         self.assertEqual(self.distribution.raw_moment(1), self.distribution.location)
-        self.assertEqual(self.distribution.raw_moment(2), self.distribution.location ** 2 + self.distribution.scale)
+        self.assertEqual(self.distribution.raw_moment(2), self.distribution.location ** 2 + self.distribution.scale**2)
 
     def test_centered_moment(self):
         expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}),
@@ -73,9 +73,10 @@ class GaussianDistributionTestCase(unittest.TestCase):
         self.assertEqual(third_order_moment[self.distribution.variable], -6.125)
 
     def test_plot(self):
-        fig = go.Figure(data=self.distribution.plot())
+        print(self.distribution.plot())
+        fig = go.Figure(self.distribution.plot())
         self.assertIsNotNone(fig)
-        # fig.show()
+        fig.show()
 
     def test_serialization(self):
         serialized = self.distribution.to_json()
@@ -84,8 +85,8 @@ class GaussianDistributionTestCase(unittest.TestCase):
         self.assertIsInstance(deserialized, GaussianDistribution)
 
     def test_variance(self):
-        variance = self.distribution.variance(self.distribution.variables)
-        self.assertEqual(variance[self.distribution.variable], self.distribution.scale)
+        variance = self.distribution.variance([self.x])
+        self.assertEqual(variance[self.distribution.variable], self.distribution.scale**2)
 
 
 # class TruncatedGaussianDistributionTestCase(unittest.TestCase):

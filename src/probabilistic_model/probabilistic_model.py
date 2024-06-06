@@ -55,9 +55,10 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def likelihood(self, event: FullEvidenceType) -> float:
+    def likelihood(self, events: np.array) -> np.array:
         """
-        Calculate the likelihood of an event.
+        Calculate the likelihood of an array of events.
+
         The likelihood is a full evidence query, i.e., an assignment to all variables in the model.
         The order of elements in the event has to correspond to the order of variables in the model.
 
@@ -67,44 +68,22 @@ class ProbabilisticModel(abc.ABC):
             or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=TAfIX2LmOWM-Fd2B&t=785>`_.
             :cite:p:`youtube2020probabilistic`
 
-        :param event: The full evidence event
-        :return: The likelihood of the event.
+        :param events: The array of full evidence event. The shape of the array has to be (n, len(self.variables)).
+        :return: The likelihoods of the event as an array of shape (n, ).
         """
-        return np.exp(self.log_likelihood(event))
+        return np.exp(self.log_likelihood(events))
 
     @abstractmethod
-    def log_likelihood(self, event: FullEvidenceType) -> float:
+    def log_likelihood(self, events: np.array) -> np.array:
         """
         Calculate the log-likelihood of an event.
 
         Check the documentation of `likelihood` for more information.
 
-        :param event: The full evidence event
+        :param events: The full evidence event
         :return: The log-likelihood of the event.
         """
         raise NotImplementedError
-
-    def likelihoods(self, events: np.array) -> np.array:
-        """
-        Calculate the likelihood of multiple events.
-
-        Check the documentation of `likelihood` for more information.
-
-        :param events: The events
-        :return: The likelihoods of the events.
-        """
-        return np.exp(self.log_likelihoods(events))
-
-    def log_likelihoods(self, events: np.array) -> np.array:
-        """
-        Calculate the log-likelihood of multiple events.
-
-        Check the documentation of `likelihood` for more information.
-
-        :param events: The events
-        :return: The log-likelihoods of the events.
-        """
-        return np.array([self.log_likelihood(event) for event in events])
 
     def probability(self, event: Event) -> float:
         """

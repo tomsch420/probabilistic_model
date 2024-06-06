@@ -116,55 +116,36 @@ class ContinuousDistribution(UnivariateDistribution):
     def univariate_support(self) -> Interval:
         raise NotImplementedError
 
-    def log_likelihood(self, event: FullEvidenceType) -> float:
-        return self.log_pdf(event[0])
+    def log_likelihood(self, events: np.array) -> np.array:
+        return self.log_pdf(events[0, :])
 
-    def log_likelihoods(self, events: np.array) -> np.array:
-        return self.log_pdfs(events[0, :])
-
-    def pdf(self, value: Union[float, int]) -> float:
+    def pdf(self, x: np.array) -> np.array:
         """
-        Calculate the probability density function at `value`.
-        :param value: The value
-        :return: The probability.
+        Evaluate the probability density function at `x`.
+        :param x: The values as numpy array
+        :return: p(x)
         """
-        return np.exp(self.log_pdf(value))
-
-    def pdfs(self, values: np.array) -> np.array:
-        """
-        Calculate the probability density function at `values`.
-        :param values: The array of values
-        :return: The array of densities.
-        """
-        return np.exp(self.log_pdfs(values))
+        return np.exp(self.log_pdf(x))
 
     @abstractmethod
-    def log_pdf(self, value: Union[float, int]) -> float:
+    def log_pdf(self, x: np.array) -> np.array:
         """
-        Evaluate the logarithmic probability density function at `value`.
-        :param value: x
-        :return: p(x)
+        Evaluate the logarithmic probability density function at `x`.
+
+        It is recommended to override this function in a performant way.
+        This method is most commonly used in learning algorithms and will be evaluated for many values of x.
+
+        :param x: x
+        :return: log(p(x))
         """
         raise NotImplementedError
 
-    def log_pdfs(self, values: np.array) -> np.array:
-        """
-        Evaluate the logarithmic probability density function at `values`.
-
-        While this implementation is not abstract, it is recommended to override it in subclasses for performance
-        reasons. This method is most commonly used in learning algorithms.
-
-        :param values: The array of values
-        :return: The array of densities.
-        """
-        return np.array([self.log_pdf(value) for value in values])
-
     @abstractmethod
-    def cdf(self, value: Union[float, int]) -> float:
+    def cdf(self, x: np.array) -> np.array:
         """
-        Evaluate the cumulative distribution function at `value`.
-        :param value: The value
-        :return: The probability.
+        Evaluate the cumulative distribution function at `x`.
+        :param x: x
+        :return: P(x <= self.variable)
         """
         raise NotImplementedError
 
@@ -254,12 +235,9 @@ class DiscreteDistribution(UnivariateDistribution):
     def __hash__(self):
         return hash((self.variable, tuple(self.probabilities.items())))
 
-    def log_likelihood(self, event: FullEvidenceType) -> float:
-        return np.log(self.pmf(event[0]))
-
-    def log_likelihoods(self, events: np.array) -> np.array:
-        events = events[0, :]
-        result = np.zeros(len(events))
+    def log_likelihood(self, events: np.array) -> np.array:
+        events = events[:, 0]
+        result = np.full(len(events), -np.inf)
         for x, p in self.probabilities.items():
             result[events == x] = np.log(p)
         return result
@@ -419,17 +397,17 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
                 result |= singleton(key)
         return result
 
-    def log_pdf(self, value: Union[float, int]) -> float:
-        return np.log(self.pmf(value))
+    def log_pdf(self, x: np.array) -> np.array:
+        return DiscreteDistribution.log_likelihood(self, x.reshape(-1, 1))
 
-    def cdf(self, value: Union[float, int]) -> float:
-        result = 0
-
-        for x, p_x in self.probabilities.items():
-            if x <= value:
-                result += p_x
-            else:
+    def cdf(self, x: np.array) -> np.array:
+        result = np.zeros((len(x), ))
+        maximum_value = max(x)
+        for value, p in self.probabilities.items():
+            if value > maximum_value:
                 break
+            else:
+                result[x <= value] += p
 
         return result
 
@@ -488,16 +466,15 @@ class DiracDeltaDistribution(ContinuousDistribution):
         self.location = location
         self.density_cap = density_cap
 
-    def log_pdf(self, value: Union[float, int]) -> float:
-        return np.log(self.density_cap) if value == self.location else -np.inf
-
-    def log_pdfs(self, values: np.array) -> np.array:
-        result = np.full(len(values), -np.inf)
-        result[values == self.location] = np.log(self.density_cap)
+    def log_pdf(self, x: np.array) -> np.array:
+        result = np.full(len(x), -np.inf)
+        result[x == self.location] = np.log(self.density_cap)
         return result
 
-    def cdf(self, value: Union[float, int]) -> float:
-        return 1. if value >= self.location else 0.
+    def cdf(self, x: np.array) -> np.array:
+        result = np.zeros((len(x), ))
+        result[x >= self.location] = 1.
+        return result
 
     @property
     def univariate_support(self) -> Interval:

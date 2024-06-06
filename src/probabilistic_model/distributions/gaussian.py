@@ -4,9 +4,10 @@ import numpy as np
 from scipy.stats import gamma, norm
 from scipy.special import erf
 from .distributions import *
+from ..plotting import SampleBasedPlotMixin
 
 
-class GaussianDistribution(ContinuousDistribution):
+class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
     """
     Class for Gaussian distributions.
     """
@@ -121,252 +122,234 @@ class GaussianDistribution(ContinuousDistribution):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable = Continuous.from_json(data["variable"])
-        return cls(variable, data["mean"], data["variance"])
+        return cls(variable, data["location"], data["scale"])
 
-    def plot(self) -> List:
-        raise NotImplementedError
+    def plot(self, number_of_samples: int = 1000) -> List:
+        return SampleBasedPlotMixin.plot(self, number_of_samples)
 
 
-# class TruncatedGaussianDistribution(GaussianDistribution):
-#     """
-#     Class for Truncated Gaussian distributions.
-#     """
-#
-#     def __init__(self, variable: Continuous, interval: portion.Interval, mean: float, scale: float):
-#         super().__init__(variable, mean, scale)
-#         self.interval = interval
-#
-#     @property
-#     def domain(self) -> ComplexEvent:
-#         return ComplexEvent([Event({self.variable: self.interval})])
-#
-#     @property
-#     def lower(self) -> float:
-#         return self.interval.lower
-#
-#     @property
-#     def upper(self) -> float:
-#         return self.interval.upper
-#
-#     @property
-#     def normalizing_constant(self) -> float:
-#         r"""
-#             Helper method to calculate
-#
-#             .. math::
-#
-#             Z = {\mathbf{\Phi}\left ( \frac{self.interval.upper-\mu}{\sigma} \right )-\mathbf{\Phi}
-#             \left( \frac{self.interval.lower-\mu}{\sigma} \right )}
-#
-#         """
-#         return super()._cdf(self.upper) - super()._cdf(self.lower)
-#
-#     def _pdf(self, value: float) -> float:
-#
-#         if value in self.interval:
-#             return super()._pdf(value) / self.normalizing_constant
-#         else:
-#             return 0
-#
-#     def _cdf(self, value: float) -> float:
-#
-#         if value in self.interval:
-#             return (super()._cdf(value) - super()._cdf(self.lower)) / self.normalizing_constant
-#         elif value <= self.lower:
-#             return 0
-#         else:
-#             return 1
-#
-#     def _mode(self) -> Tuple[ComplexEvent, float]:
-#         if self.mean in self.interval:
-#             mode, likelihood = [EncodedEvent({self.variable: portion.singleton(self.mean)})], self._pdf(self.mean)
-#         elif self.mean < self.lower:
-#             mode, likelihood = [EncodedEvent({self.variable: portion.singleton(self.lower)})], self._pdf(self.lower)
-#         else:
-#             mode, likelihood = [EncodedEvent({self.variable: portion.singleton(self.upper)})], self._pdf(self.upper)
-#         return ComplexEvent(mode), likelihood
-#
-#     def rejection_sample(self, amount: int) -> List[List[float]]:
-#         """
-#         .. note::
-#             This uses rejection sampling and hence is inefficient.
-#
-#         """
-#         samples = super().sample(amount)
-#         samples = [sample for sample in samples if sample[0] in self.interval]
-#         rejected_samples = amount - len(samples)
-#         if rejected_samples > 0:
-#             samples.extend(self.rejection_sample(rejected_samples))
-#         return samples
-#
-#     def moment(self, order: OrderType, center: CenterType) -> MomentType:
-#         r"""
-#                 Helper method to calculate the moment of a Truncated Gaussian distribution.
-#
-#                 .. note::
-#                 This method follows the equation (2.8) in :cite:p:`ogasawara2022moments`.
-#
-#                 .. math::
-#
-#                     \mathbb{E} \left[ \left( X-center \right)^{order} \right]\mathds{1}_{\left[ lower , upper \right]}(x)
-#                     = \sigma^{order} \frac{1}{\Phi(upper)-\Phi(lower)} \sum_{k=0}^{order} \binom{order}{k} I_k (-center)^{(order-k)}.
-#
-#                     where:
-#
-#                     .. math::
-#
-#                         I_k = \frac{2^{\frac{k}{2}}}{\sqrt{\pi}}\Gamma \left( \frac{k+1}{2} \right) \left[ sgn \left(upper\right)
-#                          \mathds{1}\left \{ k=2 \nu \right \} + \mathds{1} \left\{k = 2\nu -1 \right\} \frac{1}{2}
-#                           F_{\Gamma} \left( \frac{upper^2}{2},\frac{k+1}{2} \right) - sgn \left(lower\right) \mathds{1}\left \{ k=2 \nu \right \}
-#                          + \mathds{1} \left\{k = 2\nu -1 \right\} \frac{1}{2} F_{\Gamma} \left( \frac{lower^2}{2},\frac{k+1}{2} \right) \right]
-#
-#                 :return: The moment of the distribution.
-#
-#                 """
-#
-#         order = order[self.variable]
-#         center = center[self.variable]
-#
-#         lower_bound = self.transform_to_standard_normal(self.lower)  # normalize the lower bound
-#         upper_bound = self.transform_to_standard_normal(self.upper)  # normalize the upper bound
-#         normalized_center = self.transform_to_standard_normal(center)  # normalize the center
-#         truncated_moment = 0
-#
-#         for k in range(order + 1):
-#
-#             multiplying_constant = math.comb(order, k) * 2 ** (k / 2) * math.gamma((k + 1) / 2) / math.sqrt(math.pi)
-#
-#             if k % 2 == 0:
-#                 bound_selection_lower = np.sign(lower_bound)
-#                 bound_selection_upper = np.sign(upper_bound)
-#             else:
-#                 bound_selection_lower = 1
-#                 bound_selection_upper = 1
-#
-#             gamma_term_lower = -0.5 * gamma.cdf(lower_bound ** 2 / 2, (k + 1) / 2) * bound_selection_lower
-#             gamma_term_upper = 0.5 * gamma.cdf(upper_bound ** 2 / 2, (k + 1) / 2) * bound_selection_upper
-#
-#             truncated_moment += (
-#                         multiplying_constant * (gamma_term_lower + gamma_term_upper) * (-normalized_center) ** (
-#                             order - k))
-#
-#         truncated_moment *= (math.sqrt(self.scale) ** order) / self.normalizing_constant
-#
-#         return VariableMap({self.variable: truncated_moment})
-#
-#     def __eq__(self, other):
-#         return super().__eq__(other) and self.interval == other.interval
-#
-#     @property
-#     def representation(self):
-#         return f"N({self.mean},{self.scale} | {self.interval})"
-#
-#     def __copy__(self):
-#         return self.__class__(self.variable, self.interval, self.mean, self.scale)
-#
-#     def to_json(self) -> Dict[str, Any]:
-#         return {**super().to_json(), "interval": portion.to_data(self.interval)}
-#
-#     @classmethod
-#     def _from_json(cls, data: Dict[str, Any]) -> Self:
-#         variable = Continuous.from_json(data["variable"])
-#         interval = portion.from_data(data["interval"])
-#         return cls(variable, interval, data["mean"], data["variance"])
-#
-#     def transform_to_standard_normal(self, number: float) -> float:
-#         """
-#         Transform the number to the standard normal distribution.
-#         :param number: The number to transform
-#         :return: The transformed bound
-#         """
-#         if number <= -portion.inf:
-#             transformed_bound = -float("inf")
-#         elif number >= portion.inf:
-#             transformed_bound = float("inf")
-#         else:
-#             transformed_bound = (number - self.mean) / np.sqrt(self.scale)
-#         return transformed_bound
-#
-#     def robert_rejection_sample(self, amount: int) -> np.ndarray:
-#         """
-#         Use robert rejection sampling to sample from the truncated Gaussian distribution.
-#
-#         :param amount: The amount of samples to generate
-#         :return: The samples
-#         """
-#         # handle the case where the distribution is not the standard normal
-#         new_interval = self.interval.replace(lower=self.transform_to_standard_normal(self.interval.lower),
-#                                              upper=self.transform_to_standard_normal(self.interval.upper))
-#         standard_distribution = self.__class__(self.variable, new_interval, 0, 1)
-#
-#         # enforce an upper bound if it is infinite
-#         if standard_distribution.interval.upper >= float("inf"):
-#             standard_distribution.interval = (standard_distribution.interval.
-#                                               replace(upper=standard_distribution.interval.lower + 10))
-#
-#         # enforce a lower bound if it is infinite
-#         if standard_distribution.interval.lower <= -float("inf"):
-#             standard_distribution.interval = (standard_distribution.interval.
-#                                               replace(lower=standard_distribution.interval.upper - 10))
-#
-#         # sample from double truncated standard normal instead
-#         samples = standard_distribution.robert_rejection_sample_from_standard_normal_with_double_truncation(amount)
-#
-#         # transform samples to this distributions mean and scale
-#         samples *= np.sqrt(self.scale)
-#         samples += self.mean
-#
-#         return samples
-#
-#     def robert_rejection_sample_from_standard_normal_with_double_truncation(self, amount: int) -> np.ndarray:
-#         """
-#         Use robert rejection sampling to sample from the truncated standard normal distribution.
-#         Resamples as long as the amount of samples is not reached.
-#
-#         :param amount: The amount of samples to generate
-#         :return: The samples
-#         """
-#         assert self.scale == 1 and self.mean == 0
-#         # sample from uniform distribution over this distribution's interval
-#         accepted_samples = np.array([])
-#         while len(accepted_samples) < amount:
-#             accepted_samples = np.append(
-#                 accepted_samples,
-#                 self.robert_rejection_sample_from_standard_normal_with_double_truncation_helper(amount - len(accepted_samples)))
-#         return accepted_samples
-#
-#     def robert_rejection_sample_from_standard_normal_with_double_truncation_helper(self, amount: int) -> np.ndarray:
-#         """
-#         Use robert rejection sampling to sample from the truncated standard normal distribution.
-#
-#         :param amount: The maximum number of samples to generate. The actual number of samples can be lower due to
-#             rejection sampling.
-#         :return: The samples
-#         """
-#         uniform_samples = np.random.uniform(self.interval.lower, self.interval.upper, amount)
-#
-#         # if the mean in the interval
-#         if 0 in self.interval:
-#             limiting_function = np.exp((uniform_samples ** 2) / -2)
-#
-#         # if the mean is below the interval
-#         elif self.interval.upper <= 0:
-#             limiting_function = np.exp((self.interval.upper ** 2 - uniform_samples ** 2) / 2)
-#
-#         # if the mean is above the interval
-#         elif self.interval.lower >= 0:
-#             limiting_function = np.exp((self.interval.lower ** 2 - uniform_samples ** 2) / 2)
-#         else:
-#             raise ValueError("This should never happen")
-#
-#         # generate standard uniform samples as acceptance probabilities
-#         acceptance_probabilities = np.random.uniform(0, 1, amount)
-#
-#         # accept samples that are below the limiting function
-#         accepted_samples = uniform_samples[acceptance_probabilities <= limiting_function]
-#         return accepted_samples
-#
-#     def sample(self, amount: int) -> List[List[float]]:
-#         if self.interval.upper >= portion.inf and self.interval.lower <= -portion.inf:
-#             return super().sample(amount)
-#         return self.robert_rejection_sample(amount).reshape(-1, 1).tolist()
+class TruncatedGaussianDistribution(GaussianDistribution):
+    """
+    Class for Truncated Gaussian distributions.
+    """
+
+    interval: SimpleInterval
+
+    def __init__(self, variable: Continuous, interval: SimpleInterval, mean: float, scale: float):
+        super().__init__(variable, mean, scale)
+        self.interval = interval
+
+    @property
+    def lower(self) -> float:
+        return self.interval.lower
+
+    @property
+    def upper(self) -> float:
+        return self.interval.upper
+
+    @property
+    def normalizing_constant(self) -> float:
+        r"""
+            Helper method to calculate
+
+            .. math::
+
+            Z = {\mathbf{\Phi}\left ( \frac{self.interval.upper-\mu}{\sigma} \right )-\mathbf{\Phi}
+            \left( \frac{self.interval.lower-\mu}{\sigma} \right )}
+
+        """
+        return super().cdf(self.upper) - super().cdf(self.lower)
+
+    def pdf(self, value: float) -> float:
+
+        if self.interval.contains(value):
+            return super().pdf(value) / self.normalizing_constant
+        else:
+            return 0
+
+    def univariate_log_mode(self) -> Tuple[Interval, float]:
+        if self.interval.contains(self.location):
+            return singleton(self.location), self.log_pdf(self.location)
+        elif self.location < self.lower:
+            return singleton(self.lower), self.log_pdf(self.lower)
+        else:
+            return singleton(self.upper), self.log_pdf(self.upper)
+
+    def rejection_sample(self, amount: int) -> np.array:
+        """
+        .. note::
+            This uses rejection sampling and hence is inefficient.
+
+        """
+        samples = super().sample(amount)
+        log_likelihoods = self.log_likelihoods(samples)
+        samples = samples[log_likelihoods > -np.inf]
+        rejected_samples = amount - len(samples)
+        if rejected_samples > 0:
+            samples.extend(self.rejection_sample(rejected_samples))
+        return samples
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        r"""
+                Helper method to calculate the moment of a Truncated Gaussian distribution.
+
+                .. note::
+                This method follows the equation (2.8) in :cite:p:`ogasawara2022moments`.
+
+                .. math::
+
+                    \mathbb{E} \left[ \left( X-center \right)^{order} \right]\mathds{1}_{\left[ lower , upper \right]}(x)
+                    = \sigma^{order} \frac{1}{\Phi(upper)-\Phi(lower)} \sum_{k=0}^{order} \binom{order}{k} I_k (-center)^{(order-k)}.
+
+                    where:
+
+                    .. math::
+
+                        I_k = \frac{2^{\frac{k}{2}}}{\sqrt{\pi}}\Gamma \left( \frac{k+1}{2} \right) \left[ sgn \left(upper\right)
+                         \mathds{1}\left \{ k=2 \nu \right \} + \mathds{1} \left\{k = 2\nu -1 \right\} \frac{1}{2}
+                          F_{\Gamma} \left( \frac{upper^2}{2},\frac{k+1}{2} \right) - sgn \left(lower\right) \mathds{1}\left \{ k=2 \nu \right \}
+                         + \mathds{1} \left\{k = 2\nu -1 \right\} \frac{1}{2} F_{\Gamma} \left( \frac{lower^2}{2},\frac{k+1}{2} \right) \right]
+
+                :return: The moment of the distribution.
+
+                """
+
+        order = order[self.variable]
+        center = center[self.variable]
+
+        lower_bound = self.transform_to_standard_normal(self.lower)  # normalize the lower bound
+        upper_bound = self.transform_to_standard_normal(self.upper)  # normalize the upper bound
+        normalized_center = self.transform_to_standard_normal(center)  # normalize the center
+        truncated_moment = 0
+
+        for k in range(order + 1):
+
+            multiplying_constant = math.comb(order, k) * 2 ** (k / 2) * math.gamma((k + 1) / 2) / math.sqrt(math.pi)
+
+            if k % 2 == 0:
+                bound_selection_lower = np.sign(lower_bound)
+                bound_selection_upper = np.sign(upper_bound)
+            else:
+                bound_selection_lower = 1
+                bound_selection_upper = 1
+
+            gamma_term_lower = -0.5 * gamma.cdf(lower_bound ** 2 / 2, (k + 1) / 2) * bound_selection_lower
+            gamma_term_upper = 0.5 * gamma.cdf(upper_bound ** 2 / 2, (k + 1) / 2) * bound_selection_upper
+
+            truncated_moment += (
+                        multiplying_constant * (gamma_term_lower + gamma_term_upper) * (-normalized_center) ** (
+                            order - k))
+
+        truncated_moment *= (self.scale ** order) / self.normalizing_constant
+
+        return VariableMap({self.variable: truncated_moment})
+
+    def __eq__(self, other):
+        return super().__eq__(other) and self.interval == other.interval
+
+    @property
+    def representation(self):
+        return f"N({self.variable.name} | {self.location}, {self.scale}, {self.interval})"
+
+    def __copy__(self):
+        return self.__class__(self.variable, self.interval, self.location, self.scale)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**super().to_json(), "interval": self.interval.to_json()}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variable = Continuous.from_json(data["variable"])
+        interval = SimpleInterval.from_json(data["interval"])
+        return cls(variable, interval, data["mean"], data["variance"])
+
+    def transform_to_standard_normal(self, number: float) -> float:
+        """
+        Transform the number to the standard normal distribution.
+        :param number: The number to transform
+        :return: The transformed bound
+        """
+        return (number - self.location) / self.scale
+
+    def robert_rejection_sample(self, amount: int) -> np.ndarray:
+        """
+        Use robert rejection sampling to sample from the truncated Gaussian distribution.
+
+        :param amount: The amount of samples to generate
+        :return: The samples
+        """
+        # handle the case where the distribution is not the standard normal
+        new_interval = SimpleInterval(self.transform_to_standard_normal(self.interval.lower),
+                                      self.transform_to_standard_normal(self.interval.upper), self.interval.left,
+                                      self.interval.right)
+        standard_distribution = self.__class__(self.variable, new_interval, 0, 1)
+
+        # enforce an upper bound if it is infinite
+        if standard_distribution.interval.upper == np.inf:
+            standard_distribution.interval.upper = standard_distribution.interval.lower + 10
+
+        # enforce a lower bound if it is infinite
+        if standard_distribution.interval.lower == -np.inf:
+            standard_distribution.interval.lower = standard_distribution.interval.upper - 10
+
+        # sample from double truncated standard normal instead
+        samples = standard_distribution.robert_rejection_sample_from_standard_normal_with_double_truncation(amount)
+
+        # transform samples to this distributions mean and scale
+        samples *= self.scale
+        samples += self.location
+
+        return samples
+
+    def robert_rejection_sample_from_standard_normal_with_double_truncation(self, amount: int) -> np.ndarray:
+        """
+        Use robert rejection sampling to sample from the truncated standard normal distribution.
+        Resamples as long as the amount of samples is not reached.
+
+        :param amount: The amount of samples to generate
+        :return: The samples
+        """
+        assert self.scale == 1 and self.location == 0
+        # sample from uniform distribution over this distribution's interval
+        accepted_samples = np.array([])
+        while len(accepted_samples) < amount:
+            accepted_samples = np.append(
+                accepted_samples,
+                self.robert_rejection_sample_from_standard_normal_with_double_truncation_helper(amount - len(accepted_samples)))
+        return accepted_samples
+
+    def robert_rejection_sample_from_standard_normal_with_double_truncation_helper(self, amount: int) -> np.ndarray:
+        """
+        Use robert rejection sampling to sample from the truncated standard normal distribution.
+
+        :param amount: The maximum number of samples to generate. The actual number of samples can be lower due to
+            rejection sampling.
+        :return: The samples
+        """
+        uniform_samples = np.random.uniform(self.lower, self.upper, amount)
+
+        # if the mean in the interval
+        if self.interval.contains(0):
+            limiting_function = np.exp((uniform_samples ** 2) / -2)
+
+        # if the mean is below the interval
+        elif self.upper <= 0:
+            limiting_function = np.exp((self.interval.upper ** 2 - uniform_samples ** 2) / 2)
+
+        # if the mean is above the interval
+        elif self.lower >= 0:
+            limiting_function = np.exp((self.interval.lower ** 2 - uniform_samples ** 2) / 2)
+        else:
+            raise ValueError("This should never happen")
+
+        # generate standard uniform samples as acceptance probabilities
+        acceptance_probabilities = np.random.uniform(0, 1, amount)
+
+        # accept samples that are below the limiting function
+        accepted_samples = uniform_samples[acceptance_probabilities <= limiting_function]
+        return accepted_samples
+
+    def sample(self, amount: int) -> List[List[float]]:
+        if self.upper == np.inf and self.lower == -np.inf:
+            return super().sample(amount)
+        return self.robert_rejection_sample(amount).reshape(-1, 1).tolist()

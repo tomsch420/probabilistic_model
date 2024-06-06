@@ -23,8 +23,11 @@ class IntegerDistributionTestCase(unittest.TestCase):
         self.model = IntegerDistribution(self.x, probabilities)
 
     def test_pdf(self):
-        self.assertEqual(self.model.pdf(1), 1 / 5)
-        self.assertEqual(self.model.pdf(3), 0)
+        pdf = self.model.pdf(np.array([1, 2, 3, 4]))
+        self.assertEqual(pdf[0], 4 / 20)
+        self.assertEqual(pdf[1], 5 / 20)
+        self.assertEqual(pdf[2], 0)
+        self.assertEqual(pdf[3], 11/20)
 
     def test_probability(self):
         event = SimpleEvent({self.x: closed(1, 3)}).as_composite_set()
@@ -51,7 +54,7 @@ class IntegerDistributionTestCase(unittest.TestCase):
 
     def test_sample(self):
         samples = self.model.sample(100)
-        likelihoods = self.model.likelihoods(samples)
+        likelihoods = self.model.likelihood(samples)
         self.assertTrue(all(likelihoods > 0))
 
     def test_copy(self):
@@ -120,11 +123,11 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
         self.model = DiracDeltaDistribution(self.x, 0, 2)
 
     def test_pdf(self):
-        self.assertEqual(self.model.pdf(1), 0)
-        self.assertEqual(self.model.pdf(0), 2)
-        self.assertEqual(self.model.pdf(2), 0)
-        self.assertEqual(self.model.pdf(-1), 0)
-        self.assertEqual(self.model.pdf(3), 0)
+        self.assertEqual(self.model.pdf([1]), 0)
+        self.assertEqual(self.model.pdf([0]), 2)
+        self.assertEqual(self.model.pdf([2]), 0)
+        self.assertEqual(self.model.pdf([-1]), 0)
+        self.assertEqual(self.model.pdf([3]), 0)
 
     def test_cdf(self):
         self.assertEqual(self.model.cdf(1), 1)
