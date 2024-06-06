@@ -1,3 +1,5 @@
+import numpy as np
+
 from .distributions import *
 from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT
 
@@ -20,19 +22,17 @@ class UniformDistribution(ContinuousDistribution):
     def univariate_support(self) -> Interval:
         return self.interval.as_composite_set()
 
-    def log_pdf(self, value: Union[float, int]) -> float:
-        if self.interval.contains(value):
-            return self.log_pdf_value()
-        else:
-            return -np.inf
+    def log_pdf(self, x: np.array) -> np.array:
+        result = np.full(len(x), -np.inf)
+        left_condition = self.interval.lower <= x if self.interval.left.CLOSED else self.interval.lower < x
+        right_condition = x < self.interval.upper if self.interval.right.OPEN else x <= self.interval.upper
+        result[left_condition & right_condition] = self.log_pdf_value()
+        return result
 
-    def cdf(self, value: Union[float, int]) -> float:
-        if self.interval.contains(value):
-            return (value - self.lower) / (self.upper - self.lower)
-        elif value < self.lower:
-            return 0
-        else:
-            return 1
+    def cdf(self, x: np.array) -> np.array:
+        result = (x - self.lower) / (self.upper - self.lower)
+        result = np.minimum(1, np.maximum(0, result))
+        return result
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         return self.interval.as_composite_set(), self.log_pdf_value()

@@ -61,9 +61,8 @@ class SampleBasedPlotMixin(ProbabilisticModel, ABC):
         return [go.Scatter(x=x_values, y=y_values, mode="lines", name="Mode", fill="toself")]
 
     def plot_1d(self, number_of_samples: int) -> List:
-        samples = np.sort(self.sample(number_of_samples))
+        samples = np.sort(self.sample(number_of_samples), axis=0)
         likelihood = self.likelihood(samples)
-        print(likelihood)
         samples = samples[:, 0]
         cdf = self.cdf(samples)
         mean = self.expectation(self.variables)[self.variables[0]]
@@ -78,7 +77,7 @@ class SampleBasedPlotMixin(ProbabilisticModel, ABC):
         pdf_trace = go.Scatter(x=samples, y=likelihood, mode="lines", name="PDF")
         cdf_trace = go.Scatter(x=samples, y=cdf, mode="lines", name="CDF")
         mean_trace = go.Scatter(x=[mean, mean], y=[0, height], mode="lines+markers", name="Expectation")
-        mode_traces = self.plot_mode_1d(mode, maximum_likelihood)
+        mode_traces = self.plot_mode_1d(mode, height)
         return [pdf_trace, cdf_trace, mean_trace] + mode_traces
 
     def plot_2d(self, number_of_samples: int) -> List:

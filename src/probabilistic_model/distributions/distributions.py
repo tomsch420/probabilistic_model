@@ -117,7 +117,7 @@ class ContinuousDistribution(UnivariateDistribution):
         raise NotImplementedError
 
     def log_likelihood(self, events: np.array) -> np.array:
-        return self.log_pdf(events[0, :])
+        return self.log_pdf(events[:, 0])
 
     def pdf(self, x: np.array) -> np.array:
         """
@@ -151,7 +151,8 @@ class ContinuousDistribution(UnivariateDistribution):
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         interval: Interval = event[self.variable]
-        return sum(self.cdf(simple_interval.upper) - self.cdf(simple_interval.lower) for simple_interval
+        return sum(self.cdf(np.array([simple_interval.upper]))[0] -
+                   self.cdf(np.array([simple_interval.lower]))[0] for simple_interval
                    in interval.simple_sets)
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
@@ -177,7 +178,7 @@ class ContinuousDistribution(UnivariateDistribution):
         :param interval: The singleton event
         :return: The conditional distribution and the log-probability of the event.
         """
-        log_pdf_value = self.log_pdf(interval.lower)
+        log_pdf_value = self.log_pdf(np.array([interval.lower]))
         return DiracDeltaDistribution(self.variable, interval.lower, np.exp(log_pdf_value)), log_pdf_value
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:

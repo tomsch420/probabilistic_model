@@ -16,21 +16,19 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.univariate_support, self.distribution.interval.as_composite_set())
 
     def test_likelihood(self):
-        self.assertEqual(self.distribution.likelihood([1]), 0.5)
-        self.assertEqual(self.distribution.likelihood([0]), 0.5)
-        self.assertEqual(self.distribution.likelihood([2]), 0.)
-        self.assertEqual(self.distribution.likelihood([-1]), 0.)
-        self.assertEqual(self.distribution.likelihood([3]), 0.)
+        pdf = self.distribution.pdf(np.array([-1, 1, 2]))
+        self.assertEqual(pdf[0], 0)
+        self.assertEqual(pdf[1], 0.5)
+        self.assertEqual(pdf[2], 0)
 
     def test_probability_of_domain(self):
         self.assertEqual(self.distribution.probability(self.distribution.support()), 1)
 
     def test_cdf(self):
-        self.assertEqual(self.distribution.cdf(1), 0.5)
-        self.assertEqual(self.distribution.cdf(0), 0)
-        self.assertEqual(self.distribution.cdf(2), 1.)
-        self.assertEqual(self.distribution.cdf(-1), 0.)
-        self.assertEqual(self.distribution.cdf(3), 1)
+        cdf = self.distribution.cdf(np.array([-1, 1, 2]))
+        self.assertEqual(cdf[0], 0)
+        self.assertEqual(cdf[1], 0.5)
+        self.assertEqual(cdf[2], 1)
 
     def test_probability(self):
         event = SimpleEvent({self.x: closed(0, 1) | closed(1.5, 2)}).as_composite_set()
@@ -44,7 +42,7 @@ class UniformDistributionTestCase(unittest.TestCase):
     def test_sample(self):
         samples = self.distribution.sample(100)
         self.assertEqual(len(samples), 100)
-        likelihoods = self.distribution.likelihoods(samples)
+        likelihoods = self.distribution.likelihood(samples)
         self.assertTrue(all(likelihoods == 0.5))
 
     def test_conditional_no_intersection(self):

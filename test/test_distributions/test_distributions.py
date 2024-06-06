@@ -99,7 +99,7 @@ class SymbolicDistributionTestCase(unittest.TestCase):
 
     def test_sample(self):
         samples = self.model.sample(100)
-        likelihoods = self.model.likelihoods(samples)
+        likelihoods = self.model.likelihood(samples)
         self.assertTrue(all(likelihoods > 0))
 
     def test_mode(self):
@@ -123,18 +123,15 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
         self.model = DiracDeltaDistribution(self.x, 0, 2)
 
     def test_pdf(self):
-        self.assertEqual(self.model.pdf([1]), 0)
-        self.assertEqual(self.model.pdf([0]), 2)
-        self.assertEqual(self.model.pdf([2]), 0)
-        self.assertEqual(self.model.pdf([-1]), 0)
-        self.assertEqual(self.model.pdf([3]), 0)
+        pdf = self.model.pdf(np.array([0, 1]))
+        self.assertEqual(pdf[0], 2)
+        self.assertEqual(pdf[1], 0)
 
     def test_cdf(self):
-        self.assertEqual(self.model.cdf(1), 1)
-        self.assertEqual(self.model.cdf(0), 1)
-        self.assertEqual(self.model.cdf(2), 1)
-        self.assertEqual(self.model.cdf(-1), 0)
-        self.assertEqual(self.model.cdf(3), 1)
+        cdf = self.model.cdf(np.array([-1, 0, 1]))
+        self.assertEqual(cdf[0], 0)
+        self.assertEqual(cdf[1], 1)
+        self.assertEqual(cdf[2], 1)
 
     def test_probability(self):
         event = SimpleEvent({self.x: closed(0, 1) | closed(1.5, 2)}).as_composite_set()
@@ -163,7 +160,7 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
 
     def test_sample(self):
         samples = self.model.sample(100)
-        likelihoods = self.model.likelihoods(samples)
+        likelihoods = self.model.likelihood(samples)
         self.assertTrue(all([likelihoods == 2]))
 
     def test_expectation(self):

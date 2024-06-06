@@ -1,8 +1,7 @@
 import math
 
-import numpy as np
 from scipy.stats import gamma, norm
-from scipy.special import erf
+
 from .distributions import *
 from ..plotting import SampleBasedPlotMixin
 
@@ -31,23 +30,11 @@ class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
     def univariate_support(self) -> Interval:
         return reals()
 
-    def log_pdf(self, value: Union[float, int]) -> float:
-        return norm.logpdf(value, loc=self.location, scale=self.scale)
+    def log_pdf(self, x: np.array) -> np.array:
+        return norm.logpdf(x, loc=self.location, scale=self.scale)
 
-    def log_pdfs(self, values: np.array) -> np.array:
-        return norm.logpdf(values, loc=self.location, scale=self.scale)
-
-    def cdf(self, value: float) -> float:
-        r"""
-            Helper method to calculate the cdf of a Gaussian distribution.
-
-            .. math::
-
-            \Phi \left( \frac{x-\mu}{\sigma} \right) = \frac{1}{2} \left[ 1 +
-            \mathbf{erf}\left( \frac{x-\mu}{\sigma\sqrt{2}} \right) \right]
-
-        """
-        return norm.cdf(value, loc=self.location, scale=self.scale)
+    def cdf(self, x: np.array) -> np.array:
+        return norm.cdf(x, loc=self.location, scale=self.scale)
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         return singleton(self.location), self.log_pdf(self.location)
@@ -76,7 +63,7 @@ class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
             sigma_term = self.scale ** (2 * j)
 
             raw_moment += (math.comb(order, 2 * j) * mu_term * sigma_term * math.factorial(2 * j) / (
-                        math.factorial(j) * (2 ** j)))
+                    math.factorial(j) * (2 ** j)))
 
         return raw_moment
 
@@ -135,8 +122,8 @@ class TruncatedGaussianDistribution(GaussianDistribution):
 
     interval: SimpleInterval
 
-    def __init__(self, variable: Continuous, interval: SimpleInterval, mean: float, scale: float):
-        super().__init__(variable, mean, scale)
+    def __init__(self, variable: Continuous, interval: SimpleInterval, location: float, scale: float):
+        super().__init__(variable, location, scale)
         self.interval = interval
 
     @property
@@ -146,6 +133,10 @@ class TruncatedGaussianDistribution(GaussianDistribution):
     @property
     def upper(self) -> float:
         return self.interval.upper
+
+    @property
+    def univariate_support(self) -> Interval:
+        return self.interval.as_composite_set()
 
     @property
     def normalizing_constant(self) -> float:
@@ -158,22 +149,43 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             \left( \frac{self.interval.lower-\mu}{\sigma} \right )}
 
         """
-        return super().cdf(self.upper) - super().cdf(self.lower)
+        return (GaussianDistribution.cdf(self, np.array([self.upper])) - GaussianDistribution.cdf(self, np.array(
+            [self.lower])))[0]
 
-    def pdf(self, value: float) -> float:
+    def elements_contained_left(self, elements: np.array) -> np.array:
+        return self.interval.lower <= elements if self.interval.left.CLOSED else self.interval.lower < elements
 
-        if self.interval.contains(value):
-            return super().pdf(value) / self.normalizing_constant
-        else:
-            return 0
+    def elements_contained_right(self, elements: np.array) -> np.array:
+        return elements < self.interval.upper if self.interval.right.OPEN else elements <= self.interval.upper
+
+    def elements_in_support(self, elements: np.array) -> np.array:
+        return self.elements_contained_left(elements) & self.elements_contained_right(elements)
+
+    def log_pdf_no_bounds_check(self, x: np.array) -> np.array:
+        return GaussianDistribution.log_pdf(self, x) - np.log(self.normalizing_constant)
+
+    def log_pdf(self, x: np.array) -> np.array:
+        result = np.full(len(x), -np.inf)
+        elements_in_support = self.elements_in_support(x)
+        result[elements_in_support] = self.log_pdf_no_bounds_check(x[elements_in_support])
+        return result
+
+    def cdf(self, x: np.array) -> np.array:
+        result = np.zeros(len(x))
+        non_zero_condition = self.elements_contained_left(x)
+        cdf_of_lower = GaussianDistribution.cdf(self, np.array([self.lower]))
+        result[non_zero_condition] = ((GaussianDistribution.cdf(self, x[non_zero_condition]) - cdf_of_lower)
+                                      / self.normalizing_constant)
+        result = np.minimum(1, result)
+        return result
 
     def univariate_log_mode(self) -> Tuple[Interval, float]:
         if self.interval.contains(self.location):
-            return singleton(self.location), self.log_pdf(self.location)
+            return singleton(self.location), self.log_pdf_no_bounds_check(np.array([self.location]))[0]
         elif self.location < self.lower:
-            return singleton(self.lower), self.log_pdf(self.lower)
+            return singleton(self.lower), self.log_pdf_no_bounds_check(np.array([self.lower]))[0]
         else:
-            return singleton(self.upper), self.log_pdf(self.upper)
+            return singleton(self.upper), self.log_pdf_no_bounds_check(np.array([self.upper]))[0]
 
     def rejection_sample(self, amount: int) -> np.array:
         """
@@ -182,11 +194,11 @@ class TruncatedGaussianDistribution(GaussianDistribution):
 
         """
         samples = super().sample(amount)
-        log_likelihoods = self.log_likelihoods(samples)
+        log_likelihoods = self.log_likelihood(samples)
         samples = samples[log_likelihoods > -np.inf]
         rejected_samples = amount - len(samples)
         if rejected_samples > 0:
-            samples.extend(self.rejection_sample(rejected_samples))
+            samples = np.concatenate((samples, self.rejection_sample(rejected_samples)))
         return samples
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
@@ -237,8 +249,7 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             gamma_term_upper = 0.5 * gamma.cdf(upper_bound ** 2 / 2, (k + 1) / 2) * bound_selection_upper
 
             truncated_moment += (
-                        multiplying_constant * (gamma_term_lower + gamma_term_upper) * (-normalized_center) ** (
-                            order - k))
+                    multiplying_constant * (gamma_term_lower + gamma_term_upper) * (-normalized_center) ** (order - k))
 
         truncated_moment *= (self.scale ** order) / self.normalizing_constant
 
@@ -313,9 +324,9 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         # sample from uniform distribution over this distribution's interval
         accepted_samples = np.array([])
         while len(accepted_samples) < amount:
-            accepted_samples = np.append(
-                accepted_samples,
-                self.robert_rejection_sample_from_standard_normal_with_double_truncation_helper(amount - len(accepted_samples)))
+            accepted_samples = np.append(accepted_samples,
+                self.robert_rejection_sample_from_standard_normal_with_double_truncation_helper(
+                    amount - len(accepted_samples)))
         return accepted_samples
 
     def robert_rejection_sample_from_standard_normal_with_double_truncation_helper(self, amount: int) -> np.ndarray:
