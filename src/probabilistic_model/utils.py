@@ -1,11 +1,21 @@
 from abc import abstractmethod
 
 import numpy as np
+from random_events.interval import SimpleInterval
 from random_events.variable import Continuous
 from typing_extensions import Dict, Any, Self, TYPE_CHECKING, Type, Tuple, List
 from random_events.utils import get_full_class_name, recursive_subclasses
 import types
 from .constants import *
+
+
+def simple_interval_as_array(interval: SimpleInterval) -> np.ndarray:
+    """
+    Convert a simple interval to a numpy array.
+    :param interval:  The interval
+    :return:  [lower, upper] as numpy array
+    """
+    return np.array([interval.lower, interval.upper])
 
 
 def type_converter(abstract_type: Type, package: types.ModuleType):

@@ -210,6 +210,68 @@ class ContinuousDistribution(UnivariateDistribution):
         raise NotImplementedError
 
 
+class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
+    """
+    Abstract base class for continuous distributions with finite support.
+    """
+
+    interval: SimpleInterval
+    """
+    The interval of the distribution.
+    """
+
+    @property
+    def lower(self) -> float:
+        return self.interval.lower
+
+    @property
+    def upper(self) -> float:
+        return self.interval.upper
+
+    @property
+    def univariate_support(self) -> Interval:
+        return self.interval.as_composite_set()
+
+    def left_included_condition(self, x: np.array) -> np.array:
+        """
+        Check if x is included in the left bound of the interval.
+        :param x: The data
+        :return: A boolean array
+        """
+        return self.interval.lower <= x if self.interval.left.CLOSED else self.interval.lower < x
+
+    def right_included_condition(self, x: np.array) -> np.array:
+        """
+         Check if x is included in the right bound of the interval.
+         :param x: The data
+         :return: A boolean array
+         """
+        return x < self.interval.upper if self.interval.right.OPEN else x <= self.interval.upper
+
+    def included_condition(self, x: np.array) -> np.array:
+        """
+         Check if x is included in interval.
+         :param x: The data
+         :return: A boolean array
+         """
+        return self.left_included_condition(x) & self.right_included_condition(x)
+
+    def log_pdf(self, x: np.array) -> np.array:
+        result = np.full(len(x), -np.inf)
+        include_condition = self.included_condition(x)
+        result[include_condition] = self.log_pdf_no_bounds_check(x[include_condition])
+        return result
+
+    @abstractmethod
+    def log_pdf_no_bounds_check(self, x: np.array) -> np.array:
+        """
+        Evaluate the logarithmic probability density function at `x` without checking the inclusion into the interval.
+        :param x: x where p(x) > 0
+        :return: log(p(x))
+        """
+        raise NotImplementedError
+
+
 class DiscreteDistribution(UnivariateDistribution):
     """
     Abstract base class for univariate discrete distributions.

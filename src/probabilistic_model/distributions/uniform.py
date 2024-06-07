@@ -4,30 +4,17 @@ from .distributions import *
 from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT
 
 
-class UniformDistribution(ContinuousDistribution):
+class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     """
     Class for uniform distributions over the half-open interval [lower, upper).
     """
 
-    interval: SimpleInterval
-    """
-    The interval that the Uniform distribution is defined over.
-    """
+    def log_pdf_no_bounds_check(self, x: np.array) -> np.array:
+        return np.full((len(x),), self.log_pdf_value())
 
     def __init__(self, variable: Continuous, interval: SimpleInterval):
         self.variable = variable
         self.interval = interval
-
-    @property
-    def univariate_support(self) -> Interval:
-        return self.interval.as_composite_set()
-
-    def log_pdf(self, x: np.array) -> np.array:
-        result = np.full(len(x), -np.inf)
-        left_condition = self.interval.lower <= x if self.interval.left.CLOSED else self.interval.lower < x
-        right_condition = x < self.interval.upper if self.interval.right.OPEN else x <= self.interval.upper
-        result[left_condition & right_condition] = self.log_pdf_value()
-        return result
 
     def cdf(self, x: np.array) -> np.array:
         result = (x - self.lower) / (self.upper - self.lower)
@@ -43,14 +30,6 @@ class UniformDistribution(ContinuousDistribution):
 
     def sample(self, amount: int) -> np.array:
         return np.random.uniform(self.lower, self.upper, (amount, 1))
-
-    @property
-    def lower(self) -> float:
-        return self.interval.lower
-
-    @property
-    def upper(self) -> float:
-        return self.interval.upper
 
     def pdf_value(self) -> float:
         """
@@ -141,7 +120,3 @@ class UniformDistribution(ContinuousDistribution):
 
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))
-
-    def parameters(self):
-        return {"variable": self.variable, "interval": self.interval}
-

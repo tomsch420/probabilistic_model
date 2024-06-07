@@ -24,10 +24,10 @@ class IntegerDistributionTestCase(unittest.TestCase):
 
     def test_pdf(self):
         pdf = self.model.pdf(np.array([1, 2, 3, 4]))
-        self.assertEqual(pdf[0], 4 / 20)
-        self.assertEqual(pdf[1], 5 / 20)
-        self.assertEqual(pdf[2], 0)
-        self.assertEqual(pdf[3], 11/20)
+        self.assertAlmostEqual(pdf[0], 4 / 20)
+        self.assertAlmostEqual(pdf[1], 5 / 20)
+        self.assertAlmostEqual(pdf[2], 0)
+        self.assertAlmostEqual(pdf[3], 11/20)
 
     def test_probability(self):
         event = SimpleEvent({self.x: closed(1, 3)}).as_composite_set()
@@ -35,7 +35,7 @@ class IntegerDistributionTestCase(unittest.TestCase):
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
-        self.assertEqual(likelihood, 11 / 20)
+        self.assertAlmostEqual(likelihood, 11 / 20)
         self.assertEqual(mode, SimpleEvent({self.x: singleton(4)}).as_composite_set())
 
     def test_conditional(self):
@@ -161,7 +161,7 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
     def test_sample(self):
         samples = self.model.sample(100)
         likelihoods = self.model.likelihood(samples)
-        self.assertTrue(all([likelihoods == 2]))
+        self.assertTrue(all(likelihoods == 2))
 
     def test_expectation(self):
         self.assertEqual(self.model.expectation([self.x])[self.x], 0)

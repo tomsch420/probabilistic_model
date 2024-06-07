@@ -4,6 +4,7 @@ from scipy.stats import gamma, norm
 
 from .distributions import *
 from ..plotting import SampleBasedPlotMixin
+from ..utils import simple_interval_as_array
 
 
 class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
@@ -90,7 +91,8 @@ class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
         return VariableMap({self.variable: moment})
 
     def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
-        probability = self.cdf(interval.upper) - self.cdf(interval.lower)
+        cdf_values = self.cdf(simple_interval_as_array(interval))
+        probability = cdf_values[1] - cdf_values[0]
         return TruncatedGaussianDistribution(self.variable, interval, self.location, self.scale), np.log(probability)
 
     def __eq__(self, other: Self):
@@ -115,28 +117,14 @@ class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
         return SampleBasedPlotMixin.plot(self, number_of_samples)
 
 
-class TruncatedGaussianDistribution(GaussianDistribution):
+class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, GaussianDistribution):
     """
     Class for Truncated Gaussian distributions.
     """
 
-    interval: SimpleInterval
-
     def __init__(self, variable: Continuous, interval: SimpleInterval, location: float, scale: float):
-        super().__init__(variable, location, scale)
+        GaussianDistribution.__init__(self, variable, location, scale)
         self.interval = interval
-
-    @property
-    def lower(self) -> float:
-        return self.interval.lower
-
-    @property
-    def upper(self) -> float:
-        return self.interval.upper
-
-    @property
-    def univariate_support(self) -> Interval:
-        return self.interval.as_composite_set()
 
     @property
     def normalizing_constant(self) -> float:
@@ -152,27 +140,12 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         return (GaussianDistribution.cdf(self, np.array([self.upper])) - GaussianDistribution.cdf(self, np.array(
             [self.lower])))[0]
 
-    def elements_contained_left(self, elements: np.array) -> np.array:
-        return self.interval.lower <= elements if self.interval.left.CLOSED else self.interval.lower < elements
-
-    def elements_contained_right(self, elements: np.array) -> np.array:
-        return elements < self.interval.upper if self.interval.right.OPEN else elements <= self.interval.upper
-
-    def elements_in_support(self, elements: np.array) -> np.array:
-        return self.elements_contained_left(elements) & self.elements_contained_right(elements)
-
     def log_pdf_no_bounds_check(self, x: np.array) -> np.array:
         return GaussianDistribution.log_pdf(self, x) - np.log(self.normalizing_constant)
 
-    def log_pdf(self, x: np.array) -> np.array:
-        result = np.full(len(x), -np.inf)
-        elements_in_support = self.elements_in_support(x)
-        result[elements_in_support] = self.log_pdf_no_bounds_check(x[elements_in_support])
-        return result
-
     def cdf(self, x: np.array) -> np.array:
         result = np.zeros(len(x))
-        non_zero_condition = self.elements_contained_left(x)
+        non_zero_condition = self.left_included_condition(x)
         cdf_of_lower = GaussianDistribution.cdf(self, np.array([self.lower]))
         result[non_zero_condition] = ((GaussianDistribution.cdf(self, x[non_zero_condition]) - cdf_of_lower)
                                       / self.normalizing_constant)
@@ -191,6 +164,7 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         """
         .. note::
             This uses rejection sampling and hence is inefficient.
+            The acceptance probability is self.normalizing_constant.
 
         """
         samples = super().sample(amount)
@@ -272,7 +246,7 @@ class TruncatedGaussianDistribution(GaussianDistribution):
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable = Continuous.from_json(data["variable"])
         interval = SimpleInterval.from_json(data["interval"])
-        return cls(variable, interval, data["mean"], data["variance"])
+        return cls(variable, interval, data["location"], data["scale"])
 
     def transform_to_standard_normal(self, number: float) -> float:
         """
@@ -360,7 +334,7 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         accepted_samples = uniform_samples[acceptance_probabilities <= limiting_function]
         return accepted_samples
 
-    def sample(self, amount: int) -> List[List[float]]:
+    def sample(self, amount: int) -> np.array:
         if self.upper == np.inf and self.lower == -np.inf:
             return super().sample(amount)
-        return self.robert_rejection_sample(amount).reshape(-1, 1).tolist()
+        return self.robert_rejection_sample(amount).reshape(-1, 1)

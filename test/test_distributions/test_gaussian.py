@@ -1,7 +1,5 @@
 import unittest
 
-import numpy as np
-
 from probabilistic_model.distributions.gaussian import *
 
 
@@ -36,7 +34,8 @@ class GaussianDistributionTestCase(unittest.TestCase):
     def test_raw_moment(self):
         self.assertEqual(self.distribution.raw_moment(0), 1)
         self.assertEqual(self.distribution.raw_moment(1), self.distribution.location)
-        self.assertEqual(self.distribution.raw_moment(2), self.distribution.location ** 2 + self.distribution.scale**2)
+        self.assertEqual(self.distribution.raw_moment(2),
+                         self.distribution.location ** 2 + self.distribution.scale ** 2)
 
     def test_centered_moment(self):
         expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}),
@@ -70,8 +69,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
 
     def test_plot(self):
         fig = go.Figure(self.distribution.plot())
-        self.assertIsNotNone(fig)
-        #  fig.show()
+        self.assertIsNotNone(fig)  # fig.show()
 
     def test_serialization(self):
         serialized = self.distribution.to_json()
@@ -81,7 +79,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
 
     def test_variance(self):
         variance = self.distribution.variance([self.x])
-        self.assertEqual(variance[self.distribution.variable], self.distribution.scale**2)
+        self.assertEqual(variance[self.distribution.variable], self.distribution.scale ** 2)
 
 
 class TruncatedGaussianDistributionTestCase(unittest.TestCase):
@@ -89,8 +87,8 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
     distribution: TruncatedGaussianDistribution
 
     def setUp(self):
-        self.distribution = TruncatedGaussianDistribution(self.x, SimpleInterval(-2, 2, Bound.CLOSED, Bound.CLOSED),
-                                                          2, 2.)
+        self.distribution = TruncatedGaussianDistribution(self.x, SimpleInterval(-2, 2, Bound.CLOSED, Bound.CLOSED), 2,
+                                                          2.)
 
     def test_init(self):
         self.assertEqual(self.distribution.location, 2.)
@@ -103,8 +101,6 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
 
     def test_cdf(self):
         cdf = self.distribution.cdf(np.array([0, 3, -3]))
-        fig = go.Figure(self.distribution.plot())
-        fig.show()
         self.assertAlmostEqual(cdf[0], 0.285, places=3)
         self.assertEqual(cdf[1], 1)
         self.assertEqual(cdf[2], 0)
@@ -112,35 +108,36 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
     def test_mode(self):
         mode, likelihood = self.distribution.univariate_log_mode()
         self.assertEqual(mode, singleton(2))
-        self.assertEqual(likelihood, self.distribution.log_pdf(np.array([2])))
+        self.assertEqual(likelihood, self.distribution.log_pdf_no_bounds_check(np.array([2])))
 
     def test_raw_moment(self):
-        gauss_distribution: GaussianDistribution = GaussianDistribution(Continuous("x"), mean=0, scale=1)
-        beta = (self.distribution.upper - self.distribution.mean) / math.sqrt(self.distribution.scale)
-        alpha = (self.distribution.lower - self.distribution.mean) / math.sqrt(self.distribution.scale)
-        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}),
-                                               VariableMap({self.distribution.variable: 0}))
-        self.assertAlmostEqual(expectation[self.distribution.variable], 0.5544205, places=7)
-        second_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}),
-                                                 VariableMap({self.distribution.variable: 0}))
-        variance = self.distribution.scale * ((1 - (
+        gauss_distribution: GaussianDistribution = GaussianDistribution(Continuous("x"), location=0, scale=1)
+        beta = (self.distribution.upper - self.distribution.location) / self.distribution.scale
+        alpha = (self.distribution.lower - self.distribution.location) / self.distribution.scale
+        expectation = self.distribution.moment(VariableMap({self.x: 1}),
+                                               VariableMap({self.x: 0}))
+        self.assertAlmostEqual(expectation[self.x], 0.5544205, places=7)
+        second_moment = self.distribution.moment(VariableMap({self.x: 2}),
+                                                 VariableMap({self.x: 0}))
+        variance = self.distribution.scale**2 * ((1 - (
                 beta * gauss_distribution.pdf(beta) - alpha * gauss_distribution.pdf(
             alpha)) / self.distribution.normalizing_constant) - ((gauss_distribution.pdf(beta) - gauss_distribution.pdf(
             alpha)) / self.distribution.normalizing_constant) ** 2)
         self.assertAlmostEqual(second_moment[self.distribution.variable],
-                               variance + expectation[self.distribution.variable] ** 2, places=7)
+                               variance + expectation[self.x] ** 2, places=7)
 
     def test_centered_moment(self):
-        gauss_distribution: GaussianDistribution = GaussianDistribution(Continuous("x"), mean=0, scale=1)
-        beta = (self.distribution.upper - self.distribution.mean) / math.sqrt(self.distribution.scale)
-        alpha = (self.distribution.lower - self.distribution.mean) / math.sqrt(self.distribution.scale)
-        center = VariableMap({self.distribution.variable: self.distribution.mean})
-        expectation = self.distribution.moment(VariableMap({self.distribution.variable: 1}), center)
-        offset_term = -math.sqrt(self.distribution.scale) * (gauss_distribution.pdf(beta) - gauss_distribution.pdf(
+        gauss_distribution: GaussianDistribution = GaussianDistribution(self.x, location=0, scale=1)
+        beta = (self.distribution.upper - self.distribution.location) / self.distribution.scale
+        alpha = (self.distribution.lower - self.distribution.location) / self.distribution.scale
+        center = VariableMap({self.x: self.distribution.location})
+        expectation = self.distribution.moment(VariableMap({self.x: 1}), center)
+        offset_term = -self.distribution.scale * (gauss_distribution.pdf(beta) - gauss_distribution.pdf(
             alpha)) / self.distribution.normalizing_constant
         self.assertAlmostEqual(expectation[self.distribution.variable], 0 + offset_term, places=7)
-        second_moment = self.distribution.moment(VariableMap({self.distribution.variable: 2}), center)
-        variance = self.distribution.scale * ((1 - (
+
+        second_moment = self.distribution.moment(VariableMap({self.x: 2}), center)
+        variance = (self.distribution.scale ** 2) * ((1 - (
                 beta * gauss_distribution.pdf(beta) - alpha * gauss_distribution.pdf(
             alpha)) / self.distribution.normalizing_constant) - ((gauss_distribution.pdf(beta) - gauss_distribution.pdf(
             alpha)) / self.distribution.normalizing_constant) ** 2)
@@ -162,10 +159,11 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
                                expectation[self.distribution.variable], places=7)
 
     def test_conditional_simple_intersection(self):
-        event = Event({self.distribution.variable: portion.closed(1, 2)})
+        event = SimpleEvent({self.x: closed(1, 2)}).as_composite_set()
         conditional, probability = self.distribution.conditional(event)
         self.assertIsInstance(conditional, TruncatedGaussianDistribution)
-        self.assertEqual(probability, self.distribution.cdf(2) - self.distribution.cdf(1))
+        cdf = self.distribution.cdf(np.array([1, 2]))
+        self.assertEqual(probability, cdf[1] - cdf[0])
         self.assertEqual(conditional.lower, 1)
         self.assertEqual(conditional.upper, 2)
 
@@ -194,9 +192,10 @@ class TruncatedGaussianDistributionJapaneseManTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.example_2, _ = cls.distribution.conditional(
-            Event({cls.distribution.variable: portion.closed(0.5, float("inf"))}))
+            SimpleEvent({cls.distribution.variable: closed(0.5, np.inf)}).as_composite_set())
 
-        cls.example_3, _ = cls.distribution.conditional(Event({cls.distribution.variable: portion.closed(-1, 1)}))
+        cls.example_3, _ = cls.distribution.conditional(
+            SimpleEvent({cls.distribution.variable: closed(-1, 1)}).as_composite_set())
 
     def test_raw_expectation_example_2(self):
         center = VariableMap({self.distribution.variable: 0})
@@ -242,7 +241,6 @@ class TruncatedGaussianDistributionJapaneseManTestCase(unittest.TestCase):
 
 
 class TruncatedGaussianSamplingTestCase(unittest.TestCase):
-
     x = Continuous("x")
 
     @classmethod
@@ -250,78 +248,75 @@ class TruncatedGaussianSamplingTestCase(unittest.TestCase):
         np.random.seed(69)
 
     def test_with_center_in_truncation(self):
-        model = TruncatedGaussianDistribution(self.x, portion.closed(-3, 5), 1, 2)
-        samples = model.robert_rejection_sample(1000)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(-3, 5), 1, 2)
+        samples = model.robert_rejection_sample(1000).reshape(-1, 1)
         self.assertEqual(len(samples), 1000)
-        for sample in samples:
-            self.assertGreater(model.pdf(sample), 0)
-        self.assertAlmostEqual(model.expectation(model.variables)[model.variable], samples.mean(), delta=0.1)
+        likelihoods = model.likelihood(samples)
+        self.assertTrue(all(likelihoods > 0))
+        self.assertAlmostEqual(model.expectation(model.variables)[self.x], samples.mean(), delta=0.1)
 
     def test_with_center_higher_truncation(self):
-        model = TruncatedGaussianDistribution(self.x, portion.closed(3, 10), 1, 2)
-        samples = model.robert_rejection_sample(1000)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(3, 10), 1, 2)
+        samples = model.robert_rejection_sample(1000).reshape(-1, 1)
         self.assertEqual(len(samples), 1000)
-        for sample in samples:
-            self.assertGreater(model.pdf(sample), 0)
+        likelihoods = model.likelihood(samples)
+        self.assertTrue(all(likelihoods > 0))
         self.assertAlmostEqual(model.expectation(model.variables)[model.variable], samples.mean(), delta=0.1)
 
     def test_with_center_lower_truncation(self):
-        model = TruncatedGaussianDistribution(self.x, portion.closed(-6, -2), 1, 2)
-        samples = model.robert_rejection_sample(1000)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(-6, -2), 1, 2)
+        samples = model.robert_rejection_sample(1000).reshape(-1, 1)
         self.assertEqual(len(samples), 1000)
-        for sample in samples:
-            self.assertGreater(model.pdf(sample), 0)
+        likelihoods = model.likelihood(samples)
+        self.assertTrue(all(likelihoods > 0))
         self.assertAlmostEqual(model.expectation(model.variables)[model.variable], samples.mean(), delta=0.1)
 
     def test_compare_rejection_sampling_with_robert_sampling(self):
-        model = TruncatedGaussianDistribution(self.x, portion.closed(9, 11), 0, 1)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(9, 11), 0, 1)
         with self.assertRaises(RecursionError):
             model.rejection_sample(50)
 
     def test_sampling_with_infinite_bounds_smaller_0(self):
-        model = TruncatedGaussianDistribution(self.x, portion.closed(-1, float("inf")), 0, 1)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(-1, float("inf")), 0, 1)
         samples = model.sample(1000)
 
         self.assertEqual(len(samples), 1000)
-        for sample in samples:
-            self.assertGreater(model.likelihood(sample), 0)
+        likelihoods = model.likelihood(samples)
+        self.assertTrue(all(likelihoods > 0))
         self.assertAlmostEqual(model.expectation(model.variables)[model.variable], np.array(samples).mean(), delta=0.1)
 
     def test_sampling_with_infinite_bounds_greater_0(self):
-        model = TruncatedGaussianDistribution(self.x, portion.closed(1, float("inf")), 0, 1)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(1, float("inf")), 0, 1)
         samples = model.sample(1000)
-        for sample in samples:
-            self.assertGreater(model.likelihood(sample), 0)
+        likelihoods = model.likelihood(samples)
+        self.assertTrue(all(likelihoods > 0))
         self.assertAlmostEqual(model.expectation(model.variables)[model.variable], np.array(samples).mean(), delta=0.1)
 
     def test_sampling_with_infinite_bounds_and_flipping(self):
-        model = TruncatedGaussianDistribution(self.x, portion.closed(-float("inf"), -1), 0, 1)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(-float("inf"), -1), 0, 1)
         samples = model.sample(1000)
-        for sample in samples:
-            self.assertGreater(model.likelihood(sample), 0)
+        likelihoods = model.likelihood(samples)
+        self.assertTrue(all(likelihoods > 0))
         self.assertAlmostEqual(model.expectation(model.variables)[model.variable], np.array(samples).mean(), delta=0.1)
 
     def test_non_standard_sampling(self):
-        model = TruncatedGaussianDistribution(self.x, portion.closed(-portion.inf, -0.1), 0.5, 2)
-        #  go.Figure(model.plot()).show()
-        samples = model.robert_rejection_sample(1000)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(-np.inf, -0.1), 0.5, 2)
+        samples = model.robert_rejection_sample(1000).reshape(-1, 1)
         self.assertAlmostEqual(max(samples), -0.1, delta=0.01)
-
-        for sample in samples:
-            self.assertGreater(model.pdf(sample), 0)
-
-        self.assertAlmostEqual(model.expectation(model.variables)[model.variable], np.array(samples).mean(), delta=0.1)
+        likelihoods = model.likelihood(samples)
+        self.assertTrue(all(likelihoods > 0))
+        self.assertAlmostEqual(model.expectation(model.variables)[model.variable], samples.mean(), delta=0.1)
 
     def test_with_zero_in_bound(self):
-        model = TruncatedGaussianDistribution(self.x, portion.open(-0.62, 0.0), 0.0, 0.5)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(-0.62, 0.0), 0.0, 0.5)
         samples = model.sample(1000)
         self.assertEqual(len(samples), 1000)
-        mean = np.array(samples).mean()
+        mean = samples.mean()
         expectation = model.expectation(model.variables)[model.variable]
         self.assertAlmostEqual(mean, expectation, delta=0.1)
 
     def test_with_far_right_interval(self):
-        model = TruncatedGaussianDistribution(self.x, portion.closed(11, float("inf")), 0, 1)
+        model = TruncatedGaussianDistribution(self.x, SimpleInterval(11, np.inf), 0, 1)
         samples = model.sample(1000)
         self.assertEqual(len(samples), 1000)
 
