@@ -199,7 +199,7 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def expectation(self, variables: Iterable[Union[Integer, Continuous]]) -> MomentType:
+    def expectation(self, variables: Iterable[Variable]) -> MomentType:
         """
         Calculate the expectation of the numeric variables in `variables`.
 
@@ -210,7 +210,7 @@ class ProbabilisticModel(abc.ABC):
         center = VariableMap({variable: 0 for variable in variables})
         return self.moment(order, center)
 
-    def variance(self, variables: Iterable[Union[Integer, Continuous]]) -> MomentType:
+    def variance(self, variables: Iterable[Variable]) -> MomentType:
         """
         Calculate the variance of the numeric variables in `variables`.
 

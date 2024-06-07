@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-from typing import Iterable
-
-from random_events.events import EncodedEvent, Event, ComplexEvent
-from random_events.variables import Variable
-from typing_extensions import Union, Tuple, Optional, Self
-
-import portion
+from random_events.product_algebra import Event, SimpleEvent
+from typing_extensions import Union, Tuple, Optional, Self, Iterable
 
 from ...distributions.distributions import (ContinuousDistribution as PMContinuousDistribution,
                                             DiracDeltaDistribution as PMDiracDeltaDistribution,
@@ -22,21 +17,15 @@ from ...distributions.gaussian import (GaussianDistribution as PMGaussianDistrib
 
 class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin):
 
-    @property
-    def variables(self) -> Tuple[Variable, ...]:
-        return self._variables
-
-    @variables.setter
-    def variables(self, variables: Iterable[Variable]):
-        self._variables = tuple(sorted(variables))
+    def is_deterministic(self) -> bool:
+        return True
 
     def __hash__(self):
         return ProbabilisticCircuitMixin.__hash__(self)
 
     @cache_inference_result
-    def _conditional_from_single_event(self, event: EncodedEvent) -> \
-            Tuple[Optional[Union['ContinuousDistribution', 'DiracDeltaDistribution', DeterministicSumUnit]], float]:
-        return super().conditional(event)
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
+        return super().log_conditional(event.as_composite_set())
 
     @cache_inference_result
     def simplify(self) -> Self:
