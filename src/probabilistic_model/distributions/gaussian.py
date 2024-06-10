@@ -1,3 +1,4 @@
+from __future__ import annotations
 import math
 
 from scipy.stats import gamma, norm
@@ -23,6 +24,7 @@ class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
     """
 
     def __init__(self, variable: Continuous, location: float, scale: float):
+        super().__init__()
         self.variable = variable
         self.location = location
         self.scale = scale
@@ -90,7 +92,8 @@ class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
 
         return VariableMap({self.variable: moment})
 
-    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
+    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> (
+            Tuple)[TruncatedGaussianDistribution, float]:
         cdf_values = self.cdf(simple_interval_as_array(interval))
         probability = cdf_values[1] - cdf_values[0]
         return TruncatedGaussianDistribution(self.variable, interval, self.location, self.scale), np.log(probability)

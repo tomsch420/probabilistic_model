@@ -1,9 +1,6 @@
+from __future__ import annotations
+
 import abc
-
-import numpy as np
-from typing_extensions import Tuple, Iterable, List, Optional, Union, TYPE_CHECKING, Self
-
-from random_events.sigma_algebra import *
 from random_events.product_algebra import *
 from random_events.variable import *
 from random_events.set import *
@@ -147,7 +144,7 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+    def conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
         """
         Calculate the conditional distribution P(*| event) and the probability of the event.
 
@@ -160,7 +157,7 @@ class ProbabilisticModel(abc.ABC):
         return conditional, np.exp(log_probability)
 
     @abstractmethod
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
         """
         Calculate the conditional distribution P(*| event) and the probability of the event.
 

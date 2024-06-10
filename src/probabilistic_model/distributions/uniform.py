@@ -9,12 +9,13 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     Class for uniform distributions over the half-open interval [lower, upper).
     """
 
-    def log_pdf_no_bounds_check(self, x: np.array) -> np.array:
-        return np.full((len(x),), self.log_pdf_value())
-
     def __init__(self, variable: Continuous, interval: SimpleInterval):
+        super().__init__()
         self.variable = variable
         self.interval = interval
+
+    def log_pdf_no_bounds_check(self, x: np.array) -> np.array:
+        return np.full((len(x),), self.log_pdf_value())
 
     def cdf(self, x: np.array) -> np.array:
         result = (x - self.lower) / (self.upper - self.lower)

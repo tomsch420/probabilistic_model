@@ -2,9 +2,10 @@ import json
 import os.path
 import unittest
 import numpy as np
-import portion
+
 from matplotlib import pyplot as plt
-from random_events.variables import Integer, Continuous
+from random_events.interval import closed
+from random_events.variable import Integer, Continuous
 from typing_extensions import Union
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 from probabilistic_model.probabilistic_circuit.convolution.convolution import (UniformDistributionConvolution,
@@ -41,12 +42,12 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
     model: DecomposableProductUnit
 
     def setUp(self):
-        u1 = UniformDistribution(self.x, portion.closed(0, 1))
-        u2 = UniformDistribution(self.y, portion.closed(3, 4))
+        u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
+        u2 = UniformDistribution(self.y, closed(3, 4).simple_sets[0])
 
         product_unit = DecomposableProductUnit()
-        product_unit.probabilistic_circuit.add_nodes_from([product_unit, u1, u2])
-        product_unit.probabilistic_circuit.add_edges_from([(product_unit, u1), (product_unit, u2)])
+        product_unit.add_subcircuit(u1)
+        product_unit.add_subcircuit(u2)
         self.model = product_unit
 
     def test_setup(self):

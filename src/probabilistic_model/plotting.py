@@ -66,7 +66,6 @@ class SampleBasedPlotMixin(ProbabilisticModel, ABC):
         samples = np.sort(self.sample(number_of_samples), axis=0)
         likelihood = self.likelihood(samples)
         samples = samples[:, 0]
-        cdf = self.cdf(samples)
         mean = self.expectation(self.variables)[self.variables[0]]
 
         try:
@@ -78,8 +77,13 @@ class SampleBasedPlotMixin(ProbabilisticModel, ABC):
 
         pdf_trace = go.Scatter(x=samples, y=likelihood, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
                                line=dict(color=PDF_TRACE_COLOR))
-        cdf_trace = go.Scatter(x=samples, y=cdf, mode="lines", name=CDF_TRACE_NAME, legendgroup="CDF",
-                               line=dict(color=CDF_TRACE_COLOR))
+
+        try:
+            cdf = self.cdf(samples)
+            cdf_trace = go.Scatter(x=samples, y=cdf, mode="lines", name=CDF_TRACE_NAME, legendgroup="CDF",
+                                   line=dict(color=CDF_TRACE_COLOR))
+        except NotImplementedError:
+            cdf_trace = None
         mean_trace = go.Scatter(x=[mean, mean], y=[0, height], mode="lines+markers", name=EXPECTATION_TRACE_NAME,
                                 marker=dict(color=EXPECTATION_TRACE_COLOR), line=dict(color=EXPECTATION_TRACE_COLOR))
         mode_traces = self.plot_mode_1d(mode, height)

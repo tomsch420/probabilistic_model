@@ -286,6 +286,7 @@ class DiscreteDistribution(UnivariateDistribution):
 
     def __init__(self, variable: Union[Symbolic, Integer],
                  probabilities: Optional[MissingDict[Union[int, SetElement], float]]):
+        super().__init__()
         self.variable = variable
 
         if probabilities is not None:
@@ -525,6 +526,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
     """
 
     def __init__(self, variable: Continuous, location: float, density_cap: float = np.inf):
+        super().__init__()
         self.variable = variable
         self.location = location
         self.density_cap = density_cap
