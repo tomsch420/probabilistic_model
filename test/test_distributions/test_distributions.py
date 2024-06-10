@@ -1,7 +1,7 @@
 import unittest
 
 from probabilistic_model.distributions.distributions import *
-from probabilistic_model.utils import SubclassJSONSerializer
+from probabilistic_model.utils import SubclassJSONSerializer, MissingDict
 
 
 class TestEnum(SetElement):
@@ -60,7 +60,7 @@ class IntegerDistributionTestCase(unittest.TestCase):
     def test_copy(self):
         copied = self.model.__copy__()
         self.assertEqual(copied, self.model)
-        copied.probabilities = defaultdict(float)
+        copied.probabilities = MissingDict(float)
         self.assertNotEqual(copied, self.model)
 
     def test_fit(self):

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from abc import abstractmethod
+from collections import defaultdict
 
 import numpy as np
 from random_events.interval import SimpleInterval
@@ -69,3 +72,11 @@ class SubclassJSONSerializer:
                 return subclass._from_json(data)
 
         raise ValueError("Unknown type {}".format(data["type"]))
+
+
+class MissingDict(defaultdict):
+    """
+    A defaultdict that returns the default value when the key is missing and does **not** add the key to the dict.
+    """
+    def __missing__(self, key):
+        return self.default_factory()

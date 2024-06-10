@@ -1,28 +1,25 @@
 import itertools
-from typing import Iterable, List, Optional, Tuple, Dict
 
 import numpy as np
+from random_events.product_algebra import SimpleEvent, Event
+from random_events.variable import Integer, Symbolic, Variable
+from sortedcontainers import SortedSet
+from typing_extensions import Self, Any, Union, Iterable, List, Optional, Tuple, Dict
 
-from random_events.variables import Discrete, Integer, Symbolic, Variable
-from random_events.events import EncodedEvent, ComplexEvent
-
-from ..probabilistic_model import ProbabilisticModel
-from ..utils import SubclassJSONSerializer
-from typing_extensions import Self, Any
-
-from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
-                                                          DecomposableProductUnit)
 from ..probabilistic_circuit.distributions.distributions import SymbolicDistribution, IntegerDistribution
+from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, DecomposableProductUnit)
+from ..probabilistic_model import ProbabilisticModel
+from ..utils import SubclassJSONSerializer, MissingDict
 
 
 class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """
-    A multinomial distribution over discrete random variables.
+    A multinomial distribution over symbolic random variables.
     """
 
-    variables: Tuple[Discrete, ...]
+    _variables: SortedSet
     """
-    The variables in the distribution.
+    The variables of the distribution.
     """
 
     probabilities: np.ndarray
@@ -32,21 +29,32 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
     the probabilities are initialized with ones.
     """
 
-    def __init__(self, variables: Iterable[Discrete], probabilities: Optional[np.ndarray] = None):
-        super().__init__(variables)
+    def __init__(self, variables: Iterable[Symbolic], probabilities: Optional[np.ndarray] = None):
+        super().__init__()
+        self._variables = SortedSet(variables)
 
-        shape = tuple(len(variable.domain) for variable in self.variables)
+        shape = tuple(len(variable.domain.simple_sets) for variable in self.variables)
 
         if probabilities is None:
             probabilities = np.ones(shape)
+            probabilities /= probabilities.sum()
 
         if shape != probabilities.shape:
             raise ValueError("The number of variables must match the number of dimensions in the probability array."
                              "Variables: {}".format(self.variables), "Dimensions: {}".format(probabilities.shape))
-
         self.probabilities = probabilities
 
-    def marginal(self, variables: Iterable[Discrete]) -> 'MultinomialDistribution':
+    @property
+    def variables(self) -> SortedSet:
+        return self._variables
+
+    def support(self) -> Event:
+        pass
+
+    def sample(self, amount: int) -> np.array:
+        return None
+
+    def marginal(self, variables: Iterable[Symbolic]) -> Self:
 
         # calculate which variables to marginalize over as the difference between variables and self.variables
         axis = tuple(self.variables.index(variable) for variable in self.variables if variable not in variables)
@@ -54,30 +62,41 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         # marginalize the probabilities over the axis
         probabilities = np.sum(self.probabilities, axis=axis)
 
-        return MultinomialDistribution(variables, probabilities)
+        result = MultinomialDistribution(variables, probabilities)
+        result.normalize()
+        return result
 
-    def _mode(self) -> Tuple[ComplexEvent, float]:
+    def log_mode(self) -> Tuple[Event, float]:
         likelihood = np.max(self.probabilities)
-        events = np.transpose(np.asarray(self.probabilities == likelihood).nonzero())
-        mode = [EncodedEvent(zip(self.variables, event)) for event in events.tolist()]
-        return ComplexEvent(mode).simplify(), likelihood
+        indices_of_maximum = np.transpose(np.asarray(self.probabilities == likelihood).nonzero())
 
-    def __copy__(self) -> 'MultinomialDistribution':
+        mode = None
+        for index_of_maximum in indices_of_maximum:
+            current_mode = SimpleEvent({variable: variable.domain.simple_sets[0].all_elements(value) for
+                                        variable, value in zip(self.variables, index_of_maximum)}).as_composite_set()
+            if mode is None:
+                mode = current_mode
+            else:
+                mode |= current_mode
+
+        return mode.simplify(), np.log(likelihood)
+
+    def __copy__(self) -> Self:
         """
         :return: a shallow copy of the distribution.
         """
         return MultinomialDistribution(self.variables, self.probabilities)
 
-    def __eq__(self, other: 'MultinomialDistribution') -> bool:
+    def __eq__(self, other: Self) -> bool:
         """Compare self with other and return the boolean result.
 
         Two discrete random variables are equal only if the probability mass
         functions are equal and the order of dimensions are equal.
 
         """
-        return (isinstance(other, self.__class__) and self.variables == other.variables and
-                self.probabilities.shape == other.probabilities.shape and
-                np.allclose(self.probabilities, other.probabilities))
+        return (isinstance(other,
+                           self.__class__) and self.variables == other.variables and self.probabilities.shape == other.probabilities.shape and np.allclose(
+            self.probabilities, other.probabilities))
 
     def __str__(self):
         return "P({}): \n".format(", ".join(var.name for var in self.variables)) + str(self.probabilities)
@@ -87,51 +106,51 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         :return: a pretty table of the distribution.
         """
         columns = [[var.name for var in self.variables] + ["P"]]
-        events: List[List] = list(list(event) for event in itertools.product(*[var.domain for var in self.variables]))
-
-        for idx, event in enumerate(events):
-            events[idx].append(self.likelihood(event))
+        events = list(list(event) for event in itertools.product(
+            *[[simple_set.name for simple_set in var.domain.simple_sets] for var in self.variables]))
+        events = np.concatenate((events, self.probabilities.reshape(-1, 1)), axis=1).tolist()
         table = columns + events
         return table
 
-    def _probability(self, event: EncodedEvent) -> float:
-        indices = tuple(event[variable] for variable in self.variables)
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        indices = tuple(list(event[variable].simple_sets) for variable in self.variables)
         return self.probabilities[np.ix_(*indices)].sum()
 
-    def _likelihood(self, event: List[int]) -> float:
-        return float(self.probabilities[tuple(event)])
+    def log_likelihood(self, events: np.array) -> np.array:
+        return np.log(self.probabilities[events])
 
-    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
+    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
         probabilities = np.zeros_like(self.probabilities)
 
-        for simple_event in event.events:
-            probabilities += self._probabilities_from_simple_event(simple_event)
+        for simple_event in event.simple_sets:
+            probabilities += self.probabilities_from_simple_event(simple_event)
 
         sum_of_probabilities = probabilities.sum()
         if sum_of_probabilities == 0:
-            return None, 0
-        else:
-            return MultinomialDistribution(self.variables, probabilities), sum_of_probabilities
+            return None, -np.inf
 
-    def _probabilities_from_simple_event(self, event: EncodedEvent) -> np.ndarray:
+        result = MultinomialDistribution(self.variables, probabilities)
+        result.normalize()
+        return result, np.log(sum_of_probabilities)
+
+    def probabilities_from_simple_event(self, event: SimpleEvent) -> np.ndarray:
         """
         Calculate the probabilities array for a simple event.
         :param event: The simple event.
         :return: The array of probabilities that apply to this event.
         """
-        indices = tuple(event[variable] for variable in self.variables)
+        indices = tuple(list(event[variable].simple_sets) for variable in self.variables)
         indices = np.ix_(*indices)
         probabilities = np.zeros_like(self.probabilities)
         probabilities[indices] = self.probabilities[indices]
         return probabilities
 
-    def normalize(self) -> Self:
+    def normalize(self):
         """
-        Normalize the distribution.
-        :return: The normalized distribution
+        Normalize the distribution inplace.
         """
         normalized_probabilities = self.probabilities / np.sum(self.probabilities)
-        return MultinomialDistribution(self.variables, normalized_probabilities)
+        self.probabilities = normalized_probabilities
 
     def as_probabilistic_circuit(self) -> DeterministicSumUnit:
         """
@@ -144,7 +163,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         result = DeterministicSumUnit()
 
         # iterate through all states of this distribution
-        for event in itertools.product(*[variable.domain for variable in self.variables]):
+        for event in itertools.product(*[variable.domain.simple_sets for variable in self.variables]):
 
             # create a product unit for the current state
             product_unit = DecomposableProductUnit()
@@ -153,16 +172,11 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
             for variable, value in zip(self.variables, event):
 
                 # create probabilities for the current variables state as one hot encoding
-                weights = [0.] * len(variable.domain)
-                weights[variable.encode(value)] = 1.
+                weights = MissingDict(float)
+                weights[value] = 1.
 
                 # create a distribution for the current variable
-                if isinstance(variable, Integer):
-                    distribution = IntegerDistribution(variable, weights)
-                elif isinstance(variable, Symbolic):
-                    distribution = SymbolicDistribution(variable, weights)
-                else:
-                    raise ValueError(f"Variable type {type(variable)} not supported.")
+                distribution = SymbolicDistribution(variable, weights)
 
                 # mount the distribution to the product unit
                 product_unit.add_subcircuit(distribution)
@@ -183,7 +197,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         """
         return [variable.encode(value) for variable, value in zip(self.variables, event)]
 
-    def fit(self, data: Iterable[Iterable[Any]]) -> Self:
+    def fit(self, data: np.array) -> Self:
         """
         Fit the distribution to the data.
         :param data: The data to fit the distribution to.

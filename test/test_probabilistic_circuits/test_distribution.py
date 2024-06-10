@@ -7,7 +7,7 @@ from random_events.product_algebra import *
 from random_events.interval import *
 from random_events.variable import Integer, Symbolic, Continuous
 
-from probabilistic_model.distributions.distributions import MissingDict
+from probabilistic_model.utils import MissingDict
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
 
 from probabilistic_model.probabilistic_circuit.distributions.distributions import (UniformDistribution,

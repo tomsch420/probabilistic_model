@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections import defaultdict
 from typing import Optional
 
 import numpy as np
@@ -13,16 +12,8 @@ import plotly.graph_objects as go
 from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 
 
-from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType, FullEvidenceType
-from ..utils import SubclassJSONSerializer
-
-
-class MissingDict(defaultdict):
-    """
-    A defaultdict that returns the default value when the key is missing and does **not** add the key to the dict.
-    """
-    def __missing__(self, key):
-        return self.default_factory()
+from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
+from ..utils import SubclassJSONSerializer, MissingDict
 
 
 class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):

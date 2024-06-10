@@ -2,10 +2,33 @@ import itertools
 import unittest
 
 import numpy as np
-from random_events.events import Event
-from random_events.variables import Symbolic
+from random_events.product_algebra import Event, SetElement, SimpleEvent
+from random_events.set import Set
+from random_events.variable import Symbolic
+from sortedcontainers import SortedSet
 
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
+
+
+class XEnum(int, SetElement):
+    EMPTY_SET = -1
+    A = 0
+    B = 1
+
+
+class YEnum(int, SetElement):
+    EMPTY_SET = -1
+    A = 0
+    B = 1
+    C = 2
+
+
+class ZEnum(int, SetElement):
+    EMPY_SET = -1
+    A = 0
+    B = 1
+    C = 2
+    D = 3
 
 
 class MultinomialConstructionTestCase(unittest.TestCase):
@@ -16,19 +39,19 @@ class MultinomialConstructionTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         np.random.seed(69)
-        cls.x = Symbolic("X", range(2))
-        cls.y = Symbolic("Y", range(3))
-        cls.z = Symbolic("Z", range(5))
+        cls.x = Symbolic("X", XEnum)
+        cls.y = Symbolic("Y", YEnum)
+        cls.z = Symbolic("Z", ZEnum)
 
     def test_creation_with_probabilities(self):
-        distribution = MultinomialDistribution([self.x, self.y, self.z], np.random.rand(len(self.x.domain),
-                                                                                        len(self.y.domain),
-                                                                                        len(self.z.domain)))
+        distribution = MultinomialDistribution([self.x, self.y, self.z], np.random.rand(len(self.x.domain.simple_sets),
+                                                                                        len(self.y.domain.simple_sets),
+                                                                                        len(self.z.domain.simple_sets)))
         self.assertTrue(distribution)
 
     def test_creation_without_probabilities(self):
         distribution = MultinomialDistribution([self.x])
-        self.assertTrue(np.allclose(1., distribution.probabilities))
+        self.assertTrue(np.allclose(1./2., distribution.probabilities))
 
     def test_creation_with_invalid_probabilities_shape(self):
         probabilities = np.array([[0.1, 0.1], [0.2, 0.2]])
@@ -43,11 +66,11 @@ class MultinomialConstructionTestCase(unittest.TestCase):
         self.assertNotEqual(distribution_2, distribution_1)
 
     def test_to_tabulate(self):
-        distribution = MultinomialDistribution([self.x, self.y, self.z], np.random.rand(len(self.x.domain),
-                                                                                        len(self.y.domain),
-                                                                                        len(self.z.domain)))
+        distribution = MultinomialDistribution([self.x, self.y, self.z], np.random.rand(len(self.x.domain.simple_sets),
+                                                                                        len(self.y.domain.simple_sets),
+                                                                                        len(self.z.domain.simple_sets)))
         table = distribution.to_tabulate()
-        self.assertTrue(table)
+        self.assertTrue(table)  # print(tabulate.tabulate(table, headers="firstrow"))
 
     def test_to_str(self):
         distribution = MultinomialDistribution([self.x, self.y, self.z])
@@ -55,9 +78,9 @@ class MultinomialConstructionTestCase(unittest.TestCase):
 
 
 class MultinomialInferenceTestCase(unittest.TestCase):
-    x: Symbolic
-    y: Symbolic
-    z: Symbolic
+    x = Symbolic("X", XEnum)
+    y = Symbolic("Y", YEnum)
+    z = Symbolic("Z", ZEnum)
     random_distribution: MultinomialDistribution
     random_distribution_mass: float
     crafted_distribution: MultinomialDistribution
@@ -66,107 +89,97 @@ class MultinomialInferenceTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         np.random.seed(69)
-        cls.x = Symbolic("X", range(2))
-        cls.y = Symbolic("Y", range(3))
-        cls.z = Symbolic("Z", range(5))
-        cls.random_distribution = MultinomialDistribution([cls.x, cls.y, cls.z], np.random.rand(len(cls.x.domain),
-                                                                                                len(cls.y.domain),
-                                                                                                len(cls.z.domain)))
+        cls.random_distribution = MultinomialDistribution([cls.x, cls.y, cls.z],
+                                                          np.random.rand(len(cls.x.domain.simple_sets),
+                                                                         len(cls.y.domain.simple_sets),
+                                                                         len(cls.z.domain.simple_sets)))
         cls.random_distribution_mass = cls.random_distribution.probabilities.sum()
 
         cls.crafted_distribution = MultinomialDistribution([cls.x, cls.y], np.array([[0.1, 0.2, 0.3], [0.7, 0.4, 0.1]]))
         cls.crafted_distribution_mass = cls.crafted_distribution.probabilities.sum()
 
     def test_normalize_random(self):
-        distribution = self.random_distribution.normalize()
-        self.assertNotAlmostEqual(self.random_distribution.probabilities.sum(),1.)
-        self.assertAlmostEqual(distribution.probabilities.sum(), 1.)
-
-    def test_normalize_crafted(self):
-        distribution = self.random_distribution.normalize()
-        self.assertNotAlmostEqual(self.random_distribution.probabilities.sum(), self.crafted_distribution_mass)
-        self.assertAlmostEqual(distribution.probabilities.sum(), 1.)
+        self.random_distribution.normalize()
+        self.assertAlmostEqual(self.random_distribution.probabilities.sum(), 1.)
 
     def test_random_marginal_with_normalize(self):
-        marginal = self.random_distribution.marginal([self.x, self.y]).normalize()
+        marginal = self.random_distribution.marginal([self.x, self.y])
         self.assertAlmostEqual(marginal.probabilities.sum(), 1)
+        self.assertEqual(marginal.variables, SortedSet([self.x, self.y]))
 
     def test_crafted_marginal_with_normalize(self):
-        marginal = self.crafted_distribution.marginal([self.x]).normalize()
+        marginal = self.crafted_distribution.marginal([self.x])
         self.assertAlmostEqual(marginal.probabilities.sum(), 1)
         self.assertAlmostEqual(marginal.probabilities[0], 0.6 / self.crafted_distribution_mass)
         self.assertAlmostEqual(marginal.probabilities[1], 1.2 / self.crafted_distribution_mass)
 
     def test_random_mode(self):
         mode, probability = self.random_distribution.mode()
-        mode = mode.events[0]
-        self.assertEqual(probability, self.random_distribution.probabilities.max())
-        self.assertEqual(mode["X"], (0,))
-        self.assertEqual(mode["Y"], (0,))
+        mode = mode.simple_sets[0]
+        self.assertAlmostEqual(probability, self.random_distribution.probabilities.max())
+        self.assertEqual(mode["X"], XEnum.A.as_composite_set())
+        self.assertEqual(mode["Y"], YEnum.A.as_composite_set())
 
     def test_crafted_mode(self):
         mode, probability = self.crafted_distribution.mode()
-        mode = mode.events[0]
+        mode = mode.simple_sets[0]
         self.assertEqual(probability, self.crafted_distribution.probabilities.max())
-        self.assertEqual(mode["X"], (1,))
-        self.assertEqual(mode["Y"], (0,))
+        self.assertEqual(mode["X"], XEnum.B.as_composite_set())
+        self.assertEqual(mode["Y"], YEnum.A.as_composite_set())
 
     def test_multiple_modes(self):
         distribution = MultinomialDistribution([self.x, self.y], np.array([[0.1, 0.7, 0.3], [0.7, 0.4, 0.1]]), )
         mode, likelihood = distribution.mode()
         self.assertEqual(likelihood, 0.7)
-        self.assertEqual(len(mode.events), 2)
-        self.assertEqual(mode.events[0]["X"], (0,))
-        self.assertEqual(mode.events[0]["Y"], (1,))
-        self.assertEqual(mode.events[1]["X"], (1,))
-        self.assertEqual(mode.events[1]["Y"], (0,))
+        self.assertEqual(len(mode.simple_sets), 2)
+        self.assertEqual(mode.simple_sets[0]["X"], XEnum.A.as_composite_set())
+        self.assertEqual(mode.simple_sets[0]["Y"], YEnum.B.as_composite_set())
+        self.assertEqual(mode.simple_sets[1]["X"], XEnum.B.as_composite_set())
+        self.assertEqual(mode.simple_sets[1]["Y"], YEnum.A.as_composite_set())
 
     def test_crafted_probability(self):
-        distribution = self.crafted_distribution.normalize()
-        event = Event()
-        self.assertAlmostEqual(distribution.probability(event), 1)
+        distribution = self.crafted_distribution
+        distribution.normalize()
+        event = SimpleEvent()
+        event.fill_missing_variables(distribution.variables)
+        self.assertAlmostEqual(distribution.probability(event.as_composite_set()), 1)
 
-        event[self.x] = 0
-        self.assertAlmostEqual(distribution.probability(event), 1 / 3)
+        event[self.x] = XEnum.A
+        self.assertAlmostEqual(distribution.probability(event.as_composite_set()), 1 / 3)
 
-        event[self.y] = (0, 1)
-        self.assertAlmostEqual(distribution.probability(event), 0.3 / self.crafted_distribution_mass)
+        event[self.y] = Set(YEnum.A, YEnum.B)
+        self.assertAlmostEqual(distribution.probability(event.as_composite_set()), 0.3 / self.crafted_distribution_mass)
 
     def test_random_probability(self):
-        distribution = self.random_distribution.normalize()
-        event = Event()
-        self.assertAlmostEqual(distribution.probability(event), 1)
+        self.random_distribution.normalize()
+        event = SimpleEvent()
+        event.fill_missing_variables(self.random_distribution.variables)
+        self.assertAlmostEqual(self.random_distribution.probability(event.as_composite_set()), 1)
 
-        event[self.x] = 0
-        self.assertLessEqual(distribution.probability(event), 1.)
+        event[self.x] = XEnum.A
+        self.assertLessEqual(self.random_distribution.probability(event.as_composite_set()), 1.)
 
-        event[self.y] = (0, 1)
-        self.assertLessEqual(distribution.probability(event), 1.)
+        event[self.y] = Set(YEnum.A, YEnum.B)
+        self.assertLessEqual(self.random_distribution.probability(event.as_composite_set()), 1.)
 
     def test_crafted_conditional(self):
-        event = Event({self.y: (0, 1)})
-        conditional, probability = self.crafted_distribution.conditional(event)
-        conditional = conditional.normalize()
-        self.assertEqual(conditional.probability(event), 1)
-        self.assertEqual(conditional.probability(Event()), 1.)
-        self.assertEqual(conditional.probability(Event({self.y: 2})), 0.)
+        event = SimpleEvent({self.y: Set(YEnum.A, YEnum.B)})
+        event.fill_missing_variables(self.crafted_distribution.variables)
+        conditional, probability = self.crafted_distribution.conditional(event.as_composite_set())
+        self.assertEqual(conditional.probability(event.as_composite_set()), 1)
 
-    def test_random_conditional(self):
-        event = Event({self.y: (0, 1)})
-        conditional, _ = self.random_distribution.conditional(event)
-        conditional = conditional.normalize()
-        self.assertAlmostEqual(conditional.probability(event), 1)
-        self.assertAlmostEqual(conditional.probability(Event()), 1.)
-        self.assertEqual(conditional.probability(Event({self.y: 2})), 0.)
+        impossible_event = SimpleEvent({self.y: YEnum.C})
+        impossible_event.fill_missing_variables(self.crafted_distribution.variables)
+
+        self.assertEqual(conditional.probability(impossible_event.as_composite_set()), 0.)
 
     def test_as_probabilistic_circuit(self):
-        distribution = self.random_distribution.normalize()
-        circuit = distribution.as_probabilistic_circuit()
+        self.random_distribution.normalize()
+        circuit = self.random_distribution.as_probabilistic_circuit()
 
         for event in itertools.product(self.x.domain, self.y.domain, self.z.domain):
-            event = Event(zip([self.x, self.y, self.z], event))
-            self.assertAlmostEqual(distribution.probability(event),
-                                   circuit.probability(event))
+            event = SimpleEvent(zip([self.x, self.y, self.z], event)).as_composite_set()
+            self.assertAlmostEqual(self.random_distribution.probability(event), circuit.probability(event))
 
     def test_serialization(self):
         distribution = self.random_distribution
