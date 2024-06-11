@@ -5,6 +5,8 @@ from abc import ABC
 import numpy as np
 from random_events.interval import SimpleInterval, Interval
 from random_events.product_algebra import Event, SimpleEvent
+from random_events.variable import Variable
+from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Optional, Self
 
 from ...distributions.distributions import (ContinuousDistribution as PMContinuousDistribution,
@@ -23,6 +25,10 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
 
     def is_deterministic(self) -> bool:
         return True
+
+    @property
+    def variables(self) -> SortedSet:
+        return SortedSet([self.variable])
 
     def __hash__(self):
         return ProbabilisticCircuitMixin.__hash__(self)

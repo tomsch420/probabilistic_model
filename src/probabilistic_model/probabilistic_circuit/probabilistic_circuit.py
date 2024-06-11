@@ -8,6 +8,7 @@ import numpy as np
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.variable import Variable, Symbolic
+from sortedcontainers import SortedSet
 
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, TYPE_CHECKING
 
@@ -106,9 +107,9 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return list(self.probabilistic_circuit.successors(self))
 
     @property
-    def variables(self) -> Tuple[Variable, ...]:
-        variables = set([variable for distribution in self.leaves for variable in distribution.variables])
-        return tuple(sorted(variables))
+    @abstractmethod
+    def variables(self) -> SortedSet:
+        raise NotImplementedError
 
     @property
     def cache_result(self) -> bool:
@@ -294,10 +295,15 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
                 self.subcircuits]
 
     @property
+    def variables(self) -> SortedSet:
+        return self.subcircuits[0].variables
+
+    @property
     def latent_variable(self) -> Symbolic:
         name = f"{hash(self)}.latent"
-        enum_elements = {"EMPTY_SET": 0}
-        enum_elements += {hash(subcircuit): index + 1 for index, subcircuit in enumerate(self.subcircuits)}
+        enum_elements = {"EMPTY_SET": -1}
+        enum_elements |= {str(hash(subcircuit)): index for index, subcircuit in enumerate(self.subcircuits)}
+        print(enum_elements)
         domain = SetElement(name, enum_elements)
         return Symbolic(name, domain)
 
@@ -366,9 +372,9 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
         # normalize probabilities
         result.normalize()
 
-        return result, total_probability
+        return result, np.log(total_probability)
 
-    def sample(self, amount: int) -> Iterable:
+    def sample(self, amount: int) -> np.array:
         """
         Sample from the sum node using the latent variable interpretation.
         """
@@ -593,7 +599,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
         return True
 
     def log_mode(self) -> Tuple[Event, float]:
-        raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated.")
+        raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
 
 class DeterministicSumUnit(SmoothSumUnit):
@@ -611,7 +617,7 @@ class DeterministicSumUnit(SmoothSumUnit):
         for weight, subcircuit in self.weighted_subcircuits:
             mode, log_likelihood = subcircuit.log_mode()
             modes.append(mode)
-            log_likelihoods.append(weight * log_likelihood)
+            log_likelihoods.append(np.log(weight) + log_likelihood)
 
         # get the most likely result
         maximum_log_likelihood = max(log_likelihoods)
@@ -643,6 +649,13 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     """
 
     representation = "⊗"
+
+    @property
+    def variables(self) -> SortedSet:
+        result = SortedSet()
+        for subcircuit in self.subcircuits:
+            result = result.union(subcircuit.variables)
+        return result
 
     def support(self) -> Event:
         support = self.subcircuits[0].support()
@@ -706,7 +719,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     @cache_inference_result
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
         # initialize probability
-        log_probability = 1.
+        log_probability = 0.
 
         # create new node with new circuit attached to it
         resulting_node = self.empty_copy()
@@ -718,7 +731,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
             # if any is 0, the whole probability is 0
             if conditional_subcircuit is None:
-                return None, 0
+                return None, -np.inf
 
             # update probability and children
             resulting_node.add_subcircuit(conditional_subcircuit)
