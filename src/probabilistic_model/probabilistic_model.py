@@ -155,6 +155,8 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event to condition on.
         :return: The conditional distribution and the probability of the event.
         """
+        for simple_event in event.simple_sets:
+            simple_event.fill_missing_variables(self.variables)
         conditional, log_probability = self.log_conditional(event)
         return conditional, np.exp(log_probability)
 

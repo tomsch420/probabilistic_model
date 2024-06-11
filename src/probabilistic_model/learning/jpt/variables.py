@@ -1,9 +1,8 @@
-from typing import List, Iterable, Any, Dict
-
 import numpy as np
 import pandas as pd
+from random_events.set import SetElement
 from random_events.variable import Variable, Continuous as REContinuous, Integer as REInteger, Symbolic
-from typing_extensions import Self
+from typing_extensions import Self, List, Any, Dict
 
 
 def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: bool = False,
@@ -47,15 +46,17 @@ def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: b
 
         # handle discrete variables
         elif datatype in [object, int]:
-
-            unique_values = data[column].unique()
-
             if datatype == int:
                 mean = data[column].mean()
                 std = data[column].std()
-                variable = Integer(column, unique_values, mean, std)
+                variable = Integer(column, mean, std)
             elif datatype == object:
-                variable = Symbolic(column, unique_values)
+                unique_values = data[column].unique()
+                unique_values.sort()
+                enum_elements = {"EMPTY_SET": -1}
+                enum_elements |= {unique_value: index for index, unique_value in enumerate(unique_values)}
+                domain = SetElement(column, enum_elements)
+                variable = Symbolic(column, domain)
             else:
                 raise ValueError(f"Datatype {datatype} of column {column} is not supported.")
 

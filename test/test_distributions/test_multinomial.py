@@ -10,20 +10,20 @@ from sortedcontainers import SortedSet
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 
 
-class XEnum(int, SetElement):
+class XEnum(SetElement):
     EMPTY_SET = -1
     A = 0
     B = 1
 
 
-class YEnum(int, SetElement):
+class YEnum(SetElement):
     EMPTY_SET = -1
     A = 0
     B = 1
     C = 2
 
 
-class ZEnum(int, SetElement):
+class ZEnum(SetElement):
     EMPY_SET = -1
     A = 0
     B = 1

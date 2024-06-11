@@ -93,8 +93,8 @@ class SymbolicDistributionTestCase(unittest.TestCase):
 
     def setUp(self):
         probabilities = MissingDict(float)
-        probabilities[TestEnum.A] = 7 / 20
-        probabilities[TestEnum.B] = 13 / 20
+        probabilities[TestEnum.A.value] = 7 / 20
+        probabilities[TestEnum.B.value] = 13 / 20
         self.model = SymbolicDistribution(self.x, probabilities)
 
     def test_sample(self):
@@ -113,6 +113,18 @@ class SymbolicDistributionTestCase(unittest.TestCase):
     def test_probability(self):
         event = SimpleEvent({self.x: Set(TestEnum.A, TestEnum.C)}).as_composite_set()
         self.assertEqual(self.model.probability(event), 7 / 20)
+
+    def test_support(self):
+        support = self.model.univariate_support
+        self.assertEqual(support, Set(TestEnum.A, TestEnum.B))
+
+    def test_fit(self):
+        data = [1, 2, 2, 2]
+        self.model.fit(data)
+        self.assertEqual(self.model.probabilities[1], [1 / 4])
+        self.assertEqual(self.model.probabilities[2], [3 / 4])
+        prob = self.model.probability(SimpleEvent({self.x: Set(TestEnum.A, TestEnum.B)}).as_composite_set())
+        self.assertEqual(prob, 1)
 
 
 class DiracDeltaDistributionTestCase(unittest.TestCase):

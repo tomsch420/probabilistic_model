@@ -4,8 +4,8 @@ import itertools
 from functools import cached_property
 
 from matplotlib import pyplot as plt
-from random_events.events import EncodedEvent, Event, VariableMap
-from random_events.variables import Variable, Symbolic, Integer, Discrete
+from random_events.product_algebra import SimpleEvent, Event, VariableMap
+from random_events.variable import Variable, Symbolic, Integer
 from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict, TYPE_CHECKING
 
 from probabilistic_model.probabilistic_circuit.distributions import (SymbolicDistribution, IntegerDistribution,
@@ -85,7 +85,7 @@ class BayesianNetworkMixin(ProbabilisticModel):
         """
         raise NotImplementedError
 
-    def forward_pass(self, event: EncodedEvent):
+    def forward_pass(self, event: Event):
         """
         Calculate the forward pass for this node given the event.
         This includes calculating the forward message and the forward probability of said event.
@@ -102,7 +102,7 @@ class BayesianNetworkMixin(ProbabilisticModel):
         """
         raise NotImplementedError
 
-    def interaction_term(self, node_latent_variable: Discrete, parent_latent_variable: Discrete) \
+    def interaction_term(self, node_latent_variable: Symbolic, parent_latent_variable: Symbolic) \
             -> ProbabilisticCircuit:
         """
         Generate the interaction term that is used for mounting into the parent circuit in the generation of a
@@ -154,7 +154,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
             result *= node._likelihood(node_event)
         return result
 
-    def forward_pass(self, event: EncodedEvent):
+    def forward_pass(self, event: Event):
         """
         Calculate all forward messages.
         """
@@ -172,7 +172,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
 
         :return: A Multinomial distribution over all the variables.
         """
-        assert all([isinstance(variable, Discrete) for variable in self.variables])
+        assert all([isinstance(variable, Symbolic) for variable in self.variables])
 
         worlds = list(itertools.product(*[variable.domain for variable in self.variables]))
         worlds = np.array(worlds)

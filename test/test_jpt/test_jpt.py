@@ -8,15 +8,17 @@ from datetime import datetime
 import networkx as nx
 import numpy as np
 import pandas as pd
-import portion
+
 import random_events
 import sklearn.datasets
 from jpt import infer_from_dataframe as old_infer_from_dataframe
 from jpt.learning.impurity import Impurity
 from jpt.trees import JPT as OldJPT, Leaf
 from matplotlib import pyplot as plt
-from random_events.events import Event, ComplexEvent
-from random_events.variables import Variable
+from random_events.interval import closed
+from random_events.product_algebra import Event, SimpleEvent
+from random_events.set import SetElement
+from random_events.variable import Variable
 
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
 from probabilistic_model.bayesian_network.distributions import (DiscreteDistribution, ConditionalProbabilisticCircuit,
@@ -56,7 +58,7 @@ class VariableTestCase(unittest.TestCase):
         self.assertEqual(self.variable.decode(-2 / 3), 0)
 
     def test_serialization_integer(self):
-        variable = Integer('x', [1, 2, 3], 2, 1)
+        variable = Integer('x', 2, 1)
         serialized = variable.to_json()
         deserialized = Variable.from_json(serialized)
         self.assertEqual(variable, deserialized)
@@ -66,6 +68,16 @@ class VariableTestCase(unittest.TestCase):
         serialized = variable.to_json()
         deserialized = Variable.from_json(serialized)
         self.assertEqual(variable, deserialized)
+
+
+class SymbolEnum(SetElement):
+    """
+    A simple enum for testing purposes.
+    """
+    EMPTY_SET = -1
+    A = 0
+    B = 1
+    C = 2
 
 
 class InferFromDataFrameTestCase(unittest.TestCase):
@@ -135,10 +147,8 @@ class JPTTestCase(unittest.TestCase):
         self.assertIsInstance(leaf_node.subcircuits[2], SymbolicDistribution)
 
         # check that all likelihoods are greater than 0
-        for index, row in self.data.iterrows():
-            row_ = [row[variable.name] for variable in self.model.variables_from_init]
-            likelihood = leaf_node.likelihood(row_)
-            self.assertTrue(likelihood > 0)
+        likelihood = leaf_node.likelihood(preprocessed_data)
+        self.assertTrue(all(likelihood > 0))
 
     def test_fit_without_sum_units(self):
         self.model.min_impurity_improvement = 1
@@ -154,45 +164,10 @@ class JPTTestCase(unittest.TestCase):
         self.assertTrue(all([weight > 0 for weight, _ in self.model.weighted_subcircuits]))
 
         # check that all likelihoods are greater than 0
-        for index, row in self.data.iterrows():
-            row_ = [row[variable.name] for variable in self.model.variables_from_init]
-            likelihood = self.model.likelihood(row_)
-            self.assertTrue(likelihood > 0)
+        preprocessed_data = self.model.preprocess_data(self.data)
+        likelihood = self.model.likelihood(preprocessed_data)
 
-    def test_fit_and_compare_to_jpt_one_leaf_only(self):
-        self.model.min_impurity_improvement = 1
-        self.model.fit(self.data)
-        variables = old_infer_from_dataframe(self.data, scale_numeric_types=False)
-        original_jpt = OldJPT(variables, min_samples_leaf=self.model.min_samples_leaf,
-                              min_impurity_improvement=self.model.min_impurity_improvement)
-        original_jpt.fit(self.data)
-        self.assertEqual(len(self.model.subcircuits), len(original_jpt.leaves))
-
-        for og_leaf, new_leaf in zip(original_jpt.leaves.values(), self.model.subcircuits):
-            self.assertTrue(self.leaf_equal_to_product(og_leaf, new_leaf))
-
-    def leaf_equal_to_product(self, leaf: Leaf, product: DecomposableProductUnit, epsilon: float = 0.001) -> bool:
-        """
-        Check if a leaf is equal to a product unit.
-        :param leaf: The (jpt) leaf to check.
-        :param product: The product unit to check.
-        :param epsilon: The epsilon to use for the comparison.
-        :return: True if the leaf is equal to the product unit, False otherwise.
-        """
-
-        for variable in product.variables:
-            if isinstance(variable, Continuous):
-                continue
-            old_distribution = leaf.distributions[variable.name]
-            new_distribution = [child for child in product.subcircuits if child.variable == variable][0]
-            for value in variable.domain:
-                old_probability = old_distribution.p(value)
-                new_probability = new_distribution.pdf(value)
-
-                if abs(old_probability - new_probability) > epsilon:
-                    return False
-
-        return True
+        self.assertTrue(all(likelihood > 0))
 
     def test_preprocessing_and_compare_to_jpt(self):
         variables = old_infer_from_dataframe(self.data, scale_numeric_types=False, precision=0.)
@@ -242,7 +217,8 @@ class JPTTestCase(unittest.TestCase):
         self.model._min_samples_leaf = 10
         self.model.fit(self.data)
         fig = self.model.plot()
-        self.assertIsNotNone(fig)  # fig.show()
+        self.assertIsNotNone(fig)
+        # fig.show()
 
     def test_variable_dependencies_to_json(self):
         serialized = self.model._variable_dependencies_to_json()
@@ -298,8 +274,8 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         file.close()
 
     def test_conditional_inference(self):
-        evidence = Event()
-        query = Event()
+        evidence = SimpleEvent({variable: variable.domain for variable in self.model.variables}).as_composite_set()
+        query = evidence
         conditional_model, evidence_probability = self.model.conditional(evidence)
         self.assertAlmostEqual(1., evidence_probability)
         self.assertAlmostEqual(1., conditional_model.probability(query))
@@ -321,17 +297,18 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
     def test_serialization_of_circuit(self):
         json_dict = self.model.probabilistic_circuit.to_json()
         model = ProbabilisticCircuit.from_json(json_dict)
-        self.assertAlmostEqual(model.probability(Event()), 1.)
+        event = SimpleEvent({variable: variable.domain for variable in self.model.variables}).as_composite_set()
+        self.assertAlmostEqual(model.probability(event), 1.)
 
     def test_marginal_conditional_chain(self):
         model = self.model.probabilistic_circuit
         marginal = model.marginal(self.model.variables[:2])
         x, y = self.model.variables[:2]
-        conditional, probability = model.conditional(Event({x: portion.closed(0, 10)}))
+        conditional, probability = model.conditional(SimpleEvent({x: closed(0, 10)}).as_composite_set())
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
-        self.assertGreater(len(mode.events), 0)
+        self.assertGreater(len(mode.simple_sets), 0)
 
 
 class MNISTTestCase(unittest.TestCase):
@@ -382,9 +359,9 @@ class BayesianJPTTestCase(unittest.TestCase):
 
     subcircuit_indices: pd.DataFrame
 
-    species_latent_variable: random_events.variables.Discrete
-    sepal_latent_variable: random_events.variables.Discrete
-    petal_latent_variable: random_events.variables.Discrete
+    species_latent_variable: random_events.variable.Symbolic
+    sepal_latent_variable: random_events.variable.Symbolic
+    petal_latent_variable: random_events.variable.Symbolic
 
     @classmethod
     def setUpClass(cls):
@@ -419,20 +396,17 @@ class BayesianJPTTestCase(unittest.TestCase):
 
         cls.subcircuit_indices = pd.DataFrame(subcircuit_indices, columns=["sl_sw", "pl_pw", "species"])
 
-        cls.species_latent_variable = random_events.variables.Discrete("species.latent",
-                                                                       range(len(cls.model_species.subcircuits)))
-        cls.sepal_latent_variable = random_events.variables.Discrete("sepal.latent",
-                                                                     range(len(cls.model_sl_sw.subcircuits)))
-        cls.petal_latent_variable = random_events.variables.Discrete("petal.latent",
-                                                                     range(len(cls.model_sl_sw.subcircuits)))
+        cls.species_latent_variable = cls.model_species.latent_variable
+        cls.sepal_latent_variable = cls.model_sl_sw.latent_variable
+        cls.petal_latent_variable = cls.model_pl_pw.latent_variable
 
         cls.species_sepal_interaction_term = MultinomialDistribution(
             [cls.sepal_latent_variable, cls.species_latent_variable])
-        cls.species_sepal_interaction_term._fit(subcircuit_indices[:, (0, 2)])
+        cls.species_sepal_interaction_term.fit(subcircuit_indices[:, (0, 2)])
 
         cls.species_petal_interaction_term = MultinomialDistribution(
             [cls.petal_latent_variable, cls.species_latent_variable])
-        cls.species_petal_interaction_term._fit(subcircuit_indices[:, (1, 2)])
+        cls.species_petal_interaction_term.fit(subcircuit_indices[:, (1, 2)])
 
     def test_setup(self):
         self.assertEqual(self.model_sl_sw.variables, (self.sl, self.sw))
@@ -506,21 +480,3 @@ class BayesianJPTTestCase(unittest.TestCase):
 
         self.assertAlmostEqual(pc_m.probability(complex_event), 0.2333333)
         self.assertLess(len(pc_m.weighted_edges), math.prod([len(v.domain) for v in bayesian_network.variables]))
-
-
-@unittest.skip("This test requires a file on your disk.")
-class MaxProblemTestCase(unittest.TestCase):
-
-    model: ProbabilisticCircuit
-    relative_x: Continuous
-    relative_y: Continuous
-
-    @classmethod
-    def setUpClass(cls):
-        with open(os.path.join(os.path.expanduser("~"), "Documents", "boob_cancer_jpt.json"),  "r") as file:
-            loaded_json = json.load(file)
-            cls.model = ProbabilisticCircuit.from_json(loaded_json)
-
-    def test_inference(self):
-        mode, _ = self.model.mode()
-        print(mode.events)

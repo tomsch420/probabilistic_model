@@ -1,11 +1,11 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent
+from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from typing_extensions import Tuple, Dict, Iterable, List, Type, Union, Optional, Self
 
 from .bayesian_network import BayesianNetworkMixin
 from ..probabilistic_model import ProbabilisticModel
-from random_events.variables import Discrete, Variable
+from random_events.variable import Variable, Symbolic
 
 from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
                                                            ProbabilisticCircuitMixin, SmoothSumUnit)
@@ -23,7 +23,7 @@ class DiscreteDistribution(BayesianNetworkMixin, PCDiscreteDistribution):
 
     forward_message: Optional[PCDiscreteDistribution]
 
-    def forward_pass(self, event: ComplexEvent):
+    def forward_pass(self, event: Event):
         self.forward_message, self.forward_probability = self._conditional(event)
 
     def joint_distribution_with_parent(self) -> DeterministicSumUnit:
@@ -51,15 +51,15 @@ class IntegerDistribution(DiscreteDistribution, PCIntegerDistribution):
 
 class ConditionalProbabilityTable(BayesianNetworkMixin):
 
-    variables: Tuple[Discrete, ...]
+    variables: Tuple[Symbolic, ...]
     conditional_probability_distributions: Dict[Tuple, PCDiscreteDistribution]
 
-    def __init__(self, variable: Discrete):
+    def __init__(self, variable: Symbolic):
         ProbabilisticModel.__init__(self, [variable])
         self.conditional_probability_distributions = dict()
 
     @property
-    def variable(self) -> Discrete:
+    def variable(self) -> Symbolic:
         return self.variables[0]
 
     def likelihood(self, event: Iterable) -> float:
@@ -71,7 +71,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         node_event = tuple(event[1:])
         return self.conditional_probability_distributions[parent_event]._likelihood(node_event)
 
-    def forward_pass(self, event: ComplexEvent):
+    def forward_pass(self, event: Event):
 
         # if the parent distribution is None, the forward message is None since it is an impossible event
         if self.parent.forward_message is None:
@@ -165,7 +165,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
     def forward_message_as_sum_unit(self) -> DeterministicSumUnit:
         return self.forward_message.as_deterministic_sum()
 
-    def interaction_term(self, node_latent_variable: Discrete, parent_latent_variable: Discrete) -> \
+    def interaction_term(self, node_latent_variable: Symbolic, parent_latent_variable: Symbolic) -> \
             ProbabilisticCircuit:
         interaction_term = self.joint_distribution_with_parent().probabilistic_circuit
         interaction_term.update_variables(VariableMap({self.variable: node_latent_variable,
@@ -204,7 +204,7 @@ class ConditionalProbabilisticCircuit(ConditionalProbabilityTable):
         ProbabilisticModel.__init__(self, variables)
         self.conditional_probability_distributions = dict()
 
-    def forward_pass(self, event: EncodedEvent):
+    def forward_pass(self, event: Event):
         forward_message, self.forward_probability = self.joint_distribution_with_parent()._conditional_from_single_event(event)
         self.forward_message = forward_message.marginal(self.variables)
 
@@ -230,7 +230,7 @@ class ConditionalProbabilisticCircuit(ConditionalProbabilityTable):
     def forward_message_as_sum_unit(self) -> SmoothSumUnit:
         return self.forward_message
 
-    def interaction_term(self, node_latent_variable: Discrete, parent_latent_variable: Discrete) -> \
+    def interaction_term(self, node_latent_variable: Symbolic, parent_latent_variable: Symbolic) -> \
             ProbabilisticCircuit:
 
         assert node_latent_variable.domain == parent_latent_variable.domain

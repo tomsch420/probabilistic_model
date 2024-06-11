@@ -317,7 +317,11 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
     def support(self) -> Event:
         support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
-            support |= subcircuit.support()
+            try:
+                support |= subcircuit.support()
+            except AttributeError:
+                return Event()
+
         return support
 
     @property

@@ -406,13 +406,15 @@ class SymbolicDistribution(DiscreteDistribution):
         return mode, np.log(max_likelihood)
 
     def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
-        return {element.name: self.pmf(element) for element in self.variable.domain.simple_sets}
+        return {element.name: self.pmf(element.value) for element in self.variable.domain.simple_sets}
 
+    @property
     def univariate_support(self) -> Set:
-        return Set(key for key, value in self.probabilities.items() if value > 0)
+        clazz = self.variable.domain.simple_sets[0].all_elements
+        return Set(*[clazz(key) for key, value in self.probabilities.items() if value > 0])
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
-        return sum(self.pmf(key) for key in event[self.variable].simple_sets)
+        return sum(self.pmf(key.value) for key in event[self.variable].simple_sets)
 
     @property
     def representation(self):
