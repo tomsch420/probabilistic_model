@@ -2,9 +2,9 @@ import unittest
 
 import numpy as np
 import plotly.graph_objects as go
-import portion
 from numpy import testing
-from random_events.variables import Continuous
+from random_events.interval import closed, closed_open
+from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
 from probabilistic_model.probabilistic_circuit.distributions import DiracDeltaDistribution
@@ -45,11 +45,11 @@ class InductionStepTestCase(unittest.TestCase):
 
     def test_create_uniform_distribution_edge_case(self):
         distribution = self.induction_step.create_uniform_distribution()
-        self.assertEqual(distribution, UniformDistribution(self.variable, portion.closed(1, 9)))
+        self.assertEqual(distribution, UniformDistribution(self.variable, closed(1, 9).simple_sets[0]))
 
     def test_create_uniform_distribution(self):
         distribution = self.induction_step.create_uniform_distribution_from_indices(3, 5)
-        self.assertEqual(distribution, UniformDistribution(self.variable, portion.closedopen(3.5, 8.0)))
+        self.assertEqual(distribution, UniformDistribution(self.variable, closed_open(3.5, 8.0).simple_sets[0]))
 
     def test_sum_weights(self):
         self.assertAlmostEqual(self.induction_step.sum_weights(), 6)
@@ -140,17 +140,18 @@ class InductionStepTestCase(unittest.TestCase):
         data = np.random.normal(0, 1, 100).tolist()
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        domain = distribution.domain
-        self.assertEqual(len(domain.events), 1)
-        self.assertEqual(domain.events[0][self.variable], portion.closed(min(data), max(data)))
+        domain = distribution.support()
+        self.assertEqual(len(domain.simple_sets), 1)
+        self.assertEqual(domain.simple_sets[0][self.variable], closed(min(data), max(data)))
 
     def test_plot(self):
         np.random.seed(69)
-        data = np.random.normal(0, 1, 100).tolist()
+        data = np.random.normal(0, 1, 100)
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
         fig = go.Figure(distribution.plot())
-        self.assertIsNotNone(fig)  # fig.show()
+        self.assertIsNotNone(fig)
+        # fig.show()
 
     def test_fit_from_singular_data(self):
         data = [1., 1.]
@@ -179,8 +180,8 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertEqual(distribution, distribution_)
 
     def test_from_mixture_of_uniform_distributions(self):
-        u1 = UniformDistribution(self.variable, portion.closed(0, 5))
-        u2 = UniformDistribution(self.variable, portion.closed(2, 3))
+        u1 = UniformDistribution(self.variable, closed(0, 5).simple_sets[0])
+        u2 = UniformDistribution(self.variable, closed(2, 3).simple_sets[0])
         sum_unit = SmoothSumUnit()
         e1 = (sum_unit, u1, 0.5)
         e2 = (sum_unit, u2, 0.5)
@@ -189,9 +190,9 @@ class InductionStepTestCase(unittest.TestCase):
 
         solution_by_hand = NygaDistribution(self.variable)
         solution_by_hand.probabilistic_circuit = ProbabilisticCircuit()
-        leaf_1 = UniformDistribution(self.variable, portion.closedopen(0, 2))
-        leaf_2 = UniformDistribution(self.variable, portion.closedopen(2, 3))
-        leaf_3 = UniformDistribution(self.variable, portion.closed(3, 5))
+        leaf_1 = UniformDistribution(self.variable, closed_open(0, 2).simple_sets[0])
+        leaf_2 = UniformDistribution(self.variable, closed_open(2, 3).simple_sets[0])
+        leaf_3 = UniformDistribution(self.variable, closed(3, 5).simple_sets[0])
 
         e1 = (solution_by_hand, leaf_1, 0.2)
         e2 = (solution_by_hand, leaf_2, 0.6)
@@ -217,12 +218,13 @@ class NygaDistributionTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self.model = NygaDistribution(self.x)
-        self.model.add_subcircuit(UniformDistribution(self.x, portion.closed(-1.5, -0.5)), 0.5)
-        self.model.add_subcircuit(UniformDistribution(self.x, portion.closed(0.5, 1.5)), 0.5)
+        self.model.add_subcircuit(UniformDistribution(self.x, closed(-1.5, -0.5).simple_sets[0]), 0.5)
+        self.model.add_subcircuit(UniformDistribution(self.x, closed(0.5, 1.5).simple_sets[0]), 0.5)
 
     def test_plot(self):
         fig = go.Figure(self.model.plot())
-        self.assertIsNotNone(fig)  # fig.show()
+        self.assertIsNotNone(fig)
+        # fig.show()
 
 
 class FittedNygaDistributionTestCase(unittest.TestCase):
@@ -236,7 +238,8 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
 
     def test_plot(self):
         fig = go.Figure(self.model.plot())
-        self.assertIsNotNone(fig)  # fig.show()
+        self.assertIsNotNone(fig)
+        # fig.show()
 
 
 if __name__ == '__main__':

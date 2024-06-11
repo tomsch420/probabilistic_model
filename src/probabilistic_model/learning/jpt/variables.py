@@ -2,7 +2,7 @@ from typing import List, Iterable, Any, Dict
 
 import numpy as np
 import pandas as pd
-from random_events.variables import Variable, Continuous as REContinuous, Integer as REInteger, Symbolic
+from random_events.variable import Variable, Continuous as REContinuous, Integer as REInteger, Symbolic
 from typing_extensions import Self
 
 
@@ -78,8 +78,8 @@ class Integer(REInteger):
     Standard Deviation of the random variable.
     """
 
-    def __init__(self, name: str, domain: Iterable, mean, std):
-        super().__init__(name, domain)
+    def __init__(self, name: str, mean, std):
+        super().__init__(name)
         self.mean = mean
         self.std = std
 
@@ -91,13 +91,13 @@ class Integer(REInteger):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
-        return cls(name=data["name"], domain=data["domain"], mean=data["mean"], std=data["std"])
+        return cls(name=data["name"], mean=data["mean"], std=data["std"])
 
     def __eq__(self, other):
-        return super().__eq__(other) and self.mean == other.mean and self.std == other.std
+        return super().__eq__(other)
 
     def __hash__(self):
-        return hash((self.name, self.domain, self.mean, self.std))
+        return hash(self.name)
 
 
 class Continuous(REContinuous):
@@ -154,18 +154,6 @@ class Continuous(REContinuous):
         return cls(name=data["name"], mean=data["mean"], std=data["std"], minimal_distance=data["minimal_distance"],
                    min_likelihood_improvement=data["min_likelihood_improvement"],
                    min_samples_per_quantile=data["min_samples_per_quantile"])
-
-    def __eq__(self, other):
-        return (super().__eq__(other) and
-                self.mean == other.mean and
-                self.std == other.std and
-                self.minimal_distance == other.minimal_distance and
-                self.min_likelihood_improvement == other.min_likelihood_improvement and
-                self.min_samples_per_quantile == other.min_samples_per_quantile)
-
-    def __hash__(self):
-        return hash((self.name, self.domain, self.mean, self.std, self.minimal_distance,
-                     self.min_likelihood_improvement, self.min_samples_per_quantile))
 
 
 class ScaledContinuous(Continuous):

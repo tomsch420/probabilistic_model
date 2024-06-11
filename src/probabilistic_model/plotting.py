@@ -47,7 +47,7 @@ class SampleBasedPlotMixin(ProbabilisticModel, ABC):
         else:
             raise NotImplementedError("Cannot plot models with more than 3 variables")
 
-    def plot_mode_1d(self, mode: Optional[Event], maximum_likelihood: float) -> List:
+    def plot_mode_1d(self, mode: Optional[Event], height: float) -> List:
         if mode is None:
             return []
 
@@ -58,7 +58,7 @@ class SampleBasedPlotMixin(ProbabilisticModel, ABC):
             simple_interval: SimpleInterval
             x_values += (
                 [simple_interval.lower, simple_interval.lower, simple_interval.upper, simple_interval.upper, None])
-            y_values += ([0, maximum_likelihood, maximum_likelihood, 0, None])
+            y_values += ([0, height, height, 0, None])
         return [go.Scatter(x=x_values, y=y_values, mode="lines+markers", name=MODE_TRACE_NAME, fill="toself",
                            line=dict(color=MODE_TRACE_COLOR))]
 
@@ -66,7 +66,6 @@ class SampleBasedPlotMixin(ProbabilisticModel, ABC):
         samples = np.sort(self.sample(number_of_samples), axis=0)
         likelihood = self.likelihood(samples)
         samples = samples[:, 0]
-        mean = self.expectation(self.variables)[self.variables[0]]
 
         try:
             mode, maximum_likelihood = self.mode()
@@ -84,11 +83,16 @@ class SampleBasedPlotMixin(ProbabilisticModel, ABC):
                                    line=dict(color=CDF_TRACE_COLOR))
         except NotImplementedError:
             cdf_trace = None
+
+        mode_traces = self.plot_mode_1d(mode, height)
+        return ([pdf_trace, cdf_trace, self.expectation_trace_1d(height)] + mode_traces +
+                self.complement_of_support_trace_1d(min(samples), max(samples)))
+
+    def expectation_trace_1d(self, height: float) -> go.Scatter:
+        mean = self.expectation(self.variables)[self.variables[0]]
         mean_trace = go.Scatter(x=[mean, mean], y=[0, height], mode="lines+markers", name=EXPECTATION_TRACE_NAME,
                                 marker=dict(color=EXPECTATION_TRACE_COLOR), line=dict(color=EXPECTATION_TRACE_COLOR))
-        mode_traces = self.plot_mode_1d(mode, height)
-        return [pdf_trace, cdf_trace, mean_trace] + mode_traces + self.complement_of_support_trace_1d(min(samples),
-                                                                                                      max(samples))
+        return mean_trace
 
     def complement_of_support_trace_1d(self, min_of_samples: float, max_of_samples: float) -> List:
         """

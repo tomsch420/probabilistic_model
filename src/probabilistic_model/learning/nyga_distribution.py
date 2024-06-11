@@ -1,17 +1,23 @@
+from __future__ import annotations
+
 import collections
 import dataclasses
-from functools import cached_property
 from typing import Optional, List, Deque, Union, Tuple, Dict, Any
 
 import numpy as np
 import plotly.graph_objects as go
-import portion
-from random_events.events import Event
-from random_events.variables import Continuous, Variable
+from random_events.interval import closed, closed_open, Interval
+from random_events.product_algebra import SimpleEvent
+from random_events.sigma_algebra import AbstractCompositeSet
+from random_events.variable import Continuous
+from sortedcontainers import SortedSet
 from typing_extensions import Self
 
 from ..probabilistic_circuit.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
-from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit, cache_inference_result)
+from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit, cache_inference_result,
+                                                           ProbabilisticCircuitMixin)
+from ..plotting import SampleBasedPlotMixin
+from ..constants import *
 
 
 @dataclasses.dataclass
@@ -45,7 +51,7 @@ class InductionStep:
     Excluded index of the last sample.
     """
 
-    nyga_distribution: 'NygaDistribution'
+    nyga_distribution: NygaDistribution
     """
     The Nyga Distribution to mount the quantile distributions into and read the parameters from.
     """
@@ -142,12 +148,12 @@ class InductionStep:
         :param end_index: The index of the last datapoint.
         """
         if end_index == len(self.data):
-            interval = portion.closed(self.left_connecting_point_from_index(begin_index),
-                                      self.right_connecting_point_from_index(end_index))
+            interval = closed(self.left_connecting_point_from_index(begin_index),
+                              self.right_connecting_point_from_index(end_index))
         else:
-            interval = portion.closedopen(self.left_connecting_point_from_index(begin_index),
-                                          self.right_connecting_point_from_index(end_index))
-        return UniformDistribution(self.variable, interval)
+            interval = closed_open(self.left_connecting_point_from_index(begin_index),
+                                   self.right_connecting_point_from_index(end_index))
+        return UniformDistribution(self.variable, interval.simple_sets[0])
 
     def sum_weights_from_indices(self, begin_index: int, end_index: int) -> float:
         """
@@ -237,8 +243,9 @@ class InductionStep:
         log_density = np.log(np.abs(density))
 
         # calculate the log of the weight of this partition in the sum node
-        log_weight_sum_of_split = np.log(self.sum_weights_from_indices(self.begin_index, split_index)) if is_left \
-            else np.log(self.sum_weights_from_indices(split_index, self.end_index))
+        log_weight_sum_of_split = np.log(
+            self.sum_weights_from_indices(self.begin_index, split_index)) if is_left else np.log(
+            self.sum_weights_from_indices(split_index, self.end_index))
 
         # calculate the log of the sum of the weights of both partitions
         log_weight_sum = np.log(self.total_weights)
@@ -247,12 +254,13 @@ class InductionStep:
         number_of_samples = split_index - self.begin_index if is_left else self.end_index - split_index
 
         # calculate the sum of the logarithmic weights of the samples in this partition
-        sum_of_log_weights_of_samples = self.sum_log_weights_from_indices(self.begin_index, split_index) if is_left \
-            else self.sum_log_weights_from_indices(split_index, self.end_index)
+        sum_of_log_weights_of_samples = self.sum_log_weights_from_indices(self.begin_index,
+                                                                          split_index) if is_left else self.sum_log_weights_from_indices(
+            split_index, self.end_index)
 
         # add the terms together
-        log_likelihood = (number_of_samples * (log_weight_sum_of_split - log_weight_sum - log_density) +
-                          sum_of_log_weights_of_samples)
+        log_likelihood = (number_of_samples * (
+                    log_weight_sum_of_split - log_weight_sum - log_density) + sum_of_log_weights_of_samples)
 
         return log_likelihood
 
@@ -328,27 +336,44 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     The minimal number of samples per quantile.
     """
 
+    @property
+    def univariate_support(self) -> Interval:
+        raise NotImplementedError("This should not be called.")
+
+    @property
+    def subcircuits(self) -> List[UniformDistribution]:
+        return super().subcircuits
+
+    @property
+    def weighted_subcircuits(self) -> List[Tuple[float, UniformDistribution]]:
+        return super().weighted_subcircuits
+
+    def log_pdf(self, x: np.array) -> np.array:
+        return DeterministicSumUnit.log_likelihood(self, x.reshape(-1, 1))[:, 0]
+
+    def cdf(self, x: np.array) -> np.array:
+        result = np.zeros(len(x))
+        for weight, subcircuit in self.weighted_subcircuits:
+            result += weight * subcircuit.cdf(x)
+        return result
+
+    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
+        raise NotImplementedError("This should not be called.")
+
     def __init__(self, variable: Continuous, min_samples_per_quantile: Optional[int] = 1,
                  min_likelihood_improvement: Optional[float] = 0.1):
         DeterministicSumUnit.__init__(self)
-        ContinuousDistribution.__init__(self, variable)
+        ContinuousDistribution.__init__(self)
+        self.variable = variable
         self.min_samples_per_quantile = min_samples_per_quantile
         self.min_likelihood_improvement = min_likelihood_improvement
 
     @property
-    def variables(self) -> Tuple[Variable, ...]:
+    def variables(self) -> SortedSet:
         if len(self.subcircuits) > 0:
-            return DeterministicSumUnit.variables.fget(self)
+            return self.subcircuits[0].variables
         else:
-            return self._variables
-
-    @cache_inference_result
-    def _pdf(self, value: Union[float, int]) -> float:
-        return sum([weight * subcircuit._pdf(value) for weight, subcircuit in self.weighted_subcircuits])
-
-    @cache_inference_result
-    def _cdf(self, value: Union[float, int]) -> float:
-        return sum([weight * subcircuit._cdf(value) for weight, subcircuit in self.weighted_subcircuits])
+            return SortedSet([self.variable])
 
     def fit(self, data: np.array, weights: Optional[np.array] = None) -> Self:
         """
@@ -358,10 +383,8 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         :param weights: The optional weights of the data points.
 
         :return: The fitted distribution.
-        """
-        return self._fit(list(self.variable.encode_many(data)), weights)
 
-    def _fit(self, data: List[float], weights: Optional[np.array] = None) -> Self:
+        """
 
         # make the data unique and sort it
         sorted_unique_data, counts = np.unique(data, return_counts=True)
@@ -385,11 +408,9 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         cumulative_weights = np.insert(cumulative_weights, 0, 0)
 
         # construct the initial induction step
-        initial_induction_step = InductionStep(data=sorted_unique_data,
-                                               cumulative_weights=cumulative_weights,
-                                               cumulative_log_weights=cumulative_log_weights,
-                                               begin_index=0, end_index=len(sorted_unique_data),
-                                               nyga_distribution=self)
+        initial_induction_step = InductionStep(data=sorted_unique_data, cumulative_weights=cumulative_weights,
+                                               cumulative_log_weights=cumulative_log_weights, begin_index=0,
+                                               end_index=len(sorted_unique_data), nyga_distribution=self)
 
         # initialize the queue
         induction_steps: Deque[InductionStep] = collections.deque([initial_induction_step])
@@ -419,7 +440,7 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         smooth_sum_unit = DeterministicSumUnit()._from_json(data)
-        result = cls([], min_samples_per_quantile=data["min_samples_per_quantile"],
+        result = cls(None, min_samples_per_quantile=data["min_samples_per_quantile"],
                      min_likelihood_improvement=data["min_likelihood_improvement"])
         for weight, subcircuit in smooth_sum_unit.weighted_subcircuits:
             result.mount(subcircuit)
@@ -447,11 +468,11 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
 
         for index, (lower, upper) in enumerate(zip(all_mixture_points[:-1], all_mixture_points[1:])):
             if index == len(all_mixture_points) - 2:
-                interval = portion.closed(lower, upper)
+                interval = closed(lower, upper)
             else:
-                interval = portion.closedopen(lower, upper)
-            leaf = UniformDistribution(variable, interval)
-            weight = mixture.probability(Event({variable: interval}))
+                interval = closed_open(lower, upper)
+            leaf = UniformDistribution(variable, interval.simple_sets[0])
+            weight = mixture.probability(SimpleEvent({variable: interval}).as_composite_set())
             result.probabilistic_circuit.add_edge(result, leaf, weight=weight)
 
         return result
@@ -460,52 +481,40 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         """
         Create a plotly trace for the probability density function.
         """
-        domain = self.domain.events[0][self.variable]
-        domain_size = domain.upper - domain.lower
-        x = [domain.lower - domain_size * 0.05, domain.lower, None]
-        y = [0, 0, None]
+        x_values = []
+        y_values = []
         for weight, subcircuit in self.weighted_subcircuits:
-            uniform: UniformDistribution = subcircuit
-            lower_value = uniform.interval.lower
-            upper_value = uniform.interval.upper
-            pdf_value = uniform.pdf_value() * weight
-            x += [lower_value, upper_value, None]
-            y += [pdf_value, pdf_value, None]
-
-        x.extend([domain.upper, domain.upper + domain_size * 0.05])
-        y.extend([0, 0])
-        return go.Scatter(x=x, y=y, mode='lines', name="PDF")
+            interval = subcircuit.interval
+            height = weight * subcircuit.pdf_value()
+            x_values += [interval.lower, interval.upper, None]
+            y_values += [height, height, None]
+        return go.Scatter(x=x_values, y=y_values, mode="lines", name=PDF_TRACE_NAME,
+                          line=dict(color=PDF_TRACE_COLOR))
 
     def cdf_trace(self) -> go.Scatter:
         """
         Create a plotly trace for the cumulative distribution function.
         """
-        domain = self.domain.events[0][self.variable]
-        domain_size = domain.upper - domain.lower
-        x = [domain.lower - domain_size * 0.05, domain.lower, None]
-        y = [0, 0, None]
-        for subcircuit in sorted(self.subcircuits, key=lambda d: d.interval.lower):
-            uniform: UniformDistribution = subcircuit
-            lower_value = uniform.interval.lower
-            upper_value = uniform.interval.upper
-            x += [lower_value, upper_value]
-            y += [self.cdf(lower_value), self.cdf(upper_value)]
-
-        x.extend([domain.upper, domain.upper + domain_size * 0.05])
-        y.extend([1, 1])
-        return go.Scatter(x=x, y=y, mode='lines', name="CDF")
+        x_values = []
+        for subcircuit in self.subcircuits:
+            x_values += [subcircuit.interval.lower, subcircuit.interval.upper]
+        x_values = sorted(x_values)
+        y_values = self.cdf(np.array(x_values))
+        return go.Scatter(x=x_values, y=y_values, mode="lines", name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))
 
     def plot(self) -> List[go.Scatter]:
         """
         Plot the distribution with PDF, CDF, Expectation and Mode.
         """
         traces = [self.pdf_trace(), self.cdf_trace()]
-        mode_trace, maximum_likelihood = self.mode_trace_1d()
+        mode, maximum_likelihood = self.mode()
+        height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
+        mode_trace = SampleBasedPlotMixin.plot_mode_1d(self, mode, height)
         self.reset_result_of_current_query()
 
-        expectation = self.expectation([self.variable])[self.variable]
-        traces.append(mode_trace)
+        traces.extend(mode_trace)
         self.reset_result_of_current_query()
-        traces.append(go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05], mode='lines+markers',
-                                 name="Expectation"))
+
+        traces.append(SampleBasedPlotMixin.expectation_trace_1d(self, height))
+
         return traces
