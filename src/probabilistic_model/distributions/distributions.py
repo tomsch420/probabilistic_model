@@ -229,7 +229,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         :param x: The data
         :return: A boolean array
         """
-        return self.interval.lower <= x if self.interval.left.CLOSED else self.interval.lower < x
+        return self.interval.lower <= x if self.interval.left == Bound.CLOSED else self.interval.lower < x
 
     def right_included_condition(self, x: np.array) -> np.array:
         """
@@ -237,7 +237,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
          :param x: The data
          :return: A boolean array
          """
-        return x < self.interval.upper if self.interval.right.OPEN else x <= self.interval.upper
+        return x < self.interval.upper if self.interval.right == Bound.OPEN else x <= self.interval.upper
 
     def included_condition(self, x: np.array) -> np.array:
         """

@@ -90,6 +90,8 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event.
         :return: The probability of the event.
         """
+        for simple_event in event.simple_sets:
+            simple_event.fill_missing_variables(self.variables)
         return sum(self.probability_of_simple_event(simple_set) for simple_set in event.simple_sets)
 
     @abstractmethod

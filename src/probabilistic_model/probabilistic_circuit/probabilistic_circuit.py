@@ -139,15 +139,8 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         :param new_variables: A map that maps the variables that should be replaced to their new variable.
         """
         for leaf in self.leaves:
-
-            new_leaf_variables = []
-            for variable in leaf.variables:
-                if variable in new_variables:
-                    new_leaf_variables.append(new_variables[variable])
-                else:
-                    new_leaf_variables.append(variable)
-
-            leaf.variables = new_leaf_variables
+            if leaf.variable in new_variables:
+                leaf.variable = new_variables[leaf.variable]
 
     def mount(self, other: ProbabilisticCircuitMixin):
         """
@@ -303,7 +296,6 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
         name = f"{hash(self)}.latent"
         enum_elements = {"EMPTY_SET": -1}
         enum_elements |= {str(hash(subcircuit)): index for index, subcircuit in enumerate(self.subcircuits)}
-        print(enum_elements)
         domain = SetElement(name, enum_elements)
         return Symbolic(name, domain)
 
@@ -343,6 +335,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
             result += weight * subcircuit_likelihood
         return np.log(result)
 
+    @cache_inference_result
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         return sum([weight * subcircuit.probability_of_simple_event(event) for weight, subcircuit in
                     self.weighted_subcircuits])
@@ -379,7 +372,6 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
         Sample from the sum node using the latent variable interpretation.
         """
         weights, subcircuits = zip(*self.weighted_subcircuits)
-
         # sample the latent variable
         states = np.random.choice(np.arange(len(self.weights)), size=amount, p=weights)
 
@@ -474,10 +466,10 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
         own_subcircuits = self.subcircuits
         other_subcircuits = other.subcircuits
 
-        for own_index, own_subcircuit in zip(own_latent_variable.domain, own_subcircuits):
+        for own_index, own_subcircuit in zip(own_latent_variable.domain.simple_sets, own_subcircuits):
 
             # create denominator of weight
-            condition = Event({own_latent_variable: own_index})
+            condition = SimpleEvent({own_latent_variable: own_index}).as_composite_set()
             p_condition = interaction_model.probability(condition)
 
             # skip iterations that are impossible
@@ -502,7 +494,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
             for other_index, other_subcircuit in zip(other_latent_variable.domain, other_subcircuits):
 
                 # create numerator of weight
-                query = Event({other_latent_variable: other_index}) & condition
+                query = SimpleEvent({other_latent_variable: other_index}).as_composite_set() & condition
                 p_query = interaction_model.probability(query)
 
                 # skip iterations that are impossible
@@ -856,7 +848,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         nx.DiGraph.__init__(self)
 
     @property
-    def variables(self) -> Tuple[Variable, ...]:
+    def variables(self) -> SortedSet:
         return self.root.variables
 
     @property

@@ -1,3 +1,5 @@
+from random_events.interval import SimpleInterval
+
 from ..distributions.distributions import UniformDistribution, GaussianDistribution, TruncatedGaussianDistribution
 from ..probabilistic_circuit import ProbabilisticCircuitMixin
 from ..distributions.distributions import DiracDeltaDistribution
@@ -37,8 +39,10 @@ class UniformDistributionConvolution(Convolution):
     distribution: UniformDistribution
 
     def convolve_with_dirac_delta(self, other: DiracDeltaDistribution) -> UniformDistribution:
-        new_interval = self.distribution.interval.replace(lower=self.distribution.interval.lower + other.location,
-                                                          upper=self.distribution.interval.upper + other.location)
+        new_interval = SimpleInterval(self.distribution.interval.lower + other.location,
+                                      self.distribution.interval.upper + other.location,
+                                      self.distribution.interval.left,
+                                      self.distribution.interval.right)
         return UniformDistribution(self.distribution.variable, new_interval)
 
 
@@ -56,11 +60,11 @@ class GaussianDistributionConvolution(Convolution):
     distribution: GaussianDistribution
 
     def convolve_with_dirac_delta(self, other: DiracDeltaDistribution) -> GaussianDistribution:
-        return GaussianDistribution(self.distribution.variable, self.distribution.mean + other.location,
+        return GaussianDistribution(self.distribution.variable, self.distribution.location + other.location,
                                     self.distribution.scale)
 
     def convolve_with_gaussian(self, other: GaussianDistribution) -> GaussianDistribution:
-        return GaussianDistribution(self.distribution.variable, self.distribution.mean + other.mean,
+        return GaussianDistribution(self.distribution.variable, self.distribution.location + other.location,
                                     self.distribution.scale + other.scale)
 
 
@@ -69,7 +73,9 @@ class TruncatedGaussianDistributionConvolution(Convolution):
     distribution: TruncatedGaussianDistribution
 
     def convolve_with_dirac_delta(self, other: DiracDeltaDistribution) -> TruncatedGaussianDistribution:
-        new_interval = self.distribution.interval.replace(lower=self.distribution.interval.lower + other.location,
-                                                          upper=self.distribution.interval.upper + other.location)
+        new_interval = SimpleInterval(self.distribution.interval.lower + other.location,
+                                      self.distribution.interval.upper + other.location,
+                                      self.distribution.interval.left,
+                                      self.distribution.interval.right)
         return TruncatedGaussianDistribution(self.distribution.variable, new_interval,
-                                             self.distribution.mean + other.location, self.distribution.scale)
+                                             self.distribution.location + other.location, self.distribution.scale)
