@@ -221,3 +221,9 @@ class ProbabilisticModel(abc.ABC):
         order = VariableMap({variable: 2 for variable in variables})
         center = self.expectation(variables)
         return self.moment(order, center)
+
+    def universal_simple_event(self) -> SimpleEvent:
+        """
+        :return: A simple event that contains every possible value.
+        """
+        return SimpleEvent({variable: variable.domain for variable in self.variables})

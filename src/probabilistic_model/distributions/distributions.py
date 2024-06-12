@@ -270,9 +270,10 @@ class DiscreteDistribution(UnivariateDistribution):
 
     variable: Union[Symbolic, Integer]
 
-    probabilities: MissingDict[Union[int, SetElement], float] = MissingDict(float)
+    probabilities: MissingDict[int, float] = MissingDict(float)
     """
-    A dict that maps from elements of the variables domain to probabilities.
+    A dict that maps from integers to probabilities.
+    In Symbolic cases, the integers are obtained by casting the elements, which inherit from int, to integers.
     """
 
     def __init__(self, variable: Union[Symbolic, Integer],
@@ -303,7 +304,7 @@ class DiscreteDistribution(UnivariateDistribution):
         :param value: The value
         :return: The probability.
         """
-        return self.probabilities[value]
+        return self.probabilities[int(value)]
 
     def fit(self, data: np.array) -> Self:
         """
@@ -317,7 +318,7 @@ class DiscreteDistribution(UnivariateDistribution):
         unique, counts = np.unique(data, return_counts=True)
         probabilities = MissingDict(float)
         for value, count in zip(unique, counts):
-            probabilities[value] = count / len(data)
+            probabilities[int(value)] = count / len(data)
         self.probabilities = probabilities
         return self
 
@@ -410,11 +411,11 @@ class SymbolicDistribution(DiscreteDistribution):
 
     @property
     def univariate_support(self) -> Set:
-        clazz = self.variable.domain.simple_sets[0].all_elements
+        clazz = self.variable.domain_type()
         return Set(*[clazz(key) for key, value in self.probabilities.items() if value > 0])
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
-        return sum(self.pmf(key.value) for key in event[self.variable].simple_sets)
+        return sum(self.pmf(int(key)) for key in event[self.variable].simple_sets)
 
     @property
     def representation(self):

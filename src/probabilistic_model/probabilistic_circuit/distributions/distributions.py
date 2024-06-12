@@ -15,10 +15,12 @@ from ...distributions.distributions import (ContinuousDistribution as PMContinuo
                                             IntegerDistribution as PMIntegerDistribution,
                                             DiscreteDistribution as PMDiscreteDistribution,
                                             UnivariateDistribution as PMUnivariateDistribution)
-from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin, cache_inference_result)
+from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin, cache_inference_result,
+                                     SmoothSumUnit)
 from ...distributions.uniform import UniformDistribution as PMUniformDistribution
 from ...distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
                                        TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
+from ...utils import MissingDict
 
 
 class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin, ABC):
@@ -83,6 +85,22 @@ class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, Proba
             result.add_subcircuit(conditional, probability)
 
         return result
+
+    @classmethod
+    def from_sum_unit(cls, sum_unit: SmoothSumUnit):
+        """
+        Create a discrete distribution from a sum unit.
+
+        :param sum_unit: The sum unit to create the distribution from.
+        :return: The discrete distribution.
+        """
+        assert len(sum_unit.variables) == 1, "Can only convert unidimensional sum units to discrete distributions."
+        variable = sum_unit.variables[0]
+        probabilities = MissingDict(float)
+
+        for element in sum_unit.support().simple_sets[0][variable].simple_sets:
+            probabilities[int(element)] = sum_unit.probability_of_simple_event(SimpleEvent({variable: element}))
+        return cls(variable, probabilities)
 
 
 class DiracDeltaDistribution(ContinuousDistribution, PMDiracDeltaDistribution):

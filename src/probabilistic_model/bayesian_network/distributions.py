@@ -1,39 +1,37 @@
 import numpy as np
-from matplotlib import pyplot as plt
-from random_events.product_algebra import Event, SimpleEvent, VariableMap
-from typing_extensions import Tuple, Dict, Iterable, List, Type, Union, Optional, Self
+from random_events.product_algebra import SimpleEvent, VariableMap
+from random_events.variable import Variable, Symbolic
+from typing_extensions import Tuple, Dict, Iterable, List, Union, Self
 
 from .bayesian_network import BayesianNetworkMixin
-from ..probabilistic_model import ProbabilisticModel
-from random_events.variable import Variable, Symbolic
-
+from ..distributions.multinomial import MultinomialDistribution
+from ..probabilistic_circuit.distributions import (SymbolicDistribution as PCSymbolicDistribution)
+from ..probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
 from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
                                                            ProbabilisticCircuitMixin, SmoothSumUnit)
-from ..probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
-from ..probabilistic_circuit.distributions import (SymbolicDistribution as PCSymbolicDistribution,
-                                                   IntegerDistribution as PCIntegerDistribution,
-                                                   DiscreteDistribution as PCDiscreteDistribution)
-from ..distributions.multinomial import MultinomialDistribution
+from ..utils import MissingDict
 
 
-class DiscreteDistribution(BayesianNetworkMixin, PCDiscreteDistribution):
+class RootDistribution(BayesianNetworkMixin, PCSymbolicDistribution):
     """
-    Intermediate Distribution for Bayesian Network root nodes.
+    Distribution for Bayesian Network root nodes.
     """
 
-    forward_message: Optional[PCDiscreteDistribution]
+    @property
+    def variables(self) -> Tuple[Symbolic, ...]:
+        return (self.variable,)
 
-    def forward_pass(self, event: Event):
-        self.forward_message, self.forward_probability = self._conditional(event)
+    def forward_pass(self, event: SimpleEvent):
+        self.forward_message, self.forward_probability = self.log_conditional_of_simple_event(event)
+        self.forward_probability = np.exp(self.forward_probability)
 
     def joint_distribution_with_parent(self) -> DeterministicSumUnit:
         result = DeterministicSumUnit()
 
-        for event in self.variable.domain:
-
-            event = Event({self.variable: event})
-            conditional, probability = self.forward_message.conditional(event)
-            result.add_subcircuit(conditional, probability)
+        for event in self.variable.domain.simple_sets:
+            event = SimpleEvent({self.variable: event})
+            conditional, probability = self.forward_message.log_conditional_of_simple_event(event)
+            result.add_subcircuit(conditional, np.exp(probability))
 
         return result
 
@@ -41,37 +39,24 @@ class DiscreteDistribution(BayesianNetworkMixin, PCDiscreteDistribution):
         return f"P({self.variable.name})"
 
 
-class SymbolicDistribution(DiscreteDistribution, PCSymbolicDistribution):
-    ...
-
-
-class IntegerDistribution(DiscreteDistribution, PCIntegerDistribution):
-    ...
-
-
 class ConditionalProbabilityTable(BayesianNetworkMixin):
+    """
+    Conditional probability distribution for Bayesian Network nodes given their parents.
+    The parent in this case must be exactly one node.
+    """
 
-    variables: Tuple[Symbolic, ...]
-    conditional_probability_distributions: Dict[Tuple, PCDiscreteDistribution]
+    variable: Symbolic
+    conditional_probability_distributions: Dict[int, PCSymbolicDistribution]
 
     def __init__(self, variable: Symbolic):
-        ProbabilisticModel.__init__(self, [variable])
+        self.variable = variable
         self.conditional_probability_distributions = dict()
 
     @property
-    def variable(self) -> Symbolic:
-        return self.variables[0]
+    def variables(self) -> Tuple[Symbolic, ...]:
+        return (self.variable,)
 
-    def likelihood(self, event: Iterable) -> float:
-        return self._likelihood([variable.encode(value) for variable, value
-                                 in zip(self.parent_and_node_variables, event)])
-
-    def _likelihood(self, event: Iterable) -> float:
-        parent_event = tuple(event[:1])
-        node_event = tuple(event[1:])
-        return self.conditional_probability_distributions[parent_event]._likelihood(node_event)
-
-    def forward_pass(self, event: Event):
+    def forward_pass(self, event: SimpleEvent):
 
         # if the parent distribution is None, the forward message is None since it is an impossible event
         if self.parent.forward_message is None:
@@ -80,51 +65,52 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
             return
 
         # initialize the weights
-        weights = np.zeros(len(self.variable.domain))
+        probabilities = MissingDict(float)
 
         # initialize the forward probability
         forward_probability = 0
 
         # for every parent state
-        for parent_state in event.marginal_event(self.parent.variables).simplify().events[0][self.parent.variable]:
+        for parent_state in event[self.parent.variable].simple_sets:
 
-            # wrap the parent state
-            parent_state = (parent_state,)
+            # calculate the probability P(self.parent.variable = parent_state)
+            parent_state_probability = self.parent.forward_message.pmf(parent_state)
+            if parent_state_probability == 0:
+                continue
 
-            # calculate the probability of said state
-            parent_state_probability = self.parent.forward_message.likelihood(parent_state)
-
-            # construct the conditional distribution
-            conditional, current_probability = (self.conditional_probability_distributions[parent_state]
-                                                ._conditional(event))
+            # construct the conditional distribution P(self.variable | self.parent.variable = parent_state)
+            conditional, current_log_probability = (self.conditional_probability_distributions[int(parent_state)].
+                                                    log_conditional_of_simple_event(event))
 
             # if the conditional is None, skip
             if conditional is None:
                 continue
 
-            # update weights and forward probability
-            weights += conditional.weights
-            forward_probability += parent_state_probability * current_probability
+            # update probability and forward probability (perform sum-product)
+            for state, probability in conditional.probabilities.items():
+                probabilities[state] += parent_state_probability * probability
+            forward_probability += parent_state_probability * np.exp(current_log_probability)
 
         # if weights sum to zero, the forward message is None
-        if weights.sum() == 0:
+        if sum(probabilities.values()) == 0:
             self.forward_message = None
             self.forward_probability = 0
         else:
             # create the new forward message
-            self.forward_message = DiscreteDistribution(self.variable, (weights/weights.sum()).tolist())
+            self.forward_message = PCSymbolicDistribution(self.variable, probabilities)
+            self.forward_message.normalize()
 
         self.forward_probability = forward_probability
 
     def __repr__(self):
-        variables = ", ".join([variable.name for variable in self.variables])
-        return f"P({variables}|{self.parent.variable.name})"
+        return f"P({self.variable.name}|{self.parent.variable.name})"
 
     def to_tabulate(self) -> List[List[str]]:
         table = [[self.parent.variable.name, self.variable.name, repr(self)]]
         for parent_event, distribution in self.conditional_probability_distributions.items():
-            for event, probability in zip(self.variable.domain, distribution.weights):
-                table.append([str(parent_event[0]), str(event), str(probability)])
+            for index, probability in distribution.probabilities.items():
+                table.append([self.parent.variable.domain_type()(parent_event),
+                              self.variable.domain_type()(index), str(probability)])
         return table
 
     def joint_distribution_with_parent(self) -> DeterministicSumUnit:
@@ -133,32 +119,33 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         result = DeterministicSumUnit()
 
         # a map from the state of this nodes variable to the distribution
-        distribution_nodes = dict()
-        distribution_template = self.conditional_probability_distributions[(self.variable.domain[0],)].__copy__()
-        distribution_template.weights = [1/len(self.variable.domain) for _ in self.variable.domain]
-        for value in self.variable.domain:
-            event = Event({self.variable: value})
-            distribution_nodes[value], _ = distribution_template.conditional(event)
+        distribution_nodes: Dict[int, PCSymbolicDistribution] = dict()
+        template_probabilities = MissingDict(float, {int(element): 1 / len(self.variable.domain.simple_sets) for element
+                                                     in self.variable.domain.simple_sets})
+        distribution_template = PCSymbolicDistribution(self.variable, template_probabilities)
+        for value in self.variable.domain.simple_sets:
+            event = SimpleEvent({self.variable: value})
+            distribution_nodes[int(value)], _ = distribution_template.log_conditional_of_simple_event(event)
 
         # for every parent event and conditional distribution
         for parent_event, distribution in self.conditional_probability_distributions.items():
 
             # wrap the parent event
-            parent_event = Event({self.parent.variable: parent_event})
+            parent_event = SimpleEvent({self.parent.variable: self.parent.variable.domain_type()(parent_event)})
 
             # encode the parent state as distribution
-            parent_distribution, parent_probability = self.parent.forward_message.conditional(parent_event)
+            parent_distribution, parent_log_probability = (
+                self.parent.forward_message.log_conditional_of_simple_event(parent_event))
 
-            for child_event, child_probability in zip(self.variable.domain, distribution.weights):
-
+            for child_event_index, child_probability in distribution.probabilities.items():
                 # initialize the product unit
                 product_unit = DecomposableProductUnit()
 
                 # add the encoded parent distribution and a copy of this distribution to the product unit
                 product_unit.add_subcircuit(parent_distribution)
-                product_unit.add_subcircuit(distribution_nodes[child_event])
+                product_unit.add_subcircuit(distribution_nodes[child_event_index])
 
-                result.add_subcircuit(product_unit, parent_probability * child_probability)
+                result.add_subcircuit(product_unit, np.exp(parent_log_probability) * child_probability)
 
         return result
 
@@ -179,51 +166,74 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         :param distribution: The multinomial distribution to get the data from
         :return:
         """
+
         assert len(distribution.variables) == 2
         assert self.variable in distribution.variables
 
+        # set the parent variable to the variable that is not this one
         parent_variable = distribution.variables[0] \
             if distribution.variables[0] != self.variable else distribution.variables[1]
 
-        for parent_event in parent_variable.domain:
-            parent_event = Event({parent_variable: parent_event})
-            conditional, _ = distribution.conditional(parent_event)
-            marginal = conditional.marginal(self.variables).normalize()
-            self.conditional_probability_distributions[parent_event[parent_variable]] = (
-                DiscreteDistribution(self.variable, marginal.probabilities.tolist()))
+        for parent_simple_set in parent_variable.domain.simple_sets:
+            parent_event = SimpleEvent({parent_variable: parent_simple_set})
+            conditional, _ = distribution.conditional(parent_event.as_composite_set())
+            marginal = conditional.marginal(self.variables)
+
+            conditional_distribution = PCSymbolicDistribution(self.variable,
+                                                              MissingDict(float, zip(range(
+                                                                  len(self.variable.domain.simple_sets)),
+                                                                  marginal.probabilities.tolist())))
+
+            self.conditional_probability_distributions[int(parent_simple_set)] = conditional_distribution
 
         return self
 
 
-class ConditionalProbabilisticCircuit(ConditionalProbabilityTable):
+class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
+    """
+    Conditional probability distribution represented as Circuit for Bayesian Network nodes given their parents.
+    """
 
-    conditional_probability_distributions: Dict[Tuple, ProbabilisticCircuit]
+    conditional_probability_distributions: Dict[int, ProbabilisticCircuit]
     forward_message: SmoothSumUnit
+    _variables: Tuple[Variable, ...]
 
     def __init__(self, variables: Iterable[Variable]):
-        ProbabilisticModel.__init__(self, variables)
+        super().__init__()
+        self._variables = tuple(variables)
         self.conditional_probability_distributions = dict()
 
-    def forward_pass(self, event: Event):
-        forward_message, self.forward_probability = self.joint_distribution_with_parent()._conditional_from_single_event(event)
+    @property
+    def variables(self) -> Tuple[Variable, ...]:
+        return self._variables
+
+    @property
+    def parent(self) -> Union[RootDistribution, ConditionalProbabilityTable]:
+        return super().parent
+
+    def forward_pass(self, event: SimpleEvent):
+        forward_message, self.forward_probability = (self.joint_distribution_with_parent().
+                                                     log_conditional_of_simple_event(event))
         self.forward_message = forward_message.marginal(self.variables)
+        self.forward_probability = np.exp(self.forward_probability)
 
     def joint_distribution_with_parent(self) -> DeterministicSumUnit:
 
         result = DeterministicSumUnit()
 
         for parent_event, distribution in self.conditional_probability_distributions.items():
-            parent_event = Event({self.parent.variable: parent_event})
-            parent_distribution, parent_probability = self.parent.forward_message.conditional(parent_event)
+            parent_event = SimpleEvent({self.parent.variable: self.parent.variable.domain_type()(parent_event)})
+            parent_distribution, parent_log_probability = self.parent.forward_message.log_conditional_of_simple_event(
+                parent_event)
 
-            if parent_probability == 0:
+            if parent_distribution is None:
                 continue
 
             product_unit = DecomposableProductUnit()
             product_unit.add_subcircuit(parent_distribution)
             product_unit.add_subcircuit(distribution.root)
 
-            result.add_subcircuit(product_unit, parent_probability)
+            result.add_subcircuit(product_unit, np.exp(parent_log_probability))
 
         return result
 
@@ -237,12 +247,12 @@ class ConditionalProbabilisticCircuit(ConditionalProbabilityTable):
 
         result = DeterministicSumUnit()
 
-        for index, weight in zip(node_latent_variable.domain, self.parent.forward_message.weights):
-            probabilities = [0] * len(node_latent_variable.domain)
-            probabilities[index] = 1
+        for state, weight in self.parent.forward_message.probabilities.items():
+            probabilities = MissingDict(float)
+            probabilities[int(state)] = 1
             product_unit = DecomposableProductUnit()
-            product_unit.add_subcircuit(DiscreteDistribution(parent_latent_variable, probabilities))
-            product_unit.add_subcircuit(DiscreteDistribution(node_latent_variable, probabilities))
+            product_unit.add_subcircuit(PCSymbolicDistribution(parent_latent_variable, probabilities))
+            product_unit.add_subcircuit(PCSymbolicDistribution(node_latent_variable, probabilities))
             result.add_subcircuit(product_unit, weight)
 
         return result.probabilistic_circuit
@@ -255,5 +265,5 @@ class ConditionalProbabilisticCircuit(ConditionalProbabilityTable):
         :return: The conditional probability distribution
         """
         for index, subcircuit in enumerate(unit.subcircuits):
-            self.conditional_probability_distributions[(index, )] = subcircuit.__copy__().probabilistic_circuit
+            self.conditional_probability_distributions[index] = subcircuit.__copy__().probabilistic_circuit
         return self

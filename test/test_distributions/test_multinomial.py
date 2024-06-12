@@ -24,7 +24,7 @@ class YEnum(SetElement):
 
 
 class ZEnum(SetElement):
-    EMPY_SET = -1
+    EMPTY_SET = -1
     A = 0
     B = 1
     C = 2
@@ -105,7 +105,7 @@ class MultinomialInferenceTestCase(unittest.TestCase):
     def test_random_marginal_with_normalize(self):
         marginal = self.random_distribution.marginal([self.x, self.y])
         self.assertAlmostEqual(marginal.probabilities.sum(), 1)
-        self.assertEqual(marginal.variables, SortedSet([self.x, self.y]))
+        self.assertEqual(marginal.variables, (self.x, self.y))
 
     def test_crafted_marginal_with_normalize(self):
         marginal = self.crafted_distribution.marginal([self.x])
@@ -177,7 +177,8 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         self.random_distribution.normalize()
         circuit = self.random_distribution.as_probabilistic_circuit()
 
-        for event in itertools.product(self.x.domain, self.y.domain, self.z.domain):
+        for event in itertools.product(self.x.domain.simple_sets, self.y.domain.simple_sets,
+                                       self.z.domain.simple_sets):
             event = SimpleEvent(zip([self.x, self.y, self.z], event)).as_composite_set()
             self.assertAlmostEqual(self.random_distribution.probability(event), circuit.probability(event))
 

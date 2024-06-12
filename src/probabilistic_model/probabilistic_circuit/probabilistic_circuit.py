@@ -626,14 +626,15 @@ class DeterministicSumUnit(SmoothSumUnit):
 
         return result, maximum_log_likelihood
 
-    def sub_circuit_index_of_sample(self, sample: Iterable) -> Optional[int]:
+    def sub_circuit_index_of_samples(self, samples: np.array) -> np.array:
         """
         :return: the index of the subcircuit where p(sample) > 0 and None if p(sample) = 0 for all subcircuits.
         """
+        result = np.full(len(samples), np.nan)
         for index, subcircuit in enumerate(self.subcircuits):
-            if subcircuit.likelihood(sample) > 0:
-                return index
-        return None
+            likelihood = subcircuit.likelihood(samples)
+            result[likelihood > 0] = index
+        return result
 
     def is_deterministic(self) -> bool:
         return True

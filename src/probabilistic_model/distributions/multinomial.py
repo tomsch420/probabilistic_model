@@ -17,7 +17,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
     A multinomial distribution over symbolic random variables.
     """
 
-    _variables: SortedSet
+    _variables: Tuple[Symbolic, ...]
     """
     The variables of the distribution.
     """
@@ -31,7 +31,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
     def __init__(self, variables: Iterable[Symbolic], probabilities: Optional[np.ndarray] = None):
         super().__init__()
-        self._variables = SortedSet(variables)
+        self._variables = tuple(variables)
 
         shape = tuple(len(variable.domain.simple_sets) for variable in self.variables)
 
@@ -45,7 +45,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         self.probabilities = probabilities
 
     @property
-    def variables(self) -> SortedSet:
+    def variables(self) -> Tuple[Symbolic, ...]:
         return self._variables
 
     def support(self) -> Event:
@@ -119,7 +119,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
     def log_likelihood(self, events: np.array) -> np.array:
         return np.log(self.probabilities[events])
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
+    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         probabilities = np.zeros_like(self.probabilities)
 
         for simple_event in event.simple_sets:
@@ -173,7 +173,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
                 # create probabilities for the current variables state as one hot encoding
                 weights = MissingDict(float)
-                weights[value] = 1.
+                weights[int(value)] = 1.
 
                 # create a distribution for the current variable
                 distribution = SymbolicDistribution(variable, weights)
@@ -197,27 +197,17 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         """
         return [variable.encode(value) for variable, value in zip(self.variables, event)]
 
-    def fit(self, data: np.array) -> Self:
+    def fit(self, data: np.ndarray) -> Self:
         """
         Fit the distribution to the data.
+
         :param data: The data to fit the distribution to.
         :return: The fitted distribution.
         """
-        encoded_data = np.zeros((len(data), len(self.variables)), dtype=int)
-        for index, sample in enumerate(data):
-            indices = self.encode_full_evidence_event(sample)
-            encoded_data[index] = indices
-
-        return self._fit(encoded_data)
-
-    def _fit(self, data: np.ndarray) -> Self:
-        probabilities = np.zeros_like(self.probabilities)
+        self.probabilities = np.zeros_like(self.probabilities)
         uniques, counts = np.unique(data, return_counts=True, axis=0)
-
-        for unique, count in zip(uniques.astype(int), counts):
-            probabilities[tuple(unique)] = count
-
-        self.probabilities = probabilities / probabilities.sum()
+        self.probabilities[tuple(uniques.astype(int).T)] = counts
+        self.normalize()
         return self
 
     def to_json(self) -> Dict[str, Any]:

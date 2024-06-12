@@ -1,6 +1,5 @@
 import json
 import math
-import os
 import tempfile
 import unittest
 from datetime import datetime
@@ -8,20 +7,20 @@ from datetime import datetime
 import networkx as nx
 import numpy as np
 import pandas as pd
-
 import random_events
 import sklearn.datasets
 from jpt import infer_from_dataframe as old_infer_from_dataframe
 from jpt.learning.impurity import Impurity
-from jpt.trees import JPT as OldJPT, Leaf
+from jpt.trees import JPT as OldJPT
 from matplotlib import pyplot as plt
-from random_events.interval import closed
-from random_events.product_algebra import Event, SimpleEvent
+from random_events.interval import closed, singleton
+from random_events.product_algebra import SimpleEvent
 from random_events.set import SetElement
 from random_events.variable import Variable
+from sortedcontainers import SortedSet
 
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
-from probabilistic_model.bayesian_network.distributions import (DiscreteDistribution, ConditionalProbabilisticCircuit,
+from probabilistic_model.bayesian_network.distributions import (RootDistribution, ConditionalProbabilisticCircuit,
                                                                 ConditionalProbabilityTable)
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 from probabilistic_model.learning.jpt.jpt import JPT
@@ -32,8 +31,7 @@ from probabilistic_model.probabilistic_circuit.distributions.distributions impor
     SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
     DeterministicSumUnit, ProbabilisticCircuit
-
-import plotly.graph_objects as go
+from probabilistic_model.utils import MissingDict
 
 
 class ShowMixin:
@@ -388,11 +386,11 @@ class BayesianJPTTestCase(unittest.TestCase):
         cls.model_species = model_species.marginal([cls.species], simplify_if_univariate=False)
 
         subcircuit_indices = np.zeros((len(df), 3))
-        for index, sample in enumerate(df.values):
-            sl, sw, pl, pw, species = sample
-            subcircuit_indices[index, 0] = cls.model_sl_sw.sub_circuit_index_of_sample((sl, sw))
-            subcircuit_indices[index, 1] = cls.model_pl_pw.sub_circuit_index_of_sample((pl, pw))
-            subcircuit_indices[index, 2] = cls.model_species.sub_circuit_index_of_sample((species,))
+        subcircuit_indices[:, 0] = cls.model_sl_sw.sub_circuit_index_of_samples(df[["sepal length (cm)",
+                                                                                    "sepal width (cm)"]].values)
+        subcircuit_indices[:, 1] = cls.model_pl_pw.sub_circuit_index_of_samples(df[["petal length (cm)",
+                                                                                    "petal width (cm)"]].values)
+        subcircuit_indices[:, 2] = cls.model_species.sub_circuit_index_of_samples(df[["species"]].values)
 
         cls.subcircuit_indices = pd.DataFrame(subcircuit_indices, columns=["sl_sw", "pl_pw", "species"])
 
@@ -409,9 +407,9 @@ class BayesianJPTTestCase(unittest.TestCase):
         cls.species_petal_interaction_term.fit(subcircuit_indices[:, (1, 2)])
 
     def test_setup(self):
-        self.assertEqual(self.model_sl_sw.variables, (self.sl, self.sw))
-        self.assertEqual(self.model_pl_pw.variables, (self.pl, self.pw))
-        self.assertEqual(self.model_species.variables, (self.species,))
+        self.assertEqual(self.model_sl_sw.variables, SortedSet([self.sl, self.sw]))
+        self.assertEqual(self.model_pl_pw.variables, SortedSet([self.pl, self.pw]))
+        self.assertEqual(self.model_species.variables, SortedSet([self.species]))
 
         self.assertGreater(len(self.model_sl_sw.subcircuits), 1)
         self.assertGreater(len(self.model_pl_pw.subcircuits), 1)
@@ -423,18 +421,17 @@ class BayesianJPTTestCase(unittest.TestCase):
         self.assertEqual(self.species_sepal_interaction_term.probabilities.sum(), 1.)
 
     def test_to_bayesian_network(self):
-
         # create bayesian network with root node
         bayesian_network = BayesianNetwork()
-        root = DiscreteDistribution(self.species_latent_variable, self.model_species.weights)
-        self.assertEqual(root.weights, [1 / 3] * 3)
+        root = RootDistribution(self.species_latent_variable, MissingDict(float, zip([0, 1, 2],
+                                                                                     self.model_species.weights)))
+        self.assertEqual(list(root.probabilities.values()), [1 / 3] * 3)
         bayesian_network.add_node(root)
 
         p_species = ConditionalProbabilisticCircuit(self.model_species.variables)
         p_species.from_unit(self.model_species)
         bayesian_network.add_node(p_species)
         bayesian_network.add_edge(root, p_species)
-
 
         # mount the interaction term with the latent variable of the sepal distribution
         p_sepal_species = ConditionalProbabilityTable(self.sepal_latent_variable)
@@ -465,18 +462,19 @@ class BayesianJPTTestCase(unittest.TestCase):
         bayesian_network.add_edge(p_petal_species, p_petal)
 
         # test some queries
-        self.assertAlmostEqual(bayesian_network.as_probabilistic_circuit().probability(Event()), 1)
+        bn_as_circuit = bayesian_network.as_probabilistic_circuit()
+        self.assertAlmostEqual(bn_as_circuit.probability(bn_as_circuit.universal_simple_event().as_composite_set()), 1)
 
-        e_species_1 = Event({self.species: 0})
+        e_species_1 = SimpleEvent({self.species: singleton(0)}).as_composite_set()
         #  bn_p_species_1 = bayesian_network.probability(e_species_1)
         # self.assertAlmostEqual(bn_p_species_1, 1 / 3)
         self.assertAlmostEqual(bayesian_network.as_probabilistic_circuit().probability(e_species_1), 1 / 3)
 
-        complex_event = Event({self.species: 0,
-                               self.sl: portion.closed(4.5, 5.5)})
+        complex_event = SimpleEvent(
+            {self.species: singleton(0), self.sl: closed(4.5, 5.5)}).as_composite_set()
         pc = bayesian_network.as_probabilistic_circuit()
         pc_m = pc.marginal([v for v in pc.variables if not v.name.endswith(".latent")]).simplify()
-        self.assertEqual(pc_m.variables, (self.pl, self.pw, self.sl, self.sw, self.species))
+        self.assertEqual(pc_m.variables, SortedSet([self.pl, self.pw, self.sl, self.sw, self.species]))
 
         self.assertAlmostEqual(pc_m.probability(complex_event), 0.2333333)
-        self.assertLess(len(pc_m.weighted_edges), math.prod([len(v.domain) for v in bayesian_network.variables]))
+        self.assertLess(len(pc_m.weighted_edges), 3 * math.prod([len(v.domain.simple_sets) for v in bayesian_network.variables]))

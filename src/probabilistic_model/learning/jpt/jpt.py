@@ -466,11 +466,10 @@ class JPT(DeterministicSumUnit):
             distribution = NygaDistribution.from_uniform_mixture(result)
 
         elif isinstance(variable, (Integer, Symbolic)):
-            weights = [result.probability(Event({variable: value})) for value in variable.domain]
             if isinstance(variable, Symbolic):
-                distribution = SymbolicDistribution(variable, weights=weights)
+                distribution = SymbolicDistribution.from_sum_unit(result)
             elif isinstance(variable, Integer):
-                distribution = IntegerDistribution(variable, weights=weights)
+                distribution = IntegerDistribution.from_sum_unit(result)
             else:
                 raise NotImplementedError(f"Variable {variable} is not supported.")
             if as_deterministic_sum:
