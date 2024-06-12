@@ -69,7 +69,7 @@ def graph_inference_caching_wrapper(func):
     return wrapper
 
 
-class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
+class ProbabilisticCircuitMixin(SampleBasedPlotMixin, SubclassJSONSerializer):
     """
     Mixin class for all components of a probabilistic circuit.
     """
@@ -1041,3 +1041,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         :return: Rather this circuit is deterministic or not.
         """
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SmoothSumUnit))
+
+    def plot(self, **kwargs):
+        return self.root.plot(**kwargs)
+
+    def plotly_layout(self, **kwargs):
+        return self.root.plotly_layout(**kwargs)

@@ -127,6 +127,13 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         self.assertEqual(mode["X"], XEnum.B.as_composite_set())
         self.assertEqual(mode["Y"], YEnum.A.as_composite_set())
 
+    def test_likelihood(self):
+        data = np.array([[XEnum.A, YEnum.A], [XEnum.B, YEnum.B]])
+        likelihood = self.crafted_distribution.likelihood(data)
+        self.assertEqual(likelihood.shape, (2,))
+        self.assertAlmostEqual(likelihood[0], 0.1/self.crafted_distribution_mass)
+        self.assertAlmostEqual(likelihood[1], 0.4/self.crafted_distribution_mass)
+
     def test_multiple_modes(self):
         distribution = MultinomialDistribution([self.x, self.y], np.array([[0.1, 0.7, 0.3], [0.7, 0.4, 0.1]]), )
         mode, likelihood = distribution.mode()

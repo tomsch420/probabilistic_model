@@ -117,7 +117,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         return self.probabilities[np.ix_(*indices)].sum()
 
     def log_likelihood(self, events: np.array) -> np.array:
-        return np.log(self.probabilities[events])
+        return np.log(self.probabilities[tuple(events.T)])
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         probabilities = np.zeros_like(self.probabilities)
@@ -182,7 +182,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
                 product_unit.add_subcircuit(distribution)
 
             # calculate the probability of the current state
-            probability = self.likelihood(event)
+            probability = self.likelihood(np.array([event]))[0]
 
             # mount the product unit to the result
             result.add_subcircuit(product_unit, probability)

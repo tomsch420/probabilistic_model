@@ -16,8 +16,6 @@ class SampleBasedPlotMixin(ProbabilisticModel, ABC):
     Mixin class for plotting models that contain only continuous variables using samples.
     """
 
-    variables: Tuple[Continuous]
-
     def cdf(self, x: np.ndarray) -> np.ndarray:
         """
         Calculate the cumulative distribution function of the model.
