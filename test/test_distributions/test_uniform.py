@@ -16,7 +16,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.univariate_support, self.distribution.interval.as_composite_set())
 
     def test_likelihood(self):
-        pdf = self.distribution.pdf(np.array([-1, 1, 2]))
+        pdf = self.distribution.likelihood(np.array([-1, 1, 2]).reshape(-1, 1))
         self.assertEqual(pdf[0], 0)
         self.assertEqual(pdf[1], 0.5)
         self.assertEqual(pdf[2], 0)

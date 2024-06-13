@@ -109,7 +109,6 @@ class GaussianDistributionTestCase(unittest.TestCase):
         self.assertIsNotNone(conditional.probabilistic_circuit)
         self.assertEqual(len(list(conditional.probabilistic_circuit.nodes)), 3)
 
-    @unittest.skip("Plotting must be implemented for UnivariateSumUnits")
     def test_plot(self):
         condition = closed(-float("inf"), -1) | closed(1, float("inf"))
         distribution, _ = self.distribution.conditional(SimpleEvent({self.x: condition}).as_composite_set())

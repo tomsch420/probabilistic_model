@@ -14,7 +14,7 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
         self.variable = variable
         self.interval = interval
 
-    def log_pdf_no_bounds_check(self, x: np.array) -> np.array:
+    def log_likelihood_without_bounds_check(self, x: np.array) -> np.array:
         return np.full((len(x),), self.log_pdf_value())
 
     def cdf(self, x: np.array) -> np.array:
@@ -103,7 +103,7 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
         cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name="Cumulative Distribution Function")
         return cdf_trace
 
-    def plot(self) -> List:
+    def plot(self, **kwargs) -> List:
         pdf_trace = self.pdf_trace()
         cdf_trace = self.cdf_trace()
 

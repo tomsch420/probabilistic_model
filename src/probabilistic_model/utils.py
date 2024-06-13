@@ -4,7 +4,7 @@ from abc import abstractmethod
 from collections import defaultdict
 
 import numpy as np
-from random_events.interval import SimpleInterval
+from random_events.interval import SimpleInterval, Interval
 from random_events.variable import Continuous
 from typing_extensions import Dict, Any, Self, TYPE_CHECKING, Type, Tuple, List
 from random_events.utils import get_full_class_name, recursive_subclasses
@@ -19,6 +19,17 @@ def simple_interval_as_array(interval: SimpleInterval) -> np.ndarray:
     :return:  [lower, upper] as numpy array
     """
     return np.array([interval.lower, interval.upper])
+
+
+def interval_as_array(interval: Interval) -> np.ndarray:
+    """
+    Convert an interval to a numpy array.
+    The resulting array has shape (n, 2) where n is the number of simple intervals in the interval.
+    The first column contains the lower bounds and the second column the upper bounds of the simple intervals.
+    :param interval: The interval
+    :return:  as numpy array
+    """
+    return np.array([simple_interval_as_array(simple_interval) for simple_interval in interval.simple_sets])
 
 
 def type_converter(abstract_type: Type, package: types.ModuleType):

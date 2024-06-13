@@ -13,7 +13,7 @@ from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
-from ..utils import SubclassJSONSerializer, MissingDict
+from ..utils import SubclassJSONSerializer, MissingDict, interval_as_array
 
 
 class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
@@ -64,35 +64,13 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
             "variable": self.variable.to_json()
         }
 
-    @abstractmethod
-    def plot(self) -> List:
-        """
-        Generate a list of traces that can be used to plot the distribution in plotly figures.
-        """
-        raise NotImplementedError
-
-    def plotly_layout(self) -> Dict[str, Any]:
-        """
-        :return: The layout argument for plotly figures as dict
-        """
-        return {
-            "title": f"{self.representation}",
-            "xaxis": {"title": self.variable.name}
-        }
-
     def composite_set_from_event(self, event: Event) -> AbstractCompositeSet:
         """
         Extract the composite set from the event that is relevant for this distribution.
         :param event: The event
         :return: The composite set
         """
-        if len(event.simple_sets) == 0:
-            return self.variable.domain.new_empty_set()
-
-        result = event.simple_sets[0][self.variable]
-        for simple_event in event.simple_sets[1:]:
-            result |= simple_event[self.variable]
-        return result
+        return event.marginal(SortedSet(self.variables)).simple_sets[0][self.variable]
 
 
 class ContinuousDistribution(UnivariateDistribution):
@@ -107,53 +85,29 @@ class ContinuousDistribution(UnivariateDistribution):
     def univariate_support(self) -> Interval:
         raise NotImplementedError
 
-    def log_likelihood(self, events: np.array) -> np.array:
-        return self.log_pdf(events[:, 0])
-
-    def pdf(self, x: np.array) -> np.array:
-        """
-        Evaluate the probability density function at `x`.
-        :param x: The values as numpy array
-        :return: p(x)
-        """
-        return np.exp(self.log_pdf(x))
-
-    @abstractmethod
-    def log_pdf(self, x: np.array) -> np.array:
-        """
-        Evaluate the logarithmic probability density function at `x`.
-
-        It is recommended to override this function in a performant way.
-        This method is most commonly used in learning algorithms and will be evaluated for many values of x.
-
-        :param x: x
-        :return: log(p(x))
-        """
-        raise NotImplementedError
-
-    @abstractmethod
     def cdf(self, x: np.array) -> np.array:
         """
-        Evaluate the cumulative distribution function at `x`.
-        :param x: x
-        :return: P(x <= self.variable)
+        Calculate the cumulative distribution function at x.
+        :param x: The data
+        :return: The cumulative distribution function at x
         """
         raise NotImplementedError
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         interval: Interval = event[self.variable]
-        return sum(self.cdf(np.array([simple_interval.upper]))[0] -
-                   self.cdf(np.array([simple_interval.lower]))[0] for simple_interval
-                   in interval.simple_sets)
+        points = interval_as_array(interval)
+        upper_bound_cdf = self.cdf(points[:, (1, )])
+        lower_bound_cdf = self.cdf(points[:, (0, )])
+        return (upper_bound_cdf - lower_bound_cdf).sum()
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         event = event & self.support()
-        interval = self.composite_set_from_event(event)
-
-        if interval.is_empty():
+        if event.is_empty():
             return None, -np.inf
 
-        elif len(interval.simple_sets) == 1:
+        interval = self.composite_set_from_event(event)
+
+        if len(interval.simple_sets) == 1:
             return self.log_conditional_from_simple_interval(interval.simple_sets[0])
 
         else:
@@ -169,7 +123,7 @@ class ContinuousDistribution(UnivariateDistribution):
         :param interval: The singleton event
         :return: The conditional distribution and the log-probability of the event.
         """
-        log_pdf_value = self.log_pdf(np.array([interval.lower]))
+        log_pdf_value = self.log_likelihood(np.array([[interval.lower]]))
         return DiracDeltaDistribution(self.variable, interval.lower, np.exp(log_pdf_value)), log_pdf_value
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
@@ -229,7 +183,8 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         :param x: The data
         :return: A boolean array
         """
-        return self.interval.lower <= x if self.interval.left == Bound.CLOSED else self.interval.lower < x
+        return ((self.interval.lower <= x if self.interval.left == Bound.CLOSED else self.interval.lower < x).
+                reshape(-1, 1))
 
     def right_included_condition(self, x: np.array) -> np.array:
         """
@@ -237,7 +192,8 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
          :param x: The data
          :return: A boolean array
          """
-        return x < self.interval.upper if self.interval.right == Bound.OPEN else x <= self.interval.upper
+        return ((x < self.interval.upper if self.interval.right == Bound.OPEN else x <= self.interval.upper).
+                reshape(-1, 1))
 
     def included_condition(self, x: np.array) -> np.array:
         """
@@ -247,16 +203,17 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
          """
         return self.left_included_condition(x) & self.right_included_condition(x)
 
-    def log_pdf(self, x: np.array) -> np.array:
+    def log_likelihood(self, x: np.array) -> np.array:
         result = np.full(len(x), -np.inf)
         include_condition = self.included_condition(x)
-        result[include_condition] = self.log_pdf_no_bounds_check(x[include_condition])
+        filtered_x = x[include_condition].reshape(-1, 1)
+        result[include_condition[:, 0]] = self.log_likelihood_without_bounds_check(filtered_x)
         return result
 
     @abstractmethod
-    def log_pdf_no_bounds_check(self, x: np.array) -> np.array:
+    def log_likelihood_without_bounds_check(self, x: np.array) -> np.array:
         """
-        Evaluate the logarithmic probability density function at `x` without checking the inclusion into the interval.
+        Evaluate the logarithmic likelihood function at `x` without checking the inclusion into the interval.
         :param x: x where p(x) > 0
         :return: log(p(x))
         """
@@ -298,14 +255,6 @@ class DiscreteDistribution(UnivariateDistribution):
             result[events == x] = np.log(p)
         return result
 
-    def pmf(self, value: Union[int, SetElement]) -> float:
-        """
-        Calculate the probability mass function at `value`.
-        :param value: The value
-        :return: The probability.
-        """
-        return self.probabilities[int(value)]
-
     def fit(self, data: np.array) -> Self:
         """
         Fit the distribution to the data.
@@ -329,7 +278,7 @@ class DiscreteDistribution(UnivariateDistribution):
         """
         raise NotImplementedError
 
-    def plot(self) -> List[go.Bar]:
+    def plot(self, **kwargs) -> List[go.Bar]:
         """
         Plot the distribution.
         """
@@ -407,7 +356,8 @@ class SymbolicDistribution(DiscreteDistribution):
         return mode, np.log(max_likelihood)
 
     def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
-        return {element.name: self.pmf(element.value) for element in self.variable.domain.simple_sets}
+        return {element.name: self.probabilities[int(element)] for element in
+                self.variable.domain.simple_sets}
 
     @property
     def univariate_support(self) -> Set:
@@ -415,7 +365,7 @@ class SymbolicDistribution(DiscreteDistribution):
         return Set(*[clazz(key) for key, value in self.probabilities.items() if value > 0])
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
-        return sum(self.pmf(int(key)) for key in event[self.variable].simple_sets)
+        return sum(self.probabilities[int(key)] for key in event[self.variable].simple_sets)
 
     @property
     def representation(self):
@@ -455,9 +405,6 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
                 result |= singleton(key)
         return result
 
-    def log_pdf(self, x: np.array) -> np.array:
-        return DiscreteDistribution.log_likelihood(self, x.reshape(-1, 1))
-
     def cdf(self, x: np.array) -> np.array:
         result = np.zeros((len(x), ))
         maximum_value = max(x)
@@ -465,7 +412,7 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
             if value > maximum_value:
                 break
             else:
-                result[x <= value] += p
+                result[x[:, 0] >= value] += p
 
         return result
 
@@ -489,13 +436,9 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
         result = sum([p_x * (x - center) ** order for x, p_x in self.probabilities.items()])
         return VariableMap({self.variable: result})
 
-    def plot_expectation(self) -> List:
-        expectation = self.expectation([self.variable])[self.variable]
+    def plot(self, **kwargs) -> List[go.Bar]:
         height = max(self.probabilities.values()) * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
-        return [go.Scatter(x=[expectation, expectation], y=[0, height], mode="lines+markers", name="Expectation")]
-
-    def plot(self) -> List[go.Bar]:
-        return super().plot() + self.plot_expectation()
+        return super().plot() + [self.univariate_expectation_trace(height)]
 
 
 class DiracDeltaDistribution(ContinuousDistribution):
@@ -525,14 +468,14 @@ class DiracDeltaDistribution(ContinuousDistribution):
         self.location = location
         self.density_cap = density_cap
 
-    def log_pdf(self, x: np.array) -> np.array:
-        result = np.full(len(x), -np.inf)
-        result[x == self.location] = np.log(self.density_cap)
+    def log_likelihood(self, events: np.array) -> np.array:
+        result = np.full(len(events), -np.inf)
+        result[events[:, 0] == self.location] = np.log(self.density_cap)
         return result
 
     def cdf(self, x: np.array) -> np.array:
         result = np.zeros((len(x), ))
-        result[x >= self.location] = 1.
+        result[x[:, 0] >= self.location] = 1.
         return result
 
     @property
@@ -594,7 +537,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
     def __repr__(self):
         return f"δ({self.variable.name}, {self.location}, {self.density_cap})"
 
-    def plot(self) -> List:
+    def plot(self, **kwargs) -> List:
         lower_border = self.location - 1
         upper_border = self.location + 1
         pdf_trace = go.Scatter(x=[lower_border, self.location, self.location, self.location, upper_border],

@@ -19,6 +19,7 @@ from probabilistic_model.probabilistic_circuit.distributions.distributions impor
                                                                                    DiracDeltaDistribution,
                                                                                    TruncatedGaussianDistribution)
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
+import plotly.graph_objects as go
 
 
 class ShowMixin:
@@ -481,7 +482,8 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
         self.assertFalse(any(samples[0] == samples[1]))
 
     def test_samples_in_sequence(self):
-        samples = np.concatenate((self.model.probabilistic_circuit.sample(1), self.model.probabilistic_circuit.sample(1)))
+        samples = np.concatenate((self.model.probabilistic_circuit.sample(1),
+                                  self.model.probabilistic_circuit.sample(1)))
         self.assertEqual(len(samples), 2)
         self.assertFalse(any(samples[0] == samples[1]))
 
@@ -558,6 +560,17 @@ class NormalizationTestCase(unittest.TestCase):
         self.assertAlmostEqual(sum_unit.weights[0], 0.5/0.8)
         self.assertAlmostEqual(sum_unit.weights[1], 0.3/0.8)
 
+    def test_plot(self):
+        u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
+        u2 = UniformDistribution(self.x, closed(3, 4).simple_sets[0])
+        sum_unit = DeterministicSumUnit()
+        sum_unit.add_subcircuit(u1, 0.5)
+        sum_unit.add_subcircuit(u2, 0.3)
+        sum_unit.normalize()
+        traces = sum_unit.plot()
+        self.assertGreater(len(traces), 0)
+        # go.Figure(sum_unit.plot(), sum_unit.plotly_layout()).show()
+
 
 class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
 
@@ -573,7 +586,6 @@ class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
         product.add_subcircuit(n2)
         self.model = product.probabilistic_circuit
 
-    @unittest.skip
     def test_plot_2d(self):
         traces = self.model.plot()
         assert len(traces) > 0

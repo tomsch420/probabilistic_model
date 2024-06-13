@@ -74,7 +74,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         for parent_state in event[self.parent.variable].simple_sets:
 
             # calculate the probability P(self.parent.variable = parent_state)
-            parent_state_probability = self.parent.forward_message.pmf(parent_state)
+            parent_state_probability = self.parent.forward_message.probabilities[int(parent_state)]
             if parent_state_probability == 0:
                 continue
 

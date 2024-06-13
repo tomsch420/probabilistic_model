@@ -5,10 +5,10 @@ from probabilistic_model.utils import SubclassJSONSerializer, MissingDict
 
 
 class TestEnum(SetElement):
-    EMPTY_SET = 0
-    A = 1
-    B = 2
-    C = 3
+    EMPTY_SET = -1
+    A = 0
+    B = 1
+    C = 2
 
 
 class IntegerDistributionTestCase(unittest.TestCase):
@@ -22,8 +22,8 @@ class IntegerDistributionTestCase(unittest.TestCase):
         probabilities[4] = 11 / 20
         self.model = IntegerDistribution(self.x, probabilities)
 
-    def test_pdf(self):
-        pdf = self.model.pdf(np.array([1, 2, 3, 4]))
+    def test_likelihood(self):
+        pdf = self.model.likelihood(np.array([1, 2, 3, 4]).reshape(-1, 1))
         self.assertAlmostEqual(pdf[0], 4 / 20)
         self.assertAlmostEqual(pdf[1], 5 / 20)
         self.assertAlmostEqual(pdf[2], 0)
@@ -78,13 +78,22 @@ class IntegerDistributionTestCase(unittest.TestCase):
         self.assertTrue(distribution.univariate_support.is_empty())
 
     def test_plot(self):
-        fig = go.Figure(self.model.plot(), self.model.plotly_layout())  # fig.show()
+        fig = go.Figure(self.model.plot(), self.model.plotly_layout())
+        # fig.show()
 
     def test_serialization(self):
         serialized = self.model.to_json()
         deserialized = SubclassJSONSerializer.from_json(serialized)
         self.assertIsInstance(deserialized, DiscreteDistribution)
         self.assertEqual(deserialized, self.model)
+
+    def test_cdf(self):
+        cdf = self.model.cdf(np.array([0, 1, 2, 3, 4]).reshape(-1, 1))
+        self.assertAlmostEqual(cdf[0], 0)
+        self.assertAlmostEqual(cdf[1], 4 / 20)
+        self.assertAlmostEqual(cdf[2], 9 / 20)
+        self.assertAlmostEqual(cdf[3], 9 / 20)
+        self.assertAlmostEqual(cdf[4], 1)
 
 
 class SymbolicDistributionTestCase(unittest.TestCase):
@@ -93,8 +102,8 @@ class SymbolicDistributionTestCase(unittest.TestCase):
 
     def setUp(self):
         probabilities = MissingDict(float)
-        probabilities[TestEnum.A.value] = 7 / 20
-        probabilities[TestEnum.B.value] = 13 / 20
+        probabilities[int(TestEnum.A)] = 7 / 20
+        probabilities[int(TestEnum.B)] = 13 / 20
         self.model = SymbolicDistribution(self.x, probabilities)
 
     def test_sample(self):
@@ -108,7 +117,8 @@ class SymbolicDistributionTestCase(unittest.TestCase):
         self.assertEqual(mode, SimpleEvent({self.x: TestEnum.B}).as_composite_set())
 
     def test_plot(self):
-        fig = go.Figure(self.model.plot(), self.model.plotly_layout())  # fig.show()
+        fig = go.Figure(self.model.plot(), self.model.plotly_layout())
+        # fig.show()
 
     def test_probability(self):
         event = SimpleEvent({self.x: Set(TestEnum.A, TestEnum.C)}).as_composite_set()
@@ -119,10 +129,10 @@ class SymbolicDistributionTestCase(unittest.TestCase):
         self.assertEqual(support, Set(TestEnum.A, TestEnum.B))
 
     def test_fit(self):
-        data = [1, 2, 2, 2]
+        data = [0, 1, 1, 1]
         self.model.fit(data)
-        self.assertEqual(self.model.probabilities[1], [1 / 4])
-        self.assertEqual(self.model.probabilities[2], [3 / 4])
+        self.assertEqual(self.model.probabilities[0], [1 / 4])
+        self.assertEqual(self.model.probabilities[1], [3 / 4])
         prob = self.model.probability(SimpleEvent({self.x: Set(TestEnum.A, TestEnum.B)}).as_composite_set())
         self.assertEqual(prob, 1)
 
@@ -134,13 +144,13 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
     def setUp(self):
         self.model = DiracDeltaDistribution(self.x, 0, 2)
 
-    def test_pdf(self):
-        pdf = self.model.pdf(np.array([0, 1]))
+    def test_likelihood(self):
+        pdf = self.model.likelihood(np.array([0, 1]).reshape(-1, 1))
         self.assertEqual(pdf[0], 2)
         self.assertEqual(pdf[1], 0)
 
     def test_cdf(self):
-        cdf = self.model.cdf(np.array([-1, 0, 1]))
+        cdf = self.model.cdf(np.array([-1, 0, 1]).reshape(-1, 1))
         self.assertEqual(cdf[0], 0)
         self.assertEqual(cdf[1], 1)
         self.assertEqual(cdf[2], 1)

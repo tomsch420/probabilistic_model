@@ -14,7 +14,6 @@ from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, 
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
-from ..plotting import SampleBasedPlotMixin
 
 if TYPE_CHECKING:
     from .distributions import UnivariateDistribution
@@ -69,7 +68,7 @@ def graph_inference_caching_wrapper(func):
     return wrapper
 
 
-class ProbabilisticCircuitMixin(SampleBasedPlotMixin, SubclassJSONSerializer):
+class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     """
     Mixin class for all components of a probabilistic circuit.
     """
@@ -275,7 +274,7 @@ class ProbabilisticCircuitMixin(SampleBasedPlotMixin, SubclassJSONSerializer):
         raise NotImplementedError()
 
 
-class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
+class SmoothSumUnit(ProbabilisticCircuitMixin):
 
     representation = "+"
 
@@ -378,12 +377,11 @@ class SmoothSumUnit(ProbabilisticCircuitMixin, SampleBasedPlotMixin):
         weights, subcircuits = zip(*self.weighted_subcircuits)
         # sample the latent variable
         states = np.random.choice(np.arange(len(self.weights)), size=amount, p=weights)
-
         _, counts = np.unique(states, return_counts=True)
         # sample from the children
         result = self.subcircuits[0].sample(int(counts[0]))
         for amount, subcircuit in zip(counts[1:], self.subcircuits[1:]):
-            result = np.concatenate((result, self.subcircuits[0].sample(amount)))
+            result = np.concatenate((result, subcircuit.sample(amount)))
         return result
 
     @cache_inference_result
@@ -1046,4 +1044,4 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return self.root.plot(**kwargs)
 
     def plotly_layout(self, **kwargs):
-        return self.root.plotly_layout(**kwargs)
+        return self.root.plotly_layout()

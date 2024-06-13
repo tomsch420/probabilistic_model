@@ -4,11 +4,10 @@ import math
 from scipy.stats import gamma, norm
 
 from .distributions import *
-from ..plotting import SampleBasedPlotMixin
 from ..utils import simple_interval_as_array
 
 
-class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
+class GaussianDistribution(ContinuousDistribution):
     """
     Class for Gaussian distributions.
     """
@@ -33,14 +32,14 @@ class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
     def univariate_support(self) -> Interval:
         return reals()
 
-    def log_pdf(self, x: np.array) -> np.array:
-        return norm.logpdf(x, loc=self.location, scale=self.scale)
+    def log_likelihood(self, x: np.array) -> np.array:
+        return norm.logpdf(x[:, 0], loc=self.location, scale=self.scale)
 
     def cdf(self, x: np.array) -> np.array:
-        return norm.cdf(x, loc=self.location, scale=self.scale)
+        return norm.cdf(x[:, 0], loc=self.location, scale=self.scale)
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
-        return singleton(self.location), self.log_pdf(self.location)
+        return singleton(self.location), self.log_likelihood(np.array([[self.location]]))[0]
 
     def sample(self, amount: int) -> np.array:
         return norm.rvs(loc=self.location, scale=self.scale, size=(amount, 1))
@@ -94,7 +93,7 @@ class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
 
     def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> (
             Tuple)[TruncatedGaussianDistribution, float]:
-        cdf_values = self.cdf(simple_interval_as_array(interval))
+        cdf_values = self.cdf(simple_interval_as_array(interval).reshape(-1, 1))
         probability = cdf_values[1] - cdf_values[0]
         return TruncatedGaussianDistribution(self.variable, interval, self.location, self.scale), np.log(probability)
 
@@ -115,9 +114,6 @@ class GaussianDistribution(ContinuousDistribution, SampleBasedPlotMixin):
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable = Continuous.from_json(data["variable"])
         return cls(variable, data["location"], data["scale"])
-
-    def plot(self, number_of_samples: int = 1000) -> List:
-        return SampleBasedPlotMixin.plot(self, number_of_samples)
 
 
 class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, GaussianDistribution):
@@ -140,28 +136,33 @@ class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, Gau
             \left( \frac{self.interval.lower-\mu}{\sigma} \right )}
 
         """
-        return (GaussianDistribution.cdf(self, np.array([self.upper])) - GaussianDistribution.cdf(self, np.array(
-            [self.lower])))[0]
+        return (GaussianDistribution.cdf(self, np.array([[self.upper]])) - GaussianDistribution.cdf(self, np.array(
+            [[self.lower]])))[0]
 
-    def log_pdf_no_bounds_check(self, x: np.array) -> np.array:
-        return GaussianDistribution.log_pdf(self, x) - np.log(self.normalizing_constant)
+    @property
+    def cdf_of_lower(self):
+        return GaussianDistribution.cdf(self, np.array([[self.lower]]))[0]
+
+    def log_likelihood_without_bounds_check(self, x: np.array) -> np.array:
+        return GaussianDistribution.log_likelihood(self, x) - np.log(self.normalizing_constant)
 
     def cdf(self, x: np.array) -> np.array:
         result = np.zeros(len(x))
         non_zero_condition = self.left_included_condition(x)
-        cdf_of_lower = GaussianDistribution.cdf(self, np.array([self.lower]))
-        result[non_zero_condition] = ((GaussianDistribution.cdf(self, x[non_zero_condition]) - cdf_of_lower)
-                                      / self.normalizing_constant)
+        x_non_zero = x[non_zero_condition].reshape(-1, 1)
+        cdf_non_zero = GaussianDistribution.cdf(self, x_non_zero)
+        result[non_zero_condition[:, 0]] = (cdf_non_zero - self.cdf_of_lower) / self.normalizing_constant
         result = np.minimum(1, result)
         return result
 
     def univariate_log_mode(self) -> Tuple[Interval, float]:
         if self.interval.contains(self.location):
-            return singleton(self.location), self.log_pdf_no_bounds_check(np.array([self.location]))[0]
+            value = self.location
         elif self.location < self.lower:
-            return singleton(self.lower), self.log_pdf_no_bounds_check(np.array([self.lower]))[0]
+            value = self.lower
         else:
-            return singleton(self.upper), self.log_pdf_no_bounds_check(np.array([self.upper]))[0]
+            value = self.upper
+        return singleton(value), self.log_likelihood_without_bounds_check(np.array([[value]]))[0]
 
     def rejection_sample(self, amount: int) -> np.array:
         """

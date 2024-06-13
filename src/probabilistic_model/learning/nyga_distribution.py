@@ -16,7 +16,6 @@ from typing_extensions import Self
 from ..probabilistic_circuit.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
 from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit, cache_inference_result,
                                                            ProbabilisticCircuitMixin)
-from ..plotting import SampleBasedPlotMixin
 from ..constants import *
 
 
@@ -321,7 +320,7 @@ class InductionStep:
             return []
 
 
-class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
+class NygaDistribution(DeterministicSumUnit):
     """
     A Nyga distribution is a deterministic mixture of uniform distributions.
     """
@@ -502,19 +501,19 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
         y_values = self.cdf(np.array(x_values))
         return go.Scatter(x=x_values, y=y_values, mode="lines", name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))
 
-    def plot(self) -> List[go.Scatter]:
+    def plot(self, **kwargs) -> List[go.Scatter]:
         """
         Plot the distribution with PDF, CDF, Expectation and Mode.
         """
         traces = [self.pdf_trace(), self.cdf_trace()]
         mode, maximum_likelihood = self.mode()
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
-        mode_trace = SampleBasedPlotMixin.plot_mode_1d(self, mode, height)
+        mode_trace = self.univariate_mode_traces(mode, height)
         self.reset_result_of_current_query()
 
         traces.extend(mode_trace)
         self.reset_result_of_current_query()
 
-        traces.append(SampleBasedPlotMixin.expectation_trace_1d(self, height))
+        traces.append(self.univariate_expectation_trace(height))
 
         return traces
