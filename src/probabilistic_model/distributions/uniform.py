@@ -1,86 +1,48 @@
-import random
-from typing import Tuple, Optional
+import numpy as np
 
-import portion
-from plotly import graph_objects as go
-from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent
-from random_events.variables import Continuous
-from typing_extensions import List, Dict, Any, Self, Union
-
-from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
-from .distributions import ContinuousDistribution
+from .distributions import *
+from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT
 
 
-class UniformDistribution(ContinuousDistribution):
+class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     """
     Class for uniform distributions over the half-open interval [lower, upper).
     """
 
-    interval: portion.Interval
-    """
-    The interval that the Uniform distribution is defined over.
-    """
-
-    def __init__(self, variable: Continuous, interval: portion.Interval):
-        super().__init__(variable)
+    def __init__(self, variable: Continuous, interval: SimpleInterval):
+        super().__init__()
+        self.variable = variable
         self.interval = interval
 
-    @property
-    def domain(self) -> ComplexEvent:
-        return ComplexEvent([Event({self.variable: self.interval})])
+    def log_likelihood_without_bounds_check(self, x: np.array) -> np.array:
+        return np.full((len(x),), self.log_pdf_value())
 
-    @property
-    def lower(self) -> float:
-        return self.interval.lower
+    def cdf(self, x: np.array) -> np.array:
+        result = (x - self.lower) / (self.upper - self.lower)
+        result = np.minimum(1, np.maximum(0, result))
+        return result
 
-    @property
-    def upper(self) -> float:
-        return self.interval.upper
+    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
+        return self.interval.as_composite_set(), self.log_pdf_value()
+
+    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
+        probability = self.cdf(interval.upper) - self.cdf(interval.lower)
+        return self.__class__(self.variable, interval), np.log(probability)
+
+    def sample(self, amount: int) -> np.array:
+        return np.random.uniform(self.lower, self.upper, (amount, 1))
 
     def pdf_value(self) -> float:
         """
         Calculate the density of the uniform distribution.
         """
-        return 1 / (self.upper - self.lower)
+        return np.exp(self.log_pdf_value())
 
-    def _pdf(self, value: float) -> float:
-        if portion.singleton(value) in self.interval:
-            return self.pdf_value()
-        else:
-            return 0
-
-    def _cdf(self, value: float) -> float:
-
-        # check edge cases
-        if value <= -portion.inf:
-            return 0.
-        if value >= portion.inf:
-            return 1.
-
-        # convert to singleton
-        singleton = portion.singleton(value)
-
-        if singleton < self.interval:
-            return 0
-        elif singleton > self.interval:
-            return 1
-        else:
-            return (value - self.lower) / (self.upper - self.lower)
-
-    def _probability(self, event: EncodedEvent) -> float:
-        interval: portion.Interval = event[self.variable]
-        probability = 0.
-
-        for interval_ in interval:
-            probability += self.cdf(interval_.upper) - self.cdf(interval_.lower)
-
-        return probability
-
-    def _mode(self):
-        return self.domain.encode(), self.pdf_value()
-
-    def sample(self, amount: int) -> List[List[float]]:
-        return [[random.uniform(self.lower, self.upper)] for _ in range(amount)]
+    def log_pdf_value(self) -> float:
+        """
+        Calculate the log-density of the uniform distribution.
+        """
+        return -np.log(self.upper - self.lower)
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
 
@@ -108,29 +70,25 @@ class UniformDistribution(ContinuousDistribution):
 
     @property
     def representation(self):
-        return f"U({self.interval})"
+        return f"U({self.variable.name} | {self.interval})"
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval)
 
-    def conditional_from_simple_interval(self, interval: portion.Interval) -> Tuple[Optional[Self], float]:
-        return self.__class__(self.variable, interval), self.cdf(interval.upper) - self.cdf(interval.lower)
-
     def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "interval": portion.to_data(self.interval)}
+        return {**super().to_json(), "interval": self.interval.to_json()}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable = Continuous.from_json(data["variable"])
-        interval = portion.from_data(data["interval"])
+        interval = SimpleInterval.from_json(data["interval"])
         return cls(variable, interval)
 
     def x_axis_points_for_plotly(self) -> List[Union[None, float]]:
-        domain = self.domain.events[0][self.variable]
-        domain_size = domain.upper - domain.lower
-        x = [domain.lower - domain_size * 0.05, domain.lower, None,
-             domain.lower, domain.upper, None, domain.upper,
-             domain.upper + domain_size * 0.05]
+        interval_size = self.upper - self.lower
+        x = [self.lower - interval_size * PADDING_FACTOR_FOR_X_AXIS_IN_PLOT, self.lower, None,
+             self.lower, self.upper, None,
+             self.upper, self.upper + interval_size * PADDING_FACTOR_FOR_X_AXIS_IN_PLOT]
         return x
 
     def pdf_trace(self) -> go.Scatter:
@@ -145,25 +103,21 @@ class UniformDistribution(ContinuousDistribution):
         cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name="Cumulative Distribution Function")
         return cdf_trace
 
-    def plot(self) -> List:
+    def plot(self, **kwargs) -> List:
         pdf_trace = self.pdf_trace()
         cdf_trace = self.cdf_trace()
 
-        mode, maximum_likelihood = self.mode()
-        mode = mode.events[0][self.variable]
+        height = self.pdf_value() * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
+
+        mode_trace = (go.Scatter(x=[self.lower, self.lower, self.upper, self.upper],
+                                 y=[0, height, height, 0], mode='lines+markers',
+                                 name="Mode", fill="toself"))
 
         expectation = self.expectation([self.variable])[self.variable]
-        mode_trace = (go.Scatter(x=[mode.lower, mode.lower, mode.upper, mode.upper, ],
-                                 y=[0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0], mode='lines+markers',
-                                 name="Mode", fill="toself"))
         expectation_trace = (
-            go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05], mode='lines+markers',
+            go.Scatter(x=[expectation, expectation], y=[0, height], mode='lines+markers',
                        name="Expectation"))
         return [pdf_trace, cdf_trace, mode_trace, expectation_trace]
 
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))
-
-    def parameters(self):
-        return {"variable": self.variable, "interval": self.interval}
-
