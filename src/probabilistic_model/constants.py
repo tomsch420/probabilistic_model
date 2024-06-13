@@ -9,6 +9,8 @@ PDF_TRACE_COLOR = plotly.colors.qualitative.Plotly[0]
 CDF_TRACE_NAME = "Cumulative Distribution Function"
 CDF_TRACE_COLOR = plotly.colors.qualitative.Plotly[1]
 
+SAMPLES_TRACE_NAME = "Samples"
+
 EXPECTATION_TRACE_NAME = "Expectation"
 EXPECTATION_TRACE_COLOR = plotly.colors.qualitative.Plotly[2]
 

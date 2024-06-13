@@ -357,8 +357,9 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
             if conditional is None:
                 continue
 
+            subcircuit_probability = np.exp(subcircuit_log_probability)
             # add subcircuit
-            result.add_subcircuit(conditional, weight * np.exp(subcircuit_log_probability))
+            result.add_subcircuit(conditional, weight * subcircuit_probability)
 
         # check if the result is valid
         total_probability = sum(result.weights)

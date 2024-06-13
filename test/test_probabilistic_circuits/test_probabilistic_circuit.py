@@ -655,6 +655,35 @@ class ComplexInferenceTestCase(unittest.TestCase):
         self.assertAlmostEqual(conditional.probability(self.event), 1.)
 
 
+class KitchenCircuitTestCase(unittest.TestCase, ShowMixin):
+    model: ProbabilisticCircuit
+    x = Continuous("x")
+    y = Continuous("y")
+
+    kitchen = SimpleEvent({x: closed(0, 6.6), y: closed(0, 7)}).as_composite_set()
+    refrigerator = SimpleEvent({x: closed(5, 6), y: closed(6.3, 7)}).as_composite_set()
+    top_kitchen_island = SimpleEvent({x: closed(0, 5), y: closed(6.5, 7)}).as_composite_set()
+    left_cabinets = SimpleEvent({x: closed(0, 0.5), y: closed(0, 6.5)}).as_composite_set()
+
+    center_island = SimpleEvent({x: closed(2, 4), y: closed(3, 5)}).as_composite_set()
+
+    occupied_spaces = refrigerator | top_kitchen_island | left_cabinets | center_island
+    free_space = kitchen - occupied_spaces
+
+    def setUp(self):
+        root = DecomposableProductUnit()
+        root.add_subcircuit(GaussianDistribution(self.x, 5.5, 0.25))
+        root.add_subcircuit(GaussianDistribution(self.y, 6.65, 0.25))
+        self.model = root.probabilistic_circuit
+
+    def test_conditioning(self):
+        model, _ = self.model.conditional(self.free_space)
+        self.assertEqual(len(model.root.subcircuits), len(self.free_space.simple_sets))
+        traces = model.plot(number_of_samples=10000)
+        assert len(traces) > 0
+        # go.Figure(traces, model.plotly_layout()).show()
+
+
 class ConvolutionTestCase(unittest.TestCase, ShowMixin):
 
     def setUp(self):

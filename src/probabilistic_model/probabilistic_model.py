@@ -298,7 +298,19 @@ class ProbabilisticModel(abc.ABC):
 
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 
-        pdf_trace = go.Scatter(x=samples[:, 0], y=likelihood, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
+        x_and_likelihood = np.concatenate((samples, likelihood.reshape(-1, 1)), axis=1)
+        x_values = []
+        y_values = []
+        supporting_interval: Interval = self.support().simple_sets[0][self.variables[0]]
+
+        for simple_interval in supporting_interval.simple_sets:
+            simple_interval: SimpleInterval
+            filtered = x_and_likelihood[(x_and_likelihood[:, 0] >= simple_interval.lower) &
+                                        (x_and_likelihood[:, 0] <= simple_interval.upper)]
+            x_values += [simple_interval.lower] + filtered[:, 0].tolist() + [simple_interval.upper]
+            y_values += [None] + filtered[:, 1].tolist() + [None]
+
+        pdf_trace = go.Scatter(x=x_values, y=y_values, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
                                line=dict(color=PDF_TRACE_COLOR))
 
         mode_traces = self.univariate_mode_traces(mode, height)
@@ -357,9 +369,10 @@ class ProbabilisticModel(abc.ABC):
         samples = self.sample(number_of_samples)
         likelihood = self.likelihood(samples)
         expectation = self.expectation(self.variables)
-        likelihood_trace = go.Scatter(x=samples[:, 0], y=samples[:, 1], mode="markers", marker=dict(color=likelihood))
+        likelihood_trace = go.Scatter(x=samples[:, 0], y=samples[:, 1], mode="markers", marker=dict(color=likelihood),
+                                      name=SAMPLES_TRACE_NAME)
         expectation_trace = go.Scatter(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
-                                       mode="markers", marker=dict(color=EXPECTATION_TRACE_COLOR))
+                                       mode="markers", marker=dict(color=EXPECTATION_TRACE_COLOR), name=EXPECTATION_TRACE_NAME)
         return [likelihood_trace, expectation_trace] + self.multivariate_mode_traces()
 
     def plot_3d(self, number_of_samples: int) -> List:
@@ -372,7 +385,7 @@ class ProbabilisticModel(abc.ABC):
         likelihood = self.likelihood(samples)
         expectation = self.expectation(self.variables)
         likelihood_trace = go.Scatter3d(x=samples[:, 0], y=samples[:, 1], z=samples[:, 2], mode="markers",
-                                        marker=dict(color=likelihood))
+                                        marker=dict(color=likelihood), name=SAMPLES_TRACE_NAME)
         expectation_trace = go.Scatter3d(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
                                          z=[expectation[self.variables[2]]], mode="markers",
                                          name=EXPECTATION_TRACE_NAME, marker=dict(color=EXPECTATION_TRACE_COLOR))

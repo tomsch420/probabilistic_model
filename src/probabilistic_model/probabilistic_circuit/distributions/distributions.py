@@ -51,16 +51,17 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, P
 
     def log_conditional_from_interval(self, interval: Interval) -> Tuple[DeterministicSumUnit, float]:
         result = DeterministicSumUnit()
-        log_probability = 0.
+        total_probability = 0.
 
         for simple_interval in interval.simple_sets:
             current_conditional, current_log_probability = self.log_conditional_from_simple_interval(simple_interval)
-            result.add_subcircuit(current_conditional, current_log_probability)
-            log_probability += current_log_probability
+            current_probability = np.exp(current_log_probability)
+            result.add_subcircuit(current_conditional, current_probability)
+            total_probability += current_probability
 
         result.normalize()
 
-        return result, log_probability
+        return result, np.log(total_probability)
 
     def log_conditional_from_singleton(self, interval: SimpleInterval) -> Tuple[DiracDeltaDistribution, float]:
         conditional, probability = super().log_conditional_from_singleton(interval)
