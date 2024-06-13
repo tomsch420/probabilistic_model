@@ -375,21 +375,38 @@ class DiscreteDistribution(UnivariateDistribution):
         weights = data["weights"]
         return cls(variable, weights)
 
-    def area_validation_metric(self, other: Self) -> float:
-        """
-        Calculate the area validation metric of this distribution and another.
+    # def area_validation_metric(self, other: Self) -> float:
+    #     """
+    #     Calculate the area validation metric of this distribution and another.
+    #
+    #     ..math:: \sum_{x \in self \cup other} |self(x) - other(x)| dx
+    #
+    #     """
+    #     distance = 0.
+    #     if isinstance(other, DiscreteDistribution):
+    #         for p_probability, q_probability in zip(self.weights, other.weights):
+    #             distance += abs(p_probability - q_probability)
+    #     else:
+    #         raise NotImplementedError(f"AVM between DiscreteDistribution and {type(other)} is not known.")
+    #     return distance/2
 
-        ..math:: \sum_{x \in self \cup other} |self(x) - other(x)| dx
-
-        """
-        distance = 0.
+    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights):
+        resulting_elements = []
         if isinstance(other, DiscreteDistribution):
-            for p_probability, q_probability in zip(self.weights, other.weights):
-                distance += abs(p_probability - q_probability)
+            own_weight = sum(own_node_weights.get(hash(self)))
+            other_weight = sum(other_node_weights.get(hash(other)))
+            for i in range(len(self.variable.domain)):
+                p_probability = self.weights[i]
+                q_probability = other.weights[i]
+                if p_probability * own_weight > q_probability * other_weight:
+                    resulting_elements.append(self.variable.domain[i])
+
         else:
             raise NotImplementedError(f"AVM between DiscreteDistribution and {type(other)} is not known.")
-        return distance/2
+        return Event({self.variable: resulting_elements})
 
+    def all_union_of_mixture_points_with(self, other: Self, own_node_weights, other_node_weights):
+        return self.domain.union(other.domain)
 class SymbolicDistribution(DiscreteDistribution):
     """
     Class for symbolic (categorical) distributions.

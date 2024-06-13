@@ -1,12 +1,15 @@
 import json
 import os.path
 import unittest
+from typing import Type
+
 import numpy as np
 import portion
 from matplotlib import pyplot as plt
 from random_events.variables import Integer, Continuous
 from typing_extensions import Union
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
+from probabilistic_model.learning.jpt.jpt import JPT, DecomposableProductUnit as JPTLeaf
 from probabilistic_model.probabilistic_circuit.convolution.convolution import (UniformDistributionConvolution,
                                                                                GaussianDistributionConvolution,
                                                                                TruncatedGaussianDistributionConvolution,
@@ -17,6 +20,7 @@ from probabilistic_model.probabilistic_circuit.distributions.distributions impor
                                                                                    DiracDeltaDistribution,
                                                                                    TruncatedGaussianDistribution)
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit
 
 
 class ShowMixin:
@@ -382,6 +386,129 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
     def test_determinism(self):
         self.assertFalse(self.model.is_deterministic())
 
+    def test_avm(self):
+        x = Continuous("x")
+        y = Continuous("y")
+        c1 = DecomposableProductUnit()
+        c1.add_subcircuit(UniformDistribution(x, portion.closed(2, 3)))
+        c1.add_subcircuit(UniformDistribution(y, portion.closed(0, 1)))
+
+        c2 = DecomposableProductUnit()
+        c2.add_subcircuit(UniformDistribution(x, portion.closed(6, 7)))
+        c2.add_subcircuit(UniformDistribution(y, portion.closed(0, 1)))
+        result = c1.area_validation_metric(c2)
+        self.assertAlmostEqual(result, 1)
+    def test_avm_is_equal(self):
+
+        other_model = ProbabilisticCircuit()
+
+        u1 = UniformDistribution(self.real, portion.closed(0, 1))
+        u2 = UniformDistribution(self.real, portion.closed(3, 5))
+        other_model.add_node(u1)
+        other_model.add_node(u2)
+
+        sum_unit_1 = DeterministicSumUnit()
+
+        other_model.add_node(sum_unit_1)
+
+        other_model.add_edge(sum_unit_1, u1, weight=0.5)
+        other_model.add_edge(sum_unit_1, u2, weight=0.5)
+
+        u3 = UniformDistribution(self.real2, portion.closed(2, 2.25))
+        u4 = UniformDistribution(self.real2, portion.closed(2, 5))
+        sum_unit_2 = SmoothSumUnit()
+        other_model.add_nodes_from([u3, u4, sum_unit_2])
+
+        e3 = (sum_unit_2, u3, 0.7)
+        e4 = (sum_unit_2, u4, 0.3)
+        other_model.add_weighted_edges_from([e3, e4])
+
+        product_1 = DecomposableProductUnit()
+        other_model.add_node(product_1)
+
+        e5 = (product_1, sum_unit_1)
+        e6 = (product_1, sum_unit_2)
+        other_model.add_edges_from([e5, e6])
+        self.assertEqual(self.model.root.area_validation_metric(other_model.root), 0)
+
+    def test_avm_not_equal_weights(self):
+
+        other_model = ProbabilisticCircuit()
+
+        u1 = UniformDistribution(self.real, portion.closed(0, 1))
+        u2 = UniformDistribution(self.real, portion.closed(3, 5))
+        other_model.add_node(u1)
+        other_model.add_node(u2)
+
+        sum_unit_1 = DeterministicSumUnit()
+
+        other_model.add_node(sum_unit_1)
+
+        other_model.add_edge(sum_unit_1, u1, weight=0.02)
+        other_model.add_edge(sum_unit_1, u2, weight=0.98)
+
+        u3 = UniformDistribution(self.real2, portion.closed(2, 2.25))
+        u4 = UniformDistribution(self.real2, portion.closed(2, 5))
+        sum_unit_2 = SmoothSumUnit()
+        other_model.add_nodes_from([u3, u4, sum_unit_2])
+
+        e3 = (sum_unit_2, u3, 0.6)
+        e4 = (sum_unit_2, u4, 0.4)
+        other_model.add_weighted_edges_from([e3, e4])
+
+        product_1 = DecomposableProductUnit()
+        other_model.add_node(product_1)
+
+        e5 = (product_1, sum_unit_1)
+        e6 = (product_1, sum_unit_2)
+        other_model.add_edges_from([e5, e6])
+
+        self.assertEqual(self.model.root.area_validation_metric(other_model.root), 0)
+
+
+    def test_avm_not_equal_leafs(self):
+
+        other_model = ProbabilisticCircuit()
+
+        u1 = UniformDistribution(self.real, portion.closed(0, 1))
+        u2 = UniformDistribution(self.real, portion.closed(3, 7))
+        other_model.add_node(u1)
+        other_model.add_node(u2)
+
+        sum_unit_1 = DeterministicSumUnit()
+
+        other_model.add_node(sum_unit_1)
+
+        other_model.add_edge(sum_unit_1, u1, weight=0.5)
+        other_model.add_edge(sum_unit_1, u2, weight=0.5)
+
+        u3 = UniformDistribution(self.real2, portion.closed(2, 3))
+        u4 = UniformDistribution(self.real2, portion.closed(4, 8))
+        sum_unit_2 = SmoothSumUnit()
+        other_model.add_nodes_from([u3, u4, sum_unit_2])
+
+        e3 = (sum_unit_2, u3, 0.7)
+        e4 = (sum_unit_2, u4, 0.3)
+        other_model.add_weighted_edges_from([e3, e4])
+
+        product_1 = DecomposableProductUnit()
+        other_model.add_node(product_1)
+
+        e5 = (product_1, sum_unit_1)
+        e6 = (product_1, sum_unit_2)
+        other_model.add_edges_from([e5, e6])
+        print(self.model.is_structured_decomposable(), self.model.decomposes_as(other_model))
+
+        self.assertAlmostEqual(self.model.root.area_validation_metric(other_model.root), 0.56, places=2)
+
+
+
+
+
+
+
+
+
 
 class FactorizationTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
@@ -689,6 +816,159 @@ class ConvolutionTestCase(unittest.TestCase, ShowMixin):
                                                          self.interval.upper + self.location))
         self.assertEqual(result.mean, self.mean + self.location)
 
+class StructuredDecomposabilityTestCase(unittest.TestCase):
+
+    model = ProbabilisticCircuit()
+    x = Continuous("x")
+    y = Continuous("y")
+    z = Continuous("z")
+
+    sum_unit_1 = DeterministicSumUnit()
+    model.add_node(sum_unit_1)
+    product_1, product_2, product_3 = DecomposableProductUnit(), DecomposableProductUnit(), DecomposableProductUnit()
+    product_4, product_5, product_6 = DecomposableProductUnit(), DecomposableProductUnit(), DecomposableProductUnit()
+
+    model.add_node(product_1)
+    model.add_node(product_2)
+    model.add_edge(sum_unit_1, product_1, weight=0.5)
+    model.add_edge(sum_unit_1, product_2, weight=0.5)
+
+    sum_unit_2 = DeterministicSumUnit()
+    sum_unit_3 = DeterministicSumUnit()
+    product_1.add_subcircuit(sum_unit_2)
+    product_1.add_subcircuit(UniformDistribution(z, portion.closed(2, 3)))
+    product_2.add_subcircuit(sum_unit_3)
+    product_2.add_subcircuit(UniformDistribution(z, portion.closed(4, 5)))
+
+    sum_unit_2.add_subcircuit(product_3, weight=0.5)
+    sum_unit_2.add_subcircuit(product_4, weight=0.5)
+    sum_unit_3.add_subcircuit(product_5, weight=0.5)
+    sum_unit_3.add_subcircuit(product_6, weight=0.5)
+
+    range1 = portion.closed(0, 2)
+    range2 = portion.closed(4, 6)
+    for unit in [product_3, product_4, product_5, product_6]:
+        unit.add_subcircuit(UniformDistribution(x, range1))
+        unit.add_subcircuit(UniformDistribution(y, range2))
+    def test_is_structured_decomposable(self):
+        assert self.model.is_structured_decomposable()
+
+    def test_structured_decomposable_as_ture(self):
+        model_other = ProbabilisticCircuit()
+        x = Continuous("x")
+        y = Continuous("y")
+        z = Continuous("z")
+
+        sum_unit_1 = DeterministicSumUnit()
+        model_other.add_node(sum_unit_1)
+        product_1, product_2, product_3 = DecomposableProductUnit(), DecomposableProductUnit(), DecomposableProductUnit()
+        product_4, product_5, product_6 = DecomposableProductUnit(), DecomposableProductUnit(), DecomposableProductUnit()
+
+        model_other.add_node(product_1)
+        model_other.add_node(product_2)
+        model_other.add_edge(sum_unit_1, product_1, weight=0.5)
+        model_other.add_edge(sum_unit_1, product_2, weight=0.5)
+
+        sum_unit_2 = DeterministicSumUnit()
+        sum_unit_3 = DeterministicSumUnit()
+        product_1.add_subcircuit(sum_unit_2)
+        product_1.add_subcircuit(UniformDistribution(z, portion.closed(7, 19)))
+        product_2.add_subcircuit(sum_unit_3)
+        product_2.add_subcircuit(UniformDistribution(z, portion.closed(0, 5)))
+
+        sum_unit_2.add_subcircuit(product_3, weight=0.3)
+        sum_unit_2.add_subcircuit(product_4, weight=0.7)
+        sum_unit_3.add_subcircuit(product_5, weight=0.5)
+        sum_unit_3.add_subcircuit(product_6, weight=0.5)
+
+        range1 = portion.closed(0, 5)
+        range2 = portion.closed(4, 6)
+        for unit in [product_3, product_4, product_5, product_6]:
+            unit.add_subcircuit(UniformDistribution(x, range1))
+            unit.add_subcircuit(UniformDistribution(y, range2))
+
+        assert self.model.decomposes_as(model_other)
+
+    def test_structured_decomposable_as_false(self):
+        model_other = ProbabilisticCircuit()
+        x = Continuous("z")
+        y = Continuous("y")
+        z = Continuous("x")
+
+        sum_unit_1 = DeterministicSumUnit()
+        model_other.add_node(sum_unit_1)
+        product_1, product_2, product_3 = DecomposableProductUnit(), DecomposableProductUnit(), DecomposableProductUnit()
+        product_4, product_5, product_6 = DecomposableProductUnit(), DecomposableProductUnit(), DecomposableProductUnit()
+
+        model_other.add_node(product_1)
+        model_other.add_node(product_2)
+        model_other.add_edge(sum_unit_1, product_1, weight=0.5)
+        model_other.add_edge(sum_unit_1, product_2, weight=0.5)
+
+        sum_unit_2 = DeterministicSumUnit()
+        sum_unit_3 = DeterministicSumUnit()
+        product_1.add_subcircuit(sum_unit_2)
+        product_1.add_subcircuit(UniformDistribution(z, portion.closed(7, 19)))
+        product_2.add_subcircuit(sum_unit_3)
+        product_2.add_subcircuit(UniformDistribution(z, portion.closed(0, 5)))
+
+        sum_unit_2.add_subcircuit(product_3, weight=0.3)
+        sum_unit_2.add_subcircuit(product_4, weight=0.7)
+        sum_unit_3.add_subcircuit(product_5, weight=0.5)
+        sum_unit_3.add_subcircuit(product_6, weight=0.5)
+
+        range1 = portion.closed(0, 5)
+        range2 = portion.closed(4, 6)
+        for unit in [product_3, product_4, product_5, product_6]:
+            unit.add_subcircuit(UniformDistribution(x, range1))
+            unit.add_subcircuit(UniformDistribution(y, range2))
+
+        assert not self.model.decomposes_as(model_other)
+
+class AreaValidationMetricTestCase(unittest.TestCase):
+
+    x = Continuous("x")
+    y = Continuous("y")
+    standard_circuit = JPTLeaf()
+    standard_circuit.add_subcircuit(UniformDistribution(x, portion.closed(0, 1)))
+    standard_circuit.add_subcircuit(UniformDistribution(y, portion.closed(0, 1)))
+    standard_circuit = standard_circuit.probabilistic_circuit
+
+    event_1 = Event({x: portion.closed(0, .25), y: portion.closed(0, .25)})
+    event_2 = Event({x: portion.closed(0.75, 1), y: portion.closed(0.75, 1)})
+
+
+    circuit_1, _ = standard_circuit.conditional(event_1.complement())
+    circuit_2, _ = standard_circuit.conditional(event_2.complement())
+    circuit_3, _ = circuit_2.conditional(event_1)
+    circuit_4, _ = circuit_1.conditional(event_2)
+
+
+
+    def test_jpt_avm(self):
+        result = JPT.area_validation_metric(self.circuit_1.root, self.circuit_2.root)
+
+        p_event_by_hand = self.event_2
+        q_event_by_hand = self.event_1
+        self.assertEqual(self.circuit_2.probability(p_event_by_hand), 0)
+        self.assertEqual(self.circuit_1.probability(q_event_by_hand), 0)
+        result_by_hand = self.circuit_1.probability(p_event_by_hand) + self.circuit_2.probability(q_event_by_hand)
+        self.assertAlmostEqual(result, result_by_hand/2, 4)
+
+    def test_jpt_avm_same_input(self):
+        result = JPT.area_validation_metric(self.circuit_1.root, self.circuit_1.root)
+        self.assertEqual(result, 0)
+
+    def test_jpt_avm_disjunct_input(self):
+        result = JPT.area_validation_metric(self.circuit_3.root, self.circuit_4.root)
+
+        self.assertEqual(result, 1)
+
+    def test_avm_mc(self):
+        import probabilistic_model.Monte_Carlo_Estimator as mc
+        result = mc.monte_carlo_estimation_area_validation_metric(sample_amount=1000, first_model=self.circuit_1, senc_model=self.circuit_2)
+
+        self.assertEqual(result, 0.13333333333333336/2)
 
 if __name__ == '__main__':
     unittest.main()
