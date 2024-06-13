@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import collections
 import queue
 import random
 from typing import Tuple, Iterable, TYPE_CHECKING
@@ -381,6 +380,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
 
         # for every mode
         for mode in modes.events[0][self.variables[0]]:
+
             # extend the x and y values
             xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
             ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
@@ -533,16 +533,42 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         }
 
     def area_validation_metric(self, other: Self) -> float:
-        """
-        Calculate the area validation metric of the circuit.
-        This is forwarded from avm of ProbabilisticCircuit Class
-        """
-        return self.probabilistic_circuit.root.area_validation_metric(other.probabilistic_circuit.root)
+        assert self.variables == other.variables, "The AVM can only be evaluated on models with the same variables"
+        avm = 0.
+        own_nodes_weights = nodes_weights(self)
+        other_nodes_weights = nodes_weights(other)
 
-    def event_of_higher_density(self, other: Self,  own_node_weights, other_node_weights) -> Event:
-        #NOT needed! #FRAGE
-        #raise NotImplementedError
-        return self.probabilistic_circuit.root.event_of_higher_density(other.probabilistic_circuit.root, own_node_weights, other_node_weights)
+        for own_leaf in self.leaves:
+            for other_leaf in other.leaves:
+                if own_leaf.variable == other_leaf.variable:
+                    p_own_leaf = sum(own_nodes_weights[hash(own_leaf)])
+                    p_other_leaf = sum(own_nodes_weights[hash(other_leaf)])
+                    avm += p_own_leaf * p_other_leaf * own_leaf.area_validation_metric(other_leaf)
+        return avm
+
+def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
+    node_weights = {hash(circuit.root): [1]}
+    seen_nodes = set()
+    seen_nodes.add(hash(circuit.root))
+    to_visit_nodes = queue.Queue()
+
+    to_visit_nodes.put(circuit.root)
+    while not to_visit_nodes.empty():
+        node = to_visit_nodes.get()
+        # sollte schon garantiert sein durch Beirten Suche
+        # if len([x for x in pc.predecessors(node) if x not in visted_nodes]) != 0:
+        #     to_visit_nodes.put(node)
+        #     continue
+        succ_iter = circuit.successors(node)
+        for succ in succ_iter:
+            if circuit.has_edge(node, succ):
+                weight = circuit.get_edge_data(node, succ)["weight"]
+                node_weights[hash(succ)] = [old * weight for old in node_weights[hash(node)]] + node_weights.get(
+                    hash(succ), [])
+                if hash(succ) not in seen_nodes:
+                    seen_nodes.add(hash(succ))
+                    to_visit_nodes.put(succ)
+    return node_weights
 
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
@@ -792,37 +818,6 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
                 # create edge from proxy to subcircuit
                 proxy_sum_node.add_subcircuit(other_subcircuit, weight=weight)
 
-    # def area_validation_metric(self, other: Self) -> float:
-    #     """
-    #     Calculate the area validation metric of self and other form the SmoothSumUnit point down.
-    #     it is given that both PCs are Smooth and Structure Decomposable
-    #     :param: the other Circuit
-    #     """
-    #     distance = 0.
-    #     if isinstance(other, SmoothSumUnit):
-    #         for own_weighte_circuits in self.weighted_subcircuits:
-    #             for other_weighte_circuits in other.weighted_subcircuits:
-    #                 own_weight, own_subcircuit = own_weighte_circuits
-    #                 other_weight, other_subcircuit = other_weighte_circuits
-    #                 if own_subcircuit.variables == other_subcircuit.variables:
-    #                     distance += own_weight * other_weight * own_subcircuit.area_validation_metric(other_subcircuit)
-    #     else:
-    #         raise NotImplementedError(f"AVM between {type(self)} and {type(other)} is not known.")
-    #     return distance
-    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights) -> Event:
-        result = Event()
-        for i in range(len(self.subcircuits)):
-            for j in range(i, len(other.subcircuits)):
-                own_subcircuit = self.subcircuits[i]
-                other_subcircuit = other.subcircuits[j]
-                density = own_subcircuit.event_of_higher_density(other_subcircuit, own_node_weights, other_node_weights)
-                if own_subcircuit.variables in result:
-                    result = result.union(density)
-                else:
-                    for var, value in density.items():
-                        result[var] = value
-        return result
-
     def mount_from_bayesian_network(self, other: 'SmoothSumUnit'):
         """
         Mount a distribution from tge `to_probabilistic_circuit` method in bayesian networks.
@@ -837,6 +832,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         # mount the other subcircuit
 
         for (own_weight, own_subcircuit), other_subcircuit in zip(self.weighted_subcircuits, other.subcircuits):
+
             # create proxy nodes for mounting
             proxy_product_node = DecomposableProductUnit()
             self.probabilistic_circuit.add_node(proxy_product_node)
@@ -899,7 +895,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
 
         # for every unique combination of subcircuits
         for index, subcircuit in enumerate(self.subcircuits):
-            for subcircuit_ in self.subcircuits[index + 1:]:
+            for subcircuit_ in self.subcircuits[index+1:]:
 
                 # if they intersect, the sum is not deterministic
                 if not subcircuit_.domain.intersection(subcircuit.domain).is_empty():
@@ -916,7 +912,7 @@ class DeterministicSumUnit(SmoothSumUnit):
 
     label = 'shape=stencil(vZVtb4MgEMc/DW8XhLj6dnHb92B6naQUDLC1+/ZD0LX4QLtFZ4zm7uDn3d8DEC1Nw1pABDeIPiNCMozd09mnkc1MC5UNzj0/Qx3cxmp1gBOvbQ/gsgHNbRelLwg/uTHdTctKSekIXEkTRa7iDsa4dHPxOcD6b39FVuv4R7Cg+wyDF5HX+7EP+TbgbKN8Y+yQ/er5rgeOM862+nGrgbO/Y2npPEvNTcs3Vh3etfqQ9XTWYmyvNMwEfsJciLDwEmWGAZUSSjtHePs6EKHYX2mZrle22w4uK5yk57WsGzgJDOGj+oSL7vmoUfIUe0AILpcRxV2IOIss7qo8qcx8FsVvEP7nL+g0CL+WwrNbaLoyEIK35hZjfECMD5BNSl9syhtr/t8l20WMXSRZ8RgpNpirCuanTbYR7w0nvnd8Aw==);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
     representation = '⊕'
-    image = os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", 'DeterministicSumUnit.png')
+    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DeterministicSumUnit.png')
 
     def merge_modes_if_one_dimensional(self, modes: List[EncodedEvent]) -> List[EncodedEvent]:
         """
@@ -980,7 +976,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
     label = 'shape=stencil(tZXbboQgEIafhtsGIY3XjW3fg+psJcsCAbe7ffsiSFc8dduiMZqZYT5/BgcQrWzLNCCCW0SfESEFxu7p7MvEZlZD3QXngV+hCW7bGXWEC2+6AcBlC4Z3fZS+IPzkxvQ3rWolpSNwJW0SGcUdjHHpcvE1wIZvfyaWdvwTdGAGhcGLyOv92IfHfcDFTnpTbFSfXW8+cKq42GvhsoGLv2Np5TxrPzet3lh9fDfqLJt51mrsoAwsBL7DXIjQeBvTDANqJZRxjvD280CEYn9tl2nc2W47uHU42c7TrB84C8TwSX3Are4kXc9oLrMjQnA5QpQporwLkaoo/6+C/EaFX/yVOsXC56rw4ha6PTMQgmv7E2N6QEwPkKxT92mzrvDecIB5xxc=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
     representation = "⊗"
-    image = os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", 'DecomposableProductUnit.png')
+    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DecomposableProductUnit.png')
 
     @property
     def domain(self) -> ComplexEvent:
@@ -1040,7 +1036,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     def is_decomposable(self):
         for index, subcircuit in enumerate(self.subcircuits):
             variables = subcircuit.variables
-            for subcircuit_ in self.subcircuits[index + 1:]:
+            for subcircuit_ in self.subcircuits[index+1:]:
                 if len(set(subcircuit_.variables).intersection(set(variables))) > 0:
                     return False
         return True
@@ -1053,6 +1049,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
         # gather all modes from the children
         for subcircuit in self.subcircuits[1:]:
+
             subcircuit_mode, subcircuit_likelihood = subcircuit._mode()
             mode = mode & subcircuit_mode
 
@@ -1104,6 +1101,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
                 # for each variable and its index of the subcircuit
                 for child_variable_index, variable in enumerate(subcircuit.variables):
+
                     # find the index of the variable in the variables of the product
                     rearranged_samples[sample_index][variables.index(variable)] = (
                         sample_subset[sample_index][child_variable_index])
@@ -1193,49 +1191,6 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             else:
                 # mount the simplified subcircuit
                 result.add_subcircuit(simplified_subcircuit)
-
-        return result
-
-    def decomposes_as(self, other: Self) -> bool:
-        """
-        Check if this product unit decomposes in the same way as the other poduct unit.
-        """
-        own_subcircuit_scopes = [child.variables for child in self.subcircuits]
-        other_subcircuit_scopes = [child.variables for child in other.subcircuits]
-
-        return (all([scope in other_subcircuit_scopes for scope in own_subcircuit_scopes]) and
-                all([scope in own_subcircuit_scopes for scope in other_subcircuit_scopes]))
-
-    # def area_validation_metric(self, other: Self) -> float:
-    #     """
-    #     Calculate the area validation metric of self and other form the PorductUnit point down.
-    #     it is given that both PCs are Smooth and Structure Decomposable
-    #     :param: the other Circuit
-    #     """
-    #     distance = 1
-    #     if isinstance(other, DecomposableProductUnit):
-    #
-    #         for i in range(len(self.subcircuits)):
-    #             for j in range(i, len(self.subcircuits)):
-    #                 own_subcircuit = self.subcircuits[i]
-    #                 other_subcircuit = other.subcircuits[j]
-    #                 if own_subcircuit.variables == other_subcircuit.variables:
-    #                     distance *= own_subcircuit.area_validation_metric(other_subcircuit)
-    #         # for own_subcircuit, other_subcircuit in zip(self.subcircuits, other.subcircuits):
-    #         #     distance *= own_subcircuit.area_validation_metric(other_subcircuit)
-    #     else:
-    #         raise NotImplementedError(f"AVM between {type(self)} and {type(other)} is not known.")
-    #     return distance
-
-    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights)-> Event:
-        result = Event()
-        for i in range(len(self.subcircuits)):
-            for j in range(i, len(other.subcircuits)):
-                own_subcircuit = self.subcircuits[i]
-                other_subcircuit = other.subcircuits[j]
-                if own_subcircuit.variables == other_subcircuit.variables:
-                    density = own_subcircuit.event_of_higher_density(other_subcircuit, own_node_weights, other_node_weights)
-                    result = result.intersection(density)
 
         return result
 
@@ -1458,6 +1413,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         icon_center = icon_size / 2.0
 
         for node in self.nodes:
+
             xf, yf = tr_figure(pos[node])
             xa, ya = tr_axes((xf, yf))
 
@@ -1482,229 +1438,3 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         :return: Rather this circuit is deterministic or not.
         """
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SmoothSumUnit))
-
-    @property
-    def product_units(self):
-        return [node for node in self.nodes if isinstance(node, DecomposableProductUnit)]
-
-    def is_structured_decomposable(self) -> bool:
-        """
-        Check if the circuit is structured decomposable according to definition 45.
-        """
-        if not self.is_decomposable():
-            return False
-
-        for index, product_node_1 in enumerate(self.product_units):
-            for product_node_2 in self.product_units[index + 1:]:
-                if product_node_1.variables == product_node_2.variables:
-                    equal = product_node_1.decomposes_as(product_node_2)
-                    if not equal:
-                        return False
-        return True
-
-    def decomposes_as(self, other: Self) -> bool:
-        """
-        Check if this circuit decomposes the same way as the other circuit.
-        """
-        for product_node_1 in self.product_units:
-            for product_node_2 in other.product_units:
-                if product_node_1.variables == product_node_2.variables:
-                    equal = product_node_1.decomposes_as(product_node_2)
-                    if not equal:
-                        return False
-        return True
-
-    def area_validation_metric(self, other: Self) -> float:
-        """
-        Calculate the area validation metric of self and other.
-        This is the header of the recusiv area validation metric functions.
-        it tests for all needed Chracktistics of the PCs and correctly transforms the Value.
-        :param other: The other circuit.
-
-        """
-
-        self.simplify()
-        other.simplify()
-        assert self.variables == other.variables, "The AVM can only be evaluated on models with the same variables"
-        #given on jpt
-        #assert self.decomposes_as(other), "The AVM can only be evaluated on models with the same variables"
-
-        own_node_weights = self.nodes_weights()
-        other_node_weights = other.nodes_weights()
-
-        p_event = self.root.event_of_higher_density(other.root, own_node_weights, other_node_weights)
-        q_event = other.root.event_of_higher_density(self.root, other_node_weights, own_node_weights)
-
-        print(p_event)
-        print(q_event)
-
-        return (self.probability(p_event) - other.probability(p_event)
-                + self.probability(q_event) - other.probability(q_event))
-        #Alt ansatz
-        #
-        # own_leaf_avm, other_leaf_avm = self.all_leaf_avm(other)
-        #
-        # own_avm = own_leaf_avm
-        # other_avm = other_leaf_avm
-        # #this works because of the simple Formation of JPTs
-        # # if its complex need to keep higher level along not all succ are in avm_temp then there can be resolved
-        # #QUESTION: is it possibel that there more Presuccesors
-        #
-        # own_all_presucc: {ProbabilisticCircuitMixin} = {j for sub in
-        #                                                 [list(self.predecessors(leave)) for leave
-        #                                                  in self.leaves] for j in sub}
-        #
-        # while len(own_all_presucc) > 0:
-        #     new_pre = set()
-        #     for pre in own_all_presucc:
-        #         pre: ProbabilisticCircuitMixin
-        #         node_avm_value = []
-        #         sub_avm = []  #[own_avm.get(hash(sub)).values() for sub in pre.subcircuits]
-        #         edge_weights = []
-        #         for items in [(sub, own_avm.get(hash(sub))) for sub in pre.subcircuits]:#<--- give struckt for Sum
-        #             temp_list = []
-        #             for i in items[1]:
-        #                 if isinstance(i, List):
-        #                     temp_list.extend(i)
-        #                 else:
-        #                     temp_list.append(i)
-        #             weight = self.get_edge_data(pre, items[0]).get("weight", 1)
-        #             edge_weights.append(weight)
-        #             sub_avm.append(temp_list)
-        #         if isinstance(pre, DeterministicSumUnit):
-        #             weight_sub_avm = [[s * edge_weights[i] for s in sub_avm[i]] for i in range(len(sub_avm))]
-        #             node_avm_value = sum([sum(s) for s in weight_sub_avm])
-        #         elif isinstance(pre, DecomposableProductUnit):
-        #             for i in range(len(sub_avm)):
-        #                 for j in range(i, len(sub_avm)):
-        #                     if i == j:
-        #                         continue
-        #                     for k in sub_avm[i]:
-        #                         for t in sub_avm[j]:
-        #                             node_avm_value.append(k * t)
-        #         else:
-        #             Exception("this is not a legal Node for the pc {}".format(type(pre)))
-        #         own_avm.update({hash(pre): node_avm_value})
-        #         new_pre = new_pre.union(list(self.predecessors(pre)))
-        #
-        #     own_all_presucc = new_pre
-        #
-        # other_all_presucc: {ProbabilisticCircuitMixin} = {j for sub in
-        #                                                   [list(other.predecessors(leave)) for
-        #                                                    leave
-        #                                                    in other.leaves] for j in sub}
-        # while len(other_all_presucc) > 0:
-        #     new_pre = set()
-        #     for pre in other_all_presucc:
-        #         pre: ProbabilisticCircuitMixin
-        #         node_avm_value = []
-        #         sub_avm = []  #[other_avm.get(hash(sub)).values() for sub in pre.subcircuits]
-        #         edge_weights = []
-        #         for items in [(sub, other_avm.get(hash(sub))) for sub in pre.subcircuits]:  # <--- give struckt for Sum
-        #             temp_list = []
-        #             for i in items[1]:
-        #                 if isinstance(i, List):
-        #                     temp_list.extend(i)
-        #                 else:
-        #                     temp_list.append(i)
-        #             weight = other.get_edge_data(pre, items[0]).get("weight", 1)
-        #             edge_weights.append(weight)
-        #             sub_avm.append(temp_list)
-        #         if isinstance(pre, DeterministicSumUnit):
-        #             weight_sub_avm = [[s * edge_weights[i] for s in sub_avm[i]] for i in range(len(sub_avm))]
-        #             node_avm_value = sum([sum(s) for s in weight_sub_avm])
-        #         elif isinstance(pre, DecomposableProductUnit):
-        #             for i in range(len(sub_avm)):
-        #                 for j in range(i, len(sub_avm)):
-        #                     if i == j:
-        #                         continue
-        #                     for k in sub_avm[i]:
-        #                         for t in sub_avm[j]:
-        #                             node_avm_value.append(k * t)
-        #         else:
-        #             Exception("this is not a legal Node for the pc {}".format(type(pre)))
-        #         other_avm.update({hash(pre): node_avm_value})
-        #         new_pre = new_pre.union(list(other.predecessors(pre)))
-        #     other_all_presucc = new_pre
-        #
-        # own_root_value = own_avm.get(hash(self.root))
-        # if isinstance(own_root_value, List):
-        #     own_root_value = sum(own_root_value)
-        # other_root_value = other_avm.get(hash(other.root))
-        # if isinstance(other_root_value, List):
-        #     other_root_value = sum(other_root_value)
-        #
-        # return abs(own_root_value + other_root_value) / 2
-        # #go up every Leaf Precessor that was not called before (if recusive then that safe)
-        # #Mutliply own_leaf vec cross other_leaf
-        # #if higher is Product reapeat withe List for Products Node# Quest is if you lose some others and vice verso
-        # # because of scope
-        # #then if you hit sum just add lists upp
-        # # if root (own_root_value + other_root_value)/2 is result
-        #
-        # self.simplify()
-        # other.simplify()
-        # assert self.variables == other.variables, "The AVM can only be evaluated on models with the same variables"
-        # assert self.decomposes_as(other), "The AVM can only be evaluated on models with the same variables"
-        # return self.root.area_validation_metric(other.root) / 2
-
-    def nodes_weights(self) -> dict:
-        """
-        """
-        node_weights = {hash(self.root): [1]}
-        seen_nodes = set()
-        seen_nodes.add(hash(self.root))
-        import queue
-        to_visit_nodes = queue.Queue()
-
-        to_visit_nodes.put(self.root)
-        while not to_visit_nodes.empty():
-            node = to_visit_nodes.get()
-            succ_iter = self.successors(node)
-            for succ in succ_iter:
-                if self.has_edge(node, succ):
-                    weight = self.get_edge_data(node, succ).get("weight", 1)
-                    node_weights[hash(succ)] = [old * weight for old in node_weights[hash(node)]] + node_weights.get(
-                        hash(succ), [])
-                    if hash(succ) not in seen_nodes:
-                        seen_nodes.add(hash(succ))
-                        to_visit_nodes.put(succ)
-        return node_weights
-
-    def all_leaf_avm(self, other: Self):
-        """
-
-        """
-        own_leaf_avm = {hash(k): [] for k in self.leaves}
-        other_leaf_avm = {hash(k): [] for k in other.leaves}
-        for own_leaf in self.leaves:
-            for other_leaf in other.leaves:
-                #for comman PC case: need a check_up to root if same Structur
-                # or better said avm value got a condtion which type ther come form
-                # if it becomes illigal later kick out
-                #this is enough for JPTs
-                #QUESTION predessors only 1 or none jpt wise?
-                # own_pres_var = [(p.variables) for p in self.predecessors(own_leaf)]
-                # other_pres_var = [(p.variables) for p in self.predecessors(other_leaf)]
-                if (own_leaf.variables == other_leaf.variables):
-                    self_avm_value = own_leaf.area_validation_metric(other_leaf)
-                    other_avm_value = other_leaf.area_validation_metric(own_leaf)
-
-                    own_leaf_avm[hash(own_leaf)].append(self_avm_value)
-
-                    other_leaf_avm[hash(other_leaf)].append(other_avm_value)
-
-        return own_leaf_avm, other_leaf_avm
-
-
-#Product Interesction Summe Union
-# AVM-> higher_densty *"
-# recursive leaf leaf
-
-class ShallowProbabilisticCircuit(ProbabilisticCircuit):
-
-    @classmethod
-    def from_probabilistic_circuit(cls, probabilistic_circuit: ProbabilisticCircuit):
-        result = cls()
-        # funny calculation
-        return result

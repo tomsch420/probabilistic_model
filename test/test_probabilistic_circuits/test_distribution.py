@@ -53,6 +53,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         conditional, probability = self.model.conditional(event)
         self.assertEqual(conditional, None)
 
+
 class DiscreteDistributionTestCase(unittest.TestCase):
 
     symbol = Symbolic("animal", ["cat", "dog", "fish"])

@@ -412,56 +412,14 @@ class NygaDistribution(DeterministicSumUnit, ContinuousDistribution):
                                  name="Expectation"))
         return traces
 
-    def all_union_of_mixture_points_with(self, other: Self):
-        all_mixture_points = set()
-        for leaf in self.leaves:
-            leaf: UniformDistribution
-            all_mixture_points.add(leaf.interval.lower)
-            all_mixture_points.add(leaf.interval.upper)
-
-        for leaf in other.leaves:
-            leaf: UniformDistribution
-            all_mixture_points.add(leaf.interval.lower)
-            all_mixture_points.add(leaf.interval.upper)
-
-        all_mixture_points = list(all_mixture_points)
-        all_mixture_points.sort()
-        portion_list = []
-        for i in range(1, len(all_mixture_points)-1):
-            portion_list += portion.open(all_mixture_points[i-1], all_mixture_points[i])
-        return all_mixture_points
-
-    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights) -> Event:
-
-        sum_own_weights = 0.
-        sum_other_weights = 0.
-
-        all_mixture_points = set()
-        for leaf in self.leaves:
-            leaf: UniformDistribution
-            all_mixture_points.add(leaf.interval.lower)
-            all_mixture_points.add(leaf.interval.upper)
-            sum_own_weights += sum(own_node_weights.get(hash(leaf),[0]))
-
-        for leaf in other.leaves:
-            leaf: UniformDistribution
-            all_mixture_points.add(leaf.interval.lower)
-            all_mixture_points.add(leaf.interval.upper)
-            sum_other_weights += sum[other_node_weights.get(hash(leaf),[0])]
-
-        all_mixture_points = list(all_mixture_points)
-        all_mixture_points.sort()
-
-        resulting_event = portion.empty()
-
-        previous_point = -float("inf")
-        for point in all_mixture_points:
-            own_density = self.pdf(point) * sum_own_weights
-            other_density = other.pdf(point) * sum_other_weights
-            if own_density > other_density:
-                current_event = portion.closed(previous_point, point)
-                resulting_event = resulting_event.union(current_event)
-
-        return Event({self.variable: resulting_event})
-
-
+    def area_validation_metric(self, other: Self) -> float:
+        distance = 0.
+        if isinstance(other, NygaDistribution):
+            for own_weight , own_subcircuit in self.weighted_subcircuits:
+                own_subcircuit: UniformDistribution
+                for other_weight , other_subcircuit in other.weighted_subcircuits:
+                    other_subcircuit: UniformDistribution
+                    distance += own_weight * other_weight * own_subcircuit.area_validation_metric(other_subcircuit)
+        else:
+            raise NotImplementedError(f"AVM between NygaDistribution and {type(other)} is not known.")
+        return distance / 2

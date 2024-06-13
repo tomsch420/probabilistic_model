@@ -1,11 +1,8 @@
-import itertools
 import math
 from collections import deque
 from datetime import datetime
 from typing import Tuple, Union, Optional, List, Iterable, Dict, Any
-from sortedcontainers import SortedSet
-import random_events.variables
-import tqdm
+
 import networkx as nx
 from matplotlib import pyplot as plt
 from typing_extensions import Self
@@ -30,6 +27,7 @@ import plotly.graph_objects as go
 
 
 class DecomposableProductUnit(PMDecomposableProductUnit):
+
     sample_indices: List[int]
     """
     The indices of the samples of the training dataset that are used to fit a product unit.
@@ -40,60 +38,9 @@ class DecomposableProductUnit(PMDecomposableProductUnit):
     The number of samples that are used to form this product unit.
     """
 
-    # def area_validation_metric(self, other: Self) -> float:
-    #     avm = 1.
-    #     for own_subcircuit in self.subcircuits:
-    #         for other_subcircuit in other.subcircuits:
-    #             if other_subcircuit.variables == own_subcircuit.variables:
-    #                 # 0 means completely different, 1 means identical
-    #                 avm *= own_subcircuit.area_validation_metric(other_subcircuit)
-    #     return avm
-
-    def events_of_higher_density(self, other: Self, own_node_weights, other_node_weights):
-        own_result = Event()
-        other_result = Event()
-        combination_map = {}
-
-        for own_univariate_unit in self.subcircuits:
-            other_univariate_unit = [s for s in other.subcircuits if s.variables == own_univariate_unit.variables][0]
-            variable = own_univariate_unit.variables[0]
-            if isinstance(variable, random_events.variables.Continuous):
-                own_univariate_unit: NygaDistribution
-                other_univariate_unit: NygaDistribution
-                all_mixture_points = own_univariate_unit.all_union_of_mixture_points_with(other_univariate_unit)
-                combination_map[variable] = all_mixture_points
-            elif isinstance(variable, random_events.variables.Symbolic):
-                own_univariate_unit: SymbolicDistribution
-                other_univariate_unit: SymbolicDistribution
-                support = own_univariate_unit.domain | other_univariate_unit.domain
-                combination_map[variable] = support
-            else:
-                raise NotImplementedError("Unknown Node Type")
-
-        # number_of_combinations = math.prod([len(value) for value in combination_map.values()])
-        own_weight = sum(own_node_weights.get(hash(self)))
-        other_weight = sum(other_node_weights.get(hash(other)))
-        for combination in itertools.product(*combination_map.values()): #tqdm.tqdm(itertools.product(*combination_map.values()), total=number_of_combinations):
-            full_evidence_state = list(((element.upper - element.lower) / 2) + element.lower  if isinstance(element, portion.Interval) else element
-                                   for element in combination)
-            likelihood_in_self = self.likelihood(full_evidence_state) * own_weight
-            likelihood_in_other = other.likelihood(full_evidence_state) * other_weight
-
-            if likelihood_in_self > likelihood_in_other:
-                if not own_result:
-                    own_result = Event({variable: value for variable, value in zip(self.variables, combination)})
-                else:
-                    own_result = own_result.union(Event({variable: value for variable, value in zip(self.variables, combination)}))
-            elif likelihood_in_other > likelihood_in_self:
-                if not other_result:
-                    other_result = Event({variable: value for variable, value in zip(other.variables, combination)})
-                else:
-                    other_result = other_result.union(Event({variable: value for variable, value in zip(other.variables, combination)}))
-
-        return own_result, other_result
-
 
 class JPT(DeterministicSumUnit):
+
     targets: Tuple[Variable, ...]
     """
     The variables to optimize for.
@@ -367,14 +314,14 @@ class JPT(DeterministicSumUnit):
                 distribution._fit(data[:, index].tolist())
 
                 if isinstance(distribution.subcircuits[0], DiracDeltaDistribution):
-                    distribution.subcircuits[0].density_cap = 1 / variable.minimal_distance
+                    distribution.subcircuits[0].density_cap = 1/variable.minimal_distance
 
             elif isinstance(variable, Symbolic):
-                distribution = SymbolicDistribution(variable, weights=[1 / len(variable.domain)] * len(variable.domain))
+                distribution = SymbolicDistribution(variable, weights=[1/len(variable.domain)]*len(variable.domain))
                 distribution._fit(data[:, index].tolist())
 
             elif isinstance(variable, Integer):
-                distribution = IntegerDistribution(variable, weights=[1 / len(variable.domain)] * len(variable.domain))
+                distribution = IntegerDistribution(variable, weights=[1/len(variable.domain)]*len(variable.domain))
                 distribution.fit(data[:, index].tolist())
             else:
                 raise ValueError(f"Variable {variable} is not supported.")
@@ -445,8 +392,8 @@ class JPT(DeterministicSumUnit):
                                     row=child_index + 1,
                                     col=distribution_index + 1)
 
-        figure.update_layout(height=300 * len(self.subcircuits), width=600 * len(self.variables),
-                             title=f"Joint Probability Tree over {len(self.variables)} variables", )
+        figure.update_layout(height=300*len(self.subcircuits), width=600*len(self.variables),
+                             title=f"Joint Probability Tree over {len(self.variables)} variables",)
 
         return figure
 
@@ -527,94 +474,3 @@ class JPT(DeterministicSumUnit):
             raise NotImplementedError(f"Variable {variable} not supported.")
 
         return distribution
-
-    def area_validation_metric(self, other: Self) -> float:
-
-        p_event, q_event = JPT.events_of_higher_density(self, other)
-        result = (self.probability(p_event) - other.probability(p_event)
-                  + other.probability(q_event) - self.probability(q_event))
-
-        return result/2
-
-        #
-        # event_p = Event()
-        # event_q = Event()
-        #
-        # for own_pro_unit in self.subcircuits:
-        #     own_pro_unit: DecomposableProductUnit
-        #     for other_pro_unit in other.subcircuits:
-        #         other_pro_unit: DecomposableProductUnit
-        #         if own_pro_unit.variables != other_pro_unit.variables:
-        #             continue
-        #         intersection = own_pro_unit.domain.intersection(other_pro_unit.domain)
-        #         if not intersection.is_empty():
-        #             intersection_point = []
-        #             for var in intersection.variables:
-        #                 var_lower = intersection.events[0][var].lower
-        #                 var_upper = intersection.events[0][var].upper
-        #                 point = var_lower + (var_upper - var_lower) / 2
-        #                 intersection_point.append(point)
-        #             if own_pro_unit.likelihood(intersection_point) > other_pro_unit.likelihood(intersection_point):
-        #                 event_p = event_p.union(intersection)
-        #             else:
-        #                 event_q = event_q.union(intersection)
-        #
-        #         difference = own_pro_unit.domain.union(other_pro_unit.domain).difference(intersection) \
-        #             if not intersection.is_empty() else own_pro_unit.domain.union(other_pro_unit.domain)
-        #         #could be more events
-        #         disjunct_events_li = []
-        #         for diff_events in difference.events:
-        #             eve_li = []
-        #             for var in difference.variables:
-        #                 portions = []
-        #                 for p in diff_events[var]:
-        #                     portions.append(Event({var: p}))
-        #
-        #                 if not eve_li:
-        #                     eve_li = portions
-        #                 else:
-        #                     temp_list = []
-        #                     for i in range(len(eve_li)):
-        #                         for j in range(len(portions)):
-        #                             dim_event = eve_li[i]
-        #                             dim_event[var] = portions[j][var]
-        #                             temp_list.append(dim_event)
-        #                     eve_li = temp_list
-        #             disjunct_events_li.extend(eve_li)
-        #
-        #         for d_event in disjunct_events_li:
-        #             if (own_pro_unit.domain.intersection(d_event).is_empty()
-        #                     and not other_pro_unit.domain.intersection(d_event).is_empty()):
-        #                 event_q = event_q.union(d_event)
-        #             elif (not own_pro_unit.domain.intersection(d_event).is_empty()
-        #                     and other_pro_unit.domain.intersection(d_event).is_empty()):
-        #                 event_p = event_p.union(d_event)
-        # print(self.probability(event_p), other.probability(event_p))
-        # print(self.probability(event_q), other.probability(event_q))
-        # go.Figure(event_p.plot()).show()
-        # go.Figure(event_q.plot()).show()
-        # return (self.probability(event_p) - other.probability(event_p)
-        #         + self.probability(event_q) - other.probability(event_q))
-
-
-    def events_of_higher_density(self, other: Self):
-        own_node_weights = self.probabilistic_circuit.nodes_weights()
-        other_node_weights = other.probabilistic_circuit.nodes_weights()
-        own_result = Event()
-        other_result = Event()
-        for own_pro_unit in self.subcircuits:
-            own_pro_unit: DecomposableProductUnit
-            for other_pro_unit in other.subcircuits:
-                other_pro_unit: DecomposableProductUnit
-                own_result_part, other_result_part = own_pro_unit.events_of_higher_density(other_pro_unit, own_node_weights, other_node_weights)
-                if own_result.is_empty():
-                    own_result = own_result_part
-                else:
-                    own_result = own_result.union(own_result_part)
-                if other_result.is_empty():
-                    other_result = other_result_part
-                else:
-                    other_result = other_result.union(other_result_part)
-
-
-        return own_result, other_result

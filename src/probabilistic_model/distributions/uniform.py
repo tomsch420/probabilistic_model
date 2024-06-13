@@ -7,7 +7,6 @@ import portion
 from plotly import graph_objects as go
 from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent
 from random_events.variables import Continuous
-from sortedcontainers import SortedSet
 from typing_extensions import List, Dict, Any, Self
 
 from probabilistic_model.probabilistic_model import OrderType, CenterType, MomentType
@@ -187,31 +186,7 @@ class UniformDistribution(ContinuousDistribution):
 
         else:
             raise NotImplementedError(f"AVM between UniformDistribution and {type(other)} is not known.")
-        return 1- distance
-
-    # def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights):
-    #     resulting_event = portion.empty()
-    #     # calculate AVM of intersecting part
-    #     if not isinstance(other, UniformDistribution):
-    #         raise NotImplementedError(f"Density between UniformDistribution and {type(other)} is not known.")
-    #     intersection = self.interval.intersection(other.interval)
-    #     own_weight = sum(own_node_weights.get(hash(self)))
-    #     other_weight = sum(other_node_weights.get(hash(other)))
-    #
-    #     if not intersection.empty and self.pdf_value() * own_weight > other.pdf_value() * other_weight:
-    #         #diff_of_pdf = self.pdf_value() - other.pdf_value()
-    #         resulting_event = resulting_event.union(portion.closed(intersection.lower, intersection.upper))
-    #     difference = self.interval.union(other.interval).difference(intersection)
-    #     for interval in difference:
-    #         if interval in self.interval:
-    #             resulting_event = resulting_event.union(portion.closed(interval.lower, interval.upper))
-    #     return Event({self.variable: resulting_event})
-
-    def all_union_of_mixture_points_with(self, other: Self):
-        points = SortedSet([self.interval.lower, self.interval.upper, other.interval.lower, other.interval.upper])
-        result = [portion.open(lower, upper) for lower, upper in zip(points[:-1], points[1:])]
-        return result
-
+        return distance/2
     def parameters(self):
         return {"variable": self.variable, "interval": self.interval}
 

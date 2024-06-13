@@ -1,5 +1,3 @@
 doc/build
 .idea
 .drawio
-__pycache__/
-**/__pycache__
