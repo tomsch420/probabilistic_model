@@ -100,7 +100,10 @@ class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, Proba
         probabilities = MissingDict(float)
 
         for element in sum_unit.support().simple_sets[0][variable].simple_sets:
-            probabilities[int(element)] = sum_unit.probability_of_simple_event(SimpleEvent({variable: element}))
+            probability = sum_unit.probability_of_simple_event(SimpleEvent({variable: element}))
+            if isinstance(element, SimpleInterval):
+                element = element.lower
+            probabilities[int(element)] = probability
         return cls(variable, probabilities)
 
 

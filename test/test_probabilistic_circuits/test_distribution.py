@@ -16,11 +16,12 @@ from probabilistic_model.probabilistic_circuit.distributions.distributions impor
                                                                                    GaussianDistribution,
                                                                                    TruncatedGaussianDistribution)
 
+
 class Animal(SetElement):
-    EMPTY_SET = 0
-    CAT = 1
-    DOG = 2
-    FISH = 3
+    EMPTY_SET = -1
+    CAT = 0
+    DOG = 1
+    FISH = 2
 
 
 class UniformDistributionTestCase(unittest.TestCase):
@@ -115,3 +116,24 @@ class GaussianDistributionTestCase(unittest.TestCase):
         traces = distribution.plot()
         self.assertGreater(len(traces), 0)
         # go.Figure(traces, distribution.plotly_layout()).show()
+
+
+class IntegerDistributionTestCase(unittest.TestCase):
+    x = Integer("x")
+
+    model: SmoothSumUnit
+
+    def setUp(self):
+        sum_unit = SmoothSumUnit()
+        i1 = IntegerDistribution(self.x, MissingDict(float, {0: 1}))
+        sum_unit.add_subcircuit(i1, 0.4)
+        i2 = IntegerDistribution(self.x, MissingDict(float, {1: 1}))
+        sum_unit.add_subcircuit(i2, 0.6)
+        self.model = sum_unit
+
+    def test_from_sum_unit(self):
+        d = IntegerDistribution.from_sum_unit(self.model)
+        i = IntegerDistribution(self.x, MissingDict(float, {0: 0.4, 1: 0.6}))
+        self.assertEqual(i, d)
+
+
