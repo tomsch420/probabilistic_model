@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import itertools
+from abc import abstractmethod
+
 import queue
 import random
 from typing import Tuple, Iterable, TYPE_CHECKING
 
 import networkx as nx
-import portion
-from random_events.events import EncodedEvent, VariableMap, Event, ComplexEvent
-from random_events.variables import Variable, Symbolic, Continuous
-from typing_extensions import List, Optional, Any, Self, Dict
-import plotly.graph_objects as go
+import numpy as np
+from random_events.product_algebra import VariableMap, SimpleEvent, Event
+from random_events.set import SetElement
+from random_events.variable import Variable, Symbolic
+from sortedcontainers import SortedSet
+
+from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, TYPE_CHECKING
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
@@ -76,7 +81,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     Mixin class for all components of a probabilistic circuit.
     """
 
-    probabilistic_circuit: 'ProbabilisticCircuit'
+    probabilistic_circuit: ProbabilisticCircuit
     """
     The circuit this component is part of. 
     """
@@ -92,34 +97,47 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     this would be returned instead.
     """
 
-    _cache_result = False
+    _cache_result: bool = False
     """
     Flag for caching the result of the current query.
     """
 
-    def __init__(self, variables: Optional[Iterable[Variable]] = None):
-        super().__init__(variables)
+    def __init__(self):
         self.probabilistic_circuit = ProbabilisticCircuit()
         self.probabilistic_circuit.add_node(self)
 
-    def __repr__(self):
-        return self.representation
-
     @property
-    def subcircuits(self) -> List['ProbabilisticCircuitMixin']:
+    def subcircuits(self) -> List[ProbabilisticCircuitMixin]:
         """
         :return: The subcircuits of this unit.
         """
         return list(self.probabilistic_circuit.successors(self))
 
     @property
-    def domain(self) -> ComplexEvent:
-        """
-        The domain of the model. The domain describes all events that have :math:`P(event) > 0`.
-
-        :return: An event describing the domain of the model.
-        """
+    @abstractmethod
+    def variables(self) -> SortedSet:
         raise NotImplementedError
+
+    @property
+    def cache_result(self) -> bool:
+        return self._cache_result
+
+    @cache_result.setter
+    def cache_result(self, value: bool):
+        """
+        Set the caching of the result flag in this and every sub-circuit.
+        If a sub-circuit has the flag already set to the value, it will not recurse in that sub-circuit.
+        :param value: The value to set the flag to.
+        """
+        self._cache_result = value
+        for subcircuit in self.subcircuits:
+            if subcircuit.cache_result != value:
+                subcircuit.cache_result = value
+
+    @property
+    def leaves(self) -> List[UnivariateDistribution]:
+        return [node for node in nx.descendants(self.probabilistic_circuit, self) if
+                self.probabilistic_circuit.out_degree(node) == 0]
 
     def update_variables(self, new_variables: VariableMap):
         """
@@ -128,19 +146,13 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         :param new_variables: A map that maps the variables that should be replaced to their new variable.
         """
         for leaf in self.leaves:
+            if leaf.variable in new_variables:
+                leaf.variable = new_variables[leaf.variable]
 
-            new_leaf_variables = []
-            for variable in leaf.variables:
-                if variable in new_variables:
-                    new_leaf_variables.append(new_variables[variable])
-                else:
-                    new_leaf_variables.append(variable)
-
-            leaf.variables = new_leaf_variables
-
-    def mount(self, other: 'ProbabilisticCircuitMixin'):
+    def mount(self, other: ProbabilisticCircuitMixin):
         """
         Mount another unit including its descendants. There will be no edge from `self` to `other`.
+
         :param other: The other circuit or unit to mount.
         """
 
@@ -165,27 +177,12 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         self.probabilistic_circuit.add_edges_from(normal_edges)
         self.probabilistic_circuit.add_weighted_edges_from(weighted_edges)
 
-    @property
-    def cache_result(self) -> bool:
-        return self._cache_result
-
+    @abstractmethod
     def is_deterministic(self) -> bool:
         """
-        :return: Rather this node is deterministic or not.
+        Calculate if this circuit is deterministic or not.
         """
         raise NotImplementedError
-
-    @cache_result.setter
-    def cache_result(self, value: bool):
-        """
-        Set the caching of the result flag in this and every sub-circuit.
-        If a sub-circuit has the flag already set to the value, it will not recurse in that sub-circuit.
-        :param value: The value to set the flag to.
-        """
-        self._cache_result = value
-        for subcircuit in self.subcircuits:
-            if subcircuit.cache_result != value:
-                subcircuit.cache_result = value
 
     def filter_variable_map_by_self(self, variable_map: VariableMap):
         """
@@ -198,57 +195,53 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return variable_map.__class__(
             {variable: value for variable, value in variable_map.items() if variable in variables})
 
-    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
+    def log_conditional(self, event: Event) -> Tuple[Optional[ProbabilisticCircuitMixin], float]:
 
         # skip trivial case
-        if len(event.events) == 0:
-            return None, 0
+        if event.is_empty():
+            return None, -np.inf
 
         # if the event is easy, don't create a proxy node
-        elif len(event.events) == 1:
-            return self._conditional_from_single_event(event.events[0])
+        elif len(event.simple_sets) == 1:
+            return self.log_conditional_of_simple_event(event.simple_sets[0])
 
         # construct the proxy node
         result = DeterministicSumUnit()
         total_probability = 0
 
-        for event_ in event.events:
+        for simple_event in event.simple_sets:
 
             # reset cache
             self.reset_result_of_current_query()
 
-            conditional, probability = self._conditional_from_single_event(event_)
+            conditional, log_probability = self.log_conditional_of_simple_event(simple_event)
 
             # skip if impossible
-            if probability == 0:
+            if log_probability == -np.inf:
                 continue
+
+            probability = np.exp(log_probability)
 
             total_probability += probability
             result.add_subcircuit(conditional, probability)
 
         if total_probability == 0:
-            return None, 0
+            return None, -np.inf
 
         result.normalize()
 
-        return result, total_probability
+        return result, np.log(total_probability)
 
+    @abstractmethod
     @cache_inference_result
-    def _conditional_from_single_event(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
         """
-        :return: the conditional circuit from a single, encoded event
+        Construct the conditional circuit from a simple event.
+
+        :param: The simple event to condition on.
+        :return: the conditional circuit and log(p(event))
         """
         raise NotImplementedError
-
-    @property
-    def variables(self) -> Tuple[Variable, ...]:
-        variables = set([variable for distribution in self.leaves for variable in distribution.variables])
-        return tuple(sorted(variables))
-
-    @property
-    def leaves(self) -> List[UnivariateDistribution]:
-        return [node for node in nx.descendants(self.probabilistic_circuit, self) if
-                self.probabilistic_circuit.out_degree(node) == 0]
 
     def reset_result_of_current_query(self):
         """
@@ -279,246 +272,10 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         return self.__class__()
 
-    def pdf_trace_1d(self, samples: List[float], support: portion.Interval) -> go.Scatter:
-        """
-        Generate the pdf trace for a 1D plot of a circuit.
-
-        :param samples: The samples to generate the pdf from.
-        :param support: The support of the circuit.
-        :return: The trace for the pdf of a circuit.
-        """
-
-        # calculate size of support
-        size_of_support = support.upper - support.lower
-
-        # form complement of support
-        complement_of_support = support.complement()
-
-        # stitch the intervals together and sort them
-        intervals = support._intervals + complement_of_support._intervals
-        intervals.sort(key=lambda x: x.lower)
-
-        # initialize x and y values
-        x_values = []
-        y_values = []
-
-        # for every interval in the partitioning of the domain
-        for interval in intervals:
-
-            # if the interval is not in the support
-            if interval in complement_of_support._intervals:
-
-                # if it is the leftmost interval
-                if interval.lower <= float("-inf"):
-                    # create left padding
-                    x_values.extend([interval.upper - size_of_support * 0.1, interval.upper, None])
-                    y_values.extend([0, 0, None])
-
-                # if it is the rightmost interval
-                elif interval.upper >= float("inf"):
-                    # create right padding
-                    x_values.extend([None, interval.lower, interval.lower + size_of_support * 0.1])
-                    y_values.extend([None, 0, 0])
-                # if it is an inner interval
-                else:
-                    # extend with zeros
-                    x_values.extend([None, interval.lower, interval.upper, None])
-                    y_values.extend([None, 0, 0, None])
-
-            # if the interval is in the support
-            elif interval in support._intervals:
-
-                # get samples in this interval
-                samples_in_interval = [sample for sample in samples if interval.lower <= sample <= interval.upper]
-
-                # calculate the pdf values
-                pdf_values = [self.likelihood([sample]) for sample in samples_in_interval]
-
-                # extend the x and y values
-                x_values.extend(samples_in_interval)
-                y_values.extend(pdf_values)
-
-            else:
-                raise ValueError("This should not happen.")
-
-        return go.Scatter(x=x_values, y=y_values, mode="lines", name="PDF")
-
-    def cdf_trace_1d(self, samples: List[float], support: portion.Interval) -> go.Scatter:
-        """
-        Generate the cdf trace for a 1D plot of a circuit.
-        :param samples: The samples to generate the cdf from.
-        :param support: The support of the circuit.
-        :return: The trace for the cdf of a circuit.
-        """
-        # calculate size of support
-        size_of_support = support.upper - support.lower
-        x = [support.lower - size_of_support * 0.1] + samples + [support.upper + size_of_support * 0.1]
-        cdf_values = [self.probability(Event({self.variables[0]: portion.closed(float("-inf"), sample)}))
-                      for sample in samples]
-        y = [0] + cdf_values + [1]
-        return go.Scatter(x=x, y=y, mode="lines", name="CDF")
-
-    def mode_trace_1d(self) -> Tuple[Optional[go.Scatter], float]:
-        """
-        Generate the mode trace for a 1D plot of a circuit.
-        :return:
-        """
-
-        # try to calculate the mode
-        try:
-            modes, maximum_likelihood = self.mode()
-
-        # if the mode cannot be calculated analytically
-        except NotImplementedError:
-
-            # skip the creation of this trace
-            return None, 0
-
-        # initialize x and y values
-        xs = []
-        ys = []
-
-        # for every mode
-        for mode in modes.events[0][self.variables[0]]:
-
-            # extend the x and y values
-            xs.extend([mode.lower, mode.lower, mode.upper, mode.upper, None])
-            ys.extend([0, maximum_likelihood * 1.05, maximum_likelihood * 1.05, 0, None])
-
-        # create trace
-        trace = go.Scatter(x=xs, y=ys, mode='lines+markers', name="Mode", fill="toself")
-        return trace, maximum_likelihood
-
-    def plot_1d(self, sample_amount: int) -> List[go.Scatter]:
-        """
-        Plot the circuit if it is one dimensional.
-
-        :param sample_amount: The amount of samples to use for plotting.
-        :return: Traces for the 1D plot of a circuit.
-        """
-        # generate samples as basis for plotting
-        samples = [sample[0] for sample in sorted(self.sample(sample_amount))]
-
-        # get variable and domain
-        domain = self.domain.events[0]
-        variable = list(domain.keys())[0]
-        support: portion.Interval = domain[variable]
-
-        # if the support has infinite lower bound
-        if support.lower <= float("-inf"):
-            # set it to the minimum of the samples
-            support = support.replace(lower=min(samples))
-
-        # if the support has infinite upper bound
-        if support.upper >= float("inf"):
-            # set it to the maximum of the samples
-            support = support.replace(upper=max(samples))
-
-        # initialize result
-        traces = []
-
-        # create pdf trace
-        pdf_trace = self.pdf_trace_1d(samples, support)
-        traces.append(pdf_trace)
-
-        # add cdf trace
-        traces.append(self.cdf_trace_1d(samples, support))
-
-        # get mode trace
-        mode_trace, maximum_likelihood = self.mode_trace_1d()
-
-        # of mode trace does not exist
-        if mode_trace is None:
-            # calculate maximum approximately
-            maximum_likelihood = max([l for l in pdf_trace.y if l is not None])
-        else:
-            traces.append(mode_trace)
-
-        # create expectation trace
-        expectation = self.expectation([variable])[variable]
-        traces.append(go.Scatter(x=[expectation, expectation], y=[0, maximum_likelihood * 1.05], mode="lines+markers",
-                                 name="Expectation"))
-
-        return traces
-
-    def plot_2d(self, sample_amount: int = 5000) -> List[go.Scatter]:
-        """
-        Plot the circuit if it is two-dimensional and both dimensions are continuous.
-
-        :param sample_amount: The amount of samples to use for plotting.
-        :return: Traces for the 2D plot of a circuit.
-        """
-
-        assert all([isinstance(variable, Continuous) for variable in self.variables])
-
-        traces = []
-
-        samples = self.sample(sample_amount)
-
-        likelihoods = [self.likelihood(sample) for sample in samples]
-
-        x_values = [sample[0] for sample in samples]
-        y_values = [sample[1] for sample in samples]
-
-        traces.append(go.Scatter(x=x_values, y=y_values, mode="markers", name="Samples",
-                                 marker=dict(color=likelihoods), hovertext=[f"Likelihood: {l}" for l in likelihoods]))
-
-        expectation = self.expectation(self.variables)
-        traces.append(go.Scatter(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
-                                 mode="markers", name="Expectation"))
-
-        mode_traces = None
-        try:
-            modes, _ = self.mode()
-            mode_traces = modes.plot()
-            for trace in mode_traces:
-                trace.update(name="Mode")
-
-        except NotImplementedError:
-            ...
-
-        if mode_traces:
-            traces.extend(mode_traces)
-
-        return traces
-
-    def plot(self, sample_amount: int = 5000) -> List[go.Scatter]:
-        """
-        Plot the circuit.
-
-        :param sample_amount: The amount of samples to use for plotting.
-        :return: Traces for the plot of a circuit.
-        """
-        variables = self.variables
-        if len(variables) == 1:
-            return self.plot_1d(sample_amount)
-        elif len(variables) == 2:
-            return self.plot_2d(sample_amount)
-        if len(variables) > 2:
-            raise ValueError("The circuit has too many variables to plot.")
-        return self.plot_1d(sample_amount)
-
-    def plotly_layout(self) -> Dict[str, Any]:
-        """
-        :return: The layout argument for plotly figures as dict
-        """
-        if len(self.variables) == 1:
-            return {
-                "title": f"{self.__class__.__name__}",
-                "xaxis": {"title": self.variables[0].name}
-            }
-        elif len(self.variables) == 2:
-            return {
-                "title": f"{self.__class__.__name__}",
-                "xaxis": {"title": self.variables[0].name},
-                "yaxis": {"title": self.variables[1].name}
-            }
-        else:
-            raise ValueError("The circuit has too many variables to plot.")
-
     def simplify(self) -> Self:
         """
         Simplify the circuit by removing nodes and redirected edges that have no impact.
+        Essentially, this method transform the circuit into an alternating order of sum and product units.
 
         :return: The simplified circuit.
         """
@@ -574,7 +331,7 @@ def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
 class SmoothSumUnit(ProbabilisticCircuitMixin):
     label = 'shape=stencil(tZVtb4MgEMc/DW8XHmLSt43bvgdTOkkpEKBr9+2LoGvxgXULGqPh/tzPu5MDQGrbUc0Ahh0grwBjBKF/+vFlMqZWs8ZF44FfWRvN1hl1ZBfeugHAZccMd71K3gDc+zn9TepGSekJXEmbKA+6h1EuvS+8Rtjw7e9kpD3/xBwzQ4TRCvD789iXahsw2ijeFDtGXzzecuA0YrTVjysGRv/Hktpb1hY3qT9oc/w06izbudeqdlCGLQg/MhciNl4mzTihUUIZb4jvkAfABIYrX6bHzvbbwb3Dcd5P037iTBjlk/pi97pXk4VS5dgjQnC5jtg9hUijQOmqqrKVWY5i9xdE+PkrdRoLX6rCi1toPjMmBNf2N8b0gJgeIEVTD26zrgjWeIAFww0=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
     image = os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", "Smoothsum.png")
-    representation = '⊕'
+    representation = '+'
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
@@ -585,8 +342,16 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
                 self.subcircuits]
 
     @property
+    def variables(self) -> SortedSet:
+        return self.subcircuits[0].variables
+
+    @property
     def latent_variable(self) -> Symbolic:
-        return Symbolic(f"{hash(self)}.latent", list(range(len(self.subcircuits))))
+        name = f"{hash(self)}.latent"
+        enum_elements = {"EMPTY_SET": -1}
+        enum_elements |= {str(hash(subcircuit)): index for index, subcircuit in enumerate(self.subcircuits)}
+        domain = SetElement(name, enum_elements)
+        return Symbolic(name, domain)
 
     def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin, weight: float):
         """
@@ -603,88 +368,76 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
 
-    @property
-    def domain(self) -> ComplexEvent:
-        domain = self.subcircuits[0].domain
+    def support(self) -> Event:
+        support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
-            target_domain = subcircuit.domain
-            domain = (target_domain | domain)
-        return domain
+            try:
+                support |= subcircuit.support()
+            except AttributeError:
+                return Event()
+
+        return support
 
     @property
-    def weights(self) -> List[float]:
+    def weights(self) -> np.array:
         """
         :return: The weights of the subcircuits of this unit.
         """
-        return [weight for weight, _ in self.weighted_subcircuits]
+        return np.array([weight for weight, _ in self.weighted_subcircuits])
 
     @cache_inference_result
-    def _likelihood(self, event: Iterable) -> float:
-
-        result = 0.
-
+    def log_likelihood(self, events: np.array) -> np.array:
+        result = np.zeros(len(events))
         for weight, subcircuit in self.weighted_subcircuits:
-            result += weight * subcircuit._likelihood(event)
-
-        return result
-
-    @cache_inference_result
-    def _probability(self, event: EncodedEvent) -> float:
-
-        result = 0.
-
-        for weight, subcircuit in self.weighted_subcircuits:
-            result += weight * subcircuit._probability(event)
-
-        return result
+            subcircuit_likelihood = subcircuit.likelihood(events)
+            result += weight * subcircuit_likelihood
+        return np.log(result)
 
     @cache_inference_result
-    def _conditional_from_single_event(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        return sum([weight * subcircuit.probability_of_simple_event(event) for weight, subcircuit in
+                    self.weighted_subcircuits])
 
-        subcircuit_probabilities = []
-        conditional_subcircuits = []
-        total_probability = 0
-
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
+        # initialize result
         result = self.empty_copy()
 
+        # for every weighted subcircuit
         for weight, subcircuit in self.weighted_subcircuits:
-            conditional, subcircuit_probability = subcircuit._conditional_from_single_event(event)
 
-            if subcircuit_probability == 0:
+            # condition the subcircuit
+            conditional, subcircuit_log_probability = subcircuit.log_conditional_of_simple_event(event)
+
+            # skip impossible subcircuits
+            if conditional is None:
                 continue
 
-            subcircuit_probability *= weight
-            total_probability += subcircuit_probability
-            subcircuit_probabilities.append(subcircuit_probability)
-            conditional_subcircuits.append(conditional)
+            subcircuit_probability = np.exp(subcircuit_log_probability)
+            # add subcircuit
+            result.add_subcircuit(conditional, weight * subcircuit_probability)
 
+        # check if the result is valid
+        total_probability = sum(result.weights)
         if total_probability == 0:
-            return None, 0
+            return None, -np.inf
 
         # normalize probabilities
-        normalized_probabilities = [p / total_probability for p in subcircuit_probabilities]
+        result.normalize()
 
-        # add edges and subcircuits
-        for weight, subcircuit in zip(normalized_probabilities, conditional_subcircuits):
-            result.mount(subcircuit)
-            result.probabilistic_circuit.add_edge(result, subcircuit, weight=weight)
+        return result, np.log(total_probability)
 
-        return result, total_probability
-
-    @cache_inference_result
-    def sample(self, amount: int) -> Iterable:
+    def sample(self, amount: int) -> np.array:
         """
         Sample from the sum node using the latent variable interpretation.
         """
         weights, subcircuits = zip(*self.weighted_subcircuits)
-
         # sample the latent variable
-        states = random.choices(list(range(len(weights))), weights=weights, k=amount)
+        states = np.random.choice(np.arange(len(self.weights)), size=amount, p=weights)
+        _, counts = np.unique(states, return_counts=True)
         # sample from the children
-        result = []
-        for index, subcircuit in enumerate(self.subcircuits):
-            result.extend(subcircuit.sample(states.count(index)))
-
+        result = self.subcircuits[0].sample(int(counts[0]))
+        for amount, subcircuit in zip(counts[1:], self.subcircuits[1:]):
+            result = np.concatenate((result, subcircuit.sample(amount)))
         return result
 
     @cache_inference_result
@@ -719,13 +472,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
 
         # propagate to sub-circuits
         for weight, subcircuit in self.weighted_subcircuits:
-            marginal = subcircuit.marginal(variables)
-
-            if marginal is None:
-                continue
-
-            result.mount(marginal)
-            result.probabilistic_circuit.add_edge(result, marginal, weight=weight)
+            result.add_subcircuit(subcircuit.marginal(variables), weight)
         return result
 
     def __hash__(self):
@@ -777,10 +524,10 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         own_subcircuits = self.subcircuits
         other_subcircuits = other.subcircuits
 
-        for own_index, own_subcircuit in zip(own_latent_variable.domain, own_subcircuits):
+        for own_index, own_subcircuit in zip(own_latent_variable.domain.simple_sets, own_subcircuits):
 
             # create denominator of weight
-            condition = Event({own_latent_variable: own_index})
+            condition = SimpleEvent({own_latent_variable: own_index}).as_composite_set()
             p_condition = interaction_model.probability(condition)
 
             # skip iterations that are impossible
@@ -805,7 +552,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
             for other_index, other_subcircuit in zip(other_latent_variable.domain, other_subcircuits):
 
                 # create numerator of weight
-                query = Event({other_latent_variable: other_index}) & condition
+                query = SimpleEvent({other_latent_variable: other_index}).as_composite_set() & condition
                 p_query = interaction_model.probability(query)
 
                 # skip iterations that are impossible
@@ -892,17 +639,17 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
             self.probabilistic_circuit.edges[self, subcircuit]["weight"] /= total_weight
 
     def is_deterministic(self) -> bool:
-
         # for every unique combination of subcircuits
-        for index, subcircuit in enumerate(self.subcircuits):
-            for subcircuit_ in self.subcircuits[index+1:]:
-
-                # if they intersect, the sum is not deterministic
-                if not subcircuit_.domain.intersection(subcircuit.domain).is_empty():
-                    return False
+        for subcircuit_a, subcircuit_b in itertools.combinations(self.subcircuits, 2):
+            # check if they intersect
+            if not subcircuit_a.support().intersection_with(subcircuit_b.support()).is_empty():
+                return False
 
         # if none intersect, the subcircuit is deterministic
         return True
+
+    def log_mode(self) -> Tuple[Event, float]:
+        raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
 
 class DeterministicSumUnit(SmoothSumUnit):
@@ -914,56 +661,36 @@ class DeterministicSumUnit(SmoothSumUnit):
     representation = '⊕'
     image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DeterministicSumUnit.png')
 
-    def merge_modes_if_one_dimensional(self, modes: List[EncodedEvent]) -> List[EncodedEvent]:
-        """
-        Merge the modes in `modes` to one mode if the model is one dimensional.
-
-        :param modes: The modes to merge.
-        :return: The (possibly) merged modes.
-        """
-        if len(self.variables) > 1:
-            return modes
-
-        # merge modes
-        mode = modes[0]
-
-        for mode_ in modes[1:]:
-            mode = mode | mode_
-
-        return [mode]
-
-    @cache_inference_result
-    def _mode(self) -> Tuple[ComplexEvent, float]:
-
+    def log_mode(self) -> Tuple[Event, float]:
         modes = []
-        likelihoods = []
+        log_likelihoods = []
 
         # gather all modes from the children
         for weight, subcircuit in self.weighted_subcircuits:
-            mode, likelihood = subcircuit._mode()
+            mode, log_likelihood = subcircuit.log_mode()
             modes.append(mode)
-            likelihoods.append(weight * likelihood)
+            log_likelihoods.append(np.log(weight) + log_likelihood)
 
         # get the most likely result
-        maximum_likelihood = max(likelihoods)
-        mode_events = []
+        maximum_log_likelihood = max(log_likelihoods)
+        result = Event()
 
         # gather all results that are maximum likely
-        for mode, likelihood in zip(modes, likelihoods):
-            if likelihood == maximum_likelihood:
-                mode_events.extend(mode.events)
+        for mode, likelihood in zip(modes, log_likelihoods):
+            if likelihood == maximum_log_likelihood:
+                result |= mode
 
-        modes = ComplexEvent(mode_events)  # self.merge_modes_if_one_dimensional(result)
-        return modes, maximum_likelihood
+        return result, maximum_log_likelihood
 
-    def sub_circuit_index_of_sample(self, sample: Iterable) -> Optional[int]:
+    def sub_circuit_index_of_samples(self, samples: np.array) -> np.array:
         """
         :return: the index of the subcircuit where p(sample) > 0 and None if p(sample) = 0 for all subcircuits.
         """
+        result = np.full(len(samples), np.nan)
         for index, subcircuit in enumerate(self.subcircuits):
-            if subcircuit.likelihood(sample) > 0:
-                return index
-        return None
+            likelihood = subcircuit.likelihood(samples)
+            result[likelihood > 0] = index
+        return result
 
     def is_deterministic(self) -> bool:
         return True
@@ -979,16 +706,17 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DecomposableProductUnit.png')
 
     @property
-    def domain(self) -> ComplexEvent:
+    def variables(self) -> SortedSet:
+        result = SortedSet()
+        for subcircuit in self.subcircuits:
+            result = result.union(subcircuit.variables)
+        return result
 
-        # initialize domain
-        domain = self.subcircuits[0].domain
-
-        # gather all domains from the children
+    def support(self) -> Event:
+        support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
-            domain = domain & subcircuit.domain
-
-        return domain
+            support &= subcircuit.support()
+        return support
 
     def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin):
         """
@@ -1000,34 +728,22 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         self.probabilistic_circuit.add_edge(self, subcircuit)
 
     @cache_inference_result
-    def _likelihood(self, event: Iterable) -> float:
-
+    def log_likelihood(self, events: np.array) -> np.array:
         variables = self.variables
-
-        result = 1.
-
+        result = np.zeros(len(events))
         for subcircuit in self.subcircuits:
             subcircuit_variables = subcircuit.variables
-            partial_event = [event[variables.index(variable)] for variable in subcircuit_variables]
-            result *= subcircuit._likelihood(partial_event)
-
+            variable_indices_in_events = np.array([variables.index(variable) for variable in subcircuit_variables])
+            result += subcircuit.log_likelihood(events[:, variable_indices_in_events])
         return result
 
     @cache_inference_result
-    def _probability(self, event: EncodedEvent) -> float:
-
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
         result = 1.
-
         for subcircuit in self.subcircuits:
-            # load variables of this subcircuit
-            subcircuit_variables = subcircuit.variables
-
-            # construct partial event for child
-            subcircuit_event = EncodedEvent({variable: event[variable] for variable in subcircuit_variables})
-
-            # multiply results
-            result *= subcircuit._probability(subcircuit_event)
-
+            result *= subcircuit.probability_of_simple_event(event)
+            if result == 0:
+                return 0.
         return result
 
     def is_deterministic(self) -> bool:
@@ -1042,25 +758,23 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         return True
 
     @cache_inference_result
-    def _mode(self) -> Tuple[ComplexEvent, float]:
+    def log_mode(self) -> Tuple[Event, float]:
 
-        # initialize mode and likelihood
-        mode, likelihood = self.subcircuits[0]._mode()
+        # initialize mode and log likelihood
+        mode, log_likelihood = self.subcircuits[0].log_mode()
 
         # gather all modes from the children
         for subcircuit in self.subcircuits[1:]:
+            subcircuit_mode, subcircuit_log_likelihood = subcircuit.log_mode()
+            mode &= subcircuit_mode
+            log_likelihood += subcircuit_log_likelihood
 
-            subcircuit_mode, subcircuit_likelihood = subcircuit._mode()
-            mode = mode & subcircuit_mode
-
-            likelihood *= subcircuit_likelihood
-
-        return mode, likelihood
+        return mode, log_likelihood
 
     @cache_inference_result
-    def _conditional_from_single_event(self, event: EncodedEvent) -> Tuple[Self, float]:
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
         # initialize probability
-        probability = 1.
+        log_probability = 0.
 
         # create new node with new circuit attached to it
         resulting_node = self.empty_copy()
@@ -1068,43 +782,36 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         for subcircuit in self.subcircuits:
 
             # get conditional child and probability in pre-order
-            conditional_subcircuit, conditional_probability = subcircuit._conditional_from_single_event(event)
+            conditional_subcircuit, conditional_log_probability = subcircuit.log_conditional_of_simple_event(event)
 
             # if any is 0, the whole probability is 0
-            if conditional_probability == 0:
-                return None, 0
+            if conditional_subcircuit is None:
+                return None, -np.inf
 
-            resulting_node.mount(conditional_subcircuit)
-            resulting_node.probabilistic_circuit.add_edge(resulting_node, conditional_subcircuit)
             # update probability and children
-            probability *= conditional_probability
+            resulting_node.add_subcircuit(conditional_subcircuit)
+            log_probability += conditional_log_probability
 
-        return resulting_node, probability
+        return resulting_node, log_probability
 
     @cache_inference_result
-    def sample(self, amount: int) -> List[List[Any]]:
+    def sample(self, amount: int) -> np.array:
 
         # load on variables
         variables = self.variables
 
         # list for the samples content in the same order as self.variables
-        rearranged_samples = [[None for _ in range(len(variables))] for _ in range(amount)]
+        rearranged_samples = np.full((amount, len(variables)), np.nan)
 
         # for every subcircuit
         for subcircuit in self.subcircuits:
 
+            # calculate the indices of the variables
+            variable_indices_in_events = np.array([variables.index(variable) for variable in subcircuit.variables])
+
             # sample from the subcircuit
             sample_subset = subcircuit.sample(amount)
-
-            # for each sample from the subcircuit
-            for sample_index in range(amount):
-
-                # for each variable and its index of the subcircuit
-                for child_variable_index, variable in enumerate(subcircuit.variables):
-
-                    # find the index of the variable in the variables of the product
-                    rearranged_samples[sample_index][variables.index(variable)] = (
-                        sample_subset[sample_index][child_variable_index])
+            rearranged_samples[:, variable_indices_in_events] = sample_subset
 
         return rearranged_samples
 
@@ -1124,6 +831,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
     @cache_inference_result
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+
         # if this node has no variables that are required in the marginal, remove it.
         if set(self.variables).intersection(set(variables)) == set():
             return None
@@ -1137,8 +845,8 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             if marginal is None:
                 continue
 
-            result.mount(marginal)
-            result.probabilistic_circuit.add_edge(result, marginal)
+            result.add_subcircuit(marginal)
+
         return result
 
     def to_json(self) -> Dict[str, Any]:
@@ -1149,16 +857,14 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         result = cls()
         for subcircuit_data in data["subcircuits"]:
             subcircuit = ProbabilisticCircuitMixin.from_json(subcircuit_data)
-            result.mount(subcircuit)
-            result.probabilistic_circuit.add_edge(result, subcircuit)
+            result.add_subcircuit(subcircuit)
         return result
 
     def __copy__(self):
         result = self.__class__()
         for subcircuit in self.subcircuits:
             copied_subcircuit = subcircuit.__copy__()
-            result.mount(copied_subcircuit)
-            result.probabilistic_circuit.add_edge(result, copied_subcircuit)
+            result.add_subcircuit(copied_subcircuit)
         return result
 
     @cache_inference_result
@@ -1205,7 +911,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         nx.DiGraph.__init__(self)
 
     @property
-    def variables(self) -> Tuple[Variable, ...]:
+    def variables(self) -> SortedSet:
         return self.root.variables
 
     @property
@@ -1250,23 +956,23 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return possible_roots[0]
 
     @graph_inference_caching_wrapper
-    def _likelihood(self, event: Iterable) -> float:
-        return self.root._likelihood(event)
+    def log_likelihood(self, events: np.array) -> np.array:
+        return self.root.log_likelihood(events)
 
     @graph_inference_caching_wrapper
-    def _probability(self, event: EncodedEvent) -> float:
-        return self.root._probability(event)
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        return self.root.probability_of_simple_event(event)
 
     @graph_inference_caching_wrapper
-    def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
-        return self.root._mode()
+    def log_mode(self) -> Tuple[Event, float]:
+        return self.root.log_mode()
 
     @graph_inference_caching_wrapper
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
-        conditional, probability = self.root._conditional(event)
+    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+        conditional, log_probability = self.root.log_conditional(event)
         if conditional is None:
-            return None, 0
-        return conditional.probabilistic_circuit, probability
+            return conditional, log_probability
+        return conditional.probabilistic_circuit, log_probability
 
     @graph_inference_caching_wrapper
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
@@ -1277,7 +983,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         root.reset_result_of_current_query()
         return result.probabilistic_circuit
 
-    def sample(self, amount: int) -> Iterable:
+    def sample(self, amount: int) -> np.array:
         return self.root.sample(amount)
 
     @graph_inference_caching_wrapper
@@ -1288,10 +994,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def simplify(self) -> Self:
         return self.root.simplify().probabilistic_circuit
 
-    @property
-    def domain(self) -> Event:
+    def support(self) -> Event:
         root = self.root
-        result = self.root.domain
+        result = self.root.support()
         root.reset_result_of_current_query()
         return result
 
@@ -1438,3 +1143,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         :return: Rather this circuit is deterministic or not.
         """
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SmoothSumUnit))
+
+    def plot(self, **kwargs):
+        return self.root.plot(**kwargs)
+
+    def plotly_layout(self, **kwargs):
+        return self.root.plotly_layout()

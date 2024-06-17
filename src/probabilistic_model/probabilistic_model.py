@@ -1,9 +1,16 @@
-import abc
-from typing import Tuple, Iterable, List, Optional, Union, TYPE_CHECKING
+from __future__ import annotations
 
-from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent, EventType
-from random_events.variables import Variable, Integer, Continuous
-from typing_extensions import Self
+import abc
+
+from random_events.interval import closed
+from random_events.product_algebra import *
+from random_events.set import *
+from random_events.variable import *
+
+from .constants import *
+
+# Type definitions
+FullEvidenceType = np.array  # [Union[float, int, SetElement]]
 
 # # Type hinting for Python 3.7 to 3.9
 if TYPE_CHECKING:
@@ -24,74 +31,37 @@ class ProbabilisticModel(abc.ABC):
     The definition of functions is motivated by the background knowledge provided in the probabilistic circuits.
 
     This class can be used as an interface to any kind of probabilistic model, tractable or not.
-    The methods follow the pattern that methods that begin with `_` use a preprocessed version of the original method.
-    This is useful to separating the process of parsing user inputs and the actual calculations.
+
     """
 
-    _variables: Tuple[Variable, ...]
-    """The variables involved in the model."""
-
-    def __init__(self, variables: Optional[Iterable[Variable]]):
+    @property
+    def representation(self) -> str:
         """
-        Initialize the model.
-
-        :param variables: The variables in the model.
+        The symbol used to represent this distribution.
         """
-
-        if variables is not None:
-            self._variables = tuple(sorted(variables))
+        return self.__class__.__name__
 
     @property
+    @abc.abstractmethod
     def variables(self) -> Tuple[Variable, ...]:
-        return self._variables
-
-    @variables.setter
-    def variables(self, variables: Iterable[Variable]):
-        self._variables = tuple(sorted(variables))
-
-    def preprocess_event(self, event: EventType) -> ComplexEvent:
         """
-        Preprocess an event to the internal representation of the model.
-        Furthermore, all variables that are in this model are assigned to some value.
-        If the value is specified in the event, the value is used; otherwise the domain of the variable is used.
-
-        :param event: The event to preprocess.
-        :return: The preprocessed event.
-        """
-        variables = self.variables
-        # if the event is a complex event
-        if isinstance(event, ComplexEvent):
-            for simple_event in event.events:
-                simple_event.fill_missing_variables(variables)
-            return event.encode()
-
-        # if the event is a simple encoded event
-        elif isinstance(event, EncodedEvent):
-            event.fill_missing_variables(variables)
-            return ComplexEvent([event])
-
-        # if the event is a simple event
-        elif isinstance(event, Event):
-            event.fill_missing_variables(variables)
-            return ComplexEvent([event.encode()])
-
-        else:
-            raise ValueError(f"Event {event} is not a valid event.")
-
-    def _likelihood(self, event: Iterable) -> float:
-        """
-        Calculate the likelihood of a preprocessed event.
-        The likelihood as a full evidence query, i.e., an assignment to all variables in the model
-
-        :param event: The event is some iterable that represents a value for each variable in the model.
-        :return: The likelihood of the event.
+        :return: The variables of the model.
         """
         raise NotImplementedError
 
-    def likelihood(self, event: Iterable) -> float:
+    @abstractmethod
+    def support(self) -> Event:
         """
-        Calculate the likelihood of an event.
-        The likelihood is a full evidence query, i.e., an assignment to all variables in the model
+        :return: The support of the model.
+        """
+        raise NotImplementedError
+
+    def likelihood(self, events: np.array) -> np.array:
+        """
+        Calculate the likelihood of an array of events.
+
+        The likelihood is a full evidence query, i.e., an assignment to all variables in the model.
+        The order of elements in the event has to correspond to the order of variables in the model.
 
         The event belongs to the class of full evidence queries.
 
@@ -99,103 +69,120 @@ class ProbabilisticModel(abc.ABC):
             or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=TAfIX2LmOWM-Fd2B&t=785>`_.
             :cite:p:`youtube2020probabilistic`
 
-
-        :param event: The event is some iterable that represents a value for each variable in the model.
-        :return: The likelihood of the event.
+        :param events: The array of full evidence event. The shape of the array has to be (n, len(self.variables)).
+        :return: The likelihoods of the event as an array of shape (n, ).
         """
-        return self._likelihood([variable.encode(value) for variable, value in zip(self.variables, event)])
+        return np.exp(self.log_likelihood(events))
 
-    def _probability(self, event: EncodedEvent) -> float:
+    @abstractmethod
+    def log_likelihood(self, events: np.array) -> np.array:
         """
-        Calculate the probability of a preprocessed event P(E).
+        Calculate the log-likelihood of an event.
 
-        :param event: The event to calculate the probability of.
-        :return: The probability of the model.
+        Check the documentation of `likelihood` for more information.
+
+        :param events: The full evidence event
+        :return: The log-likelihood of the event.
         """
         raise NotImplementedError
 
-    def probability(self, event: EventType) -> float:
+    def probability(self, event: Event) -> float:
         """
-        Calculate the probability of an event P(E).
+        Calculate the probability of an event.
+        The event is richly described by the random_events package.
+
+        :param event: The event.
+        :return: The probability of the event.
+        """
+        for simple_event in event.simple_sets:
+            simple_event.fill_missing_variables(self.variables)
+        return sum(self.probability_of_simple_event(simple_set) for simple_set in event.simple_sets)
+
+    @abstractmethod
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        """
+        Calculate the probability of a simple event.
+
         The event belongs to the class of marginal queries.
 
         .. Note:: You can read more about queries of this class in Definition 11 in :cite:p:`choi2020probabilistic`
             or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
             :cite:p:`youtube2020probabilistic`
 
-        :param event: The event to calculate the probability of.
-        :return: The probability of the model.
-        """
-        complex_event = self.preprocess_event(event)
-        return sum(self._probability(event) for event in complex_event.events)
-
-    def _mode(self) -> Tuple[ComplexEvent, float]:
-        """
-        Calculate the mode of the model.
-        As there may exist multiple modes, this method returns an Iterable of modes and their likelihood.
-
-        :return: The internal representation of the mode and the likelihood.
+        :param event: The event.
+        :return: The probability of the event.
         """
         raise NotImplementedError
 
-    def mode(self) -> Tuple[ComplexEvent, float]:
+    def mode(self) -> Tuple[Event, float]:
         """
         Calculate the mode of the model.
-        As there may exist multiple modes, this method returns an Iterable of modes and their likelihood.
-        The event belongs to the map query class.
+        The mode is the **set** of most likely events.
+
+        The calculation belongs to the map query class.
 
         .. Note:: You can read more about queries of this class in Definition 26 in :cite:p:`choi2020probabilistic`
             or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=FjREKNtAV0owm27A&t=1962>`_.
             :cite:p:`youtube2020probabilistic`
 
-        :return: The mode of the model and the likelihood.
+        :return: The mode and its likelihood.
         """
-        mode, likelihood = self._mode()
-        return mode.decode(), likelihood
+        mode, log_likelihood = self.log_mode()
+        return mode, np.exp(log_likelihood)
+
+    @abstractmethod
+    def log_mode(self) -> Tuple[Event, float]:
+        """
+        Calculate the mode of the model.
+
+        Check the documentation of `mode` for more information.
+
+        :return: The mode and its log-likelihood.
+        """
+        raise NotImplementedError
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         """
         Calculate the marginal distribution of a set of variables.
 
         :param variables: The variables to calculate the marginal distribution on.
-        :return: The marginal distribution of the variables.
+        :return: The marginal distribution over the variables.
         """
         raise NotImplementedError
 
-    def _conditional(self, event: ComplexEvent) -> Tuple[Optional[Self], float]:
+    def conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
         """
-        Calculate the conditional distribution of the model given a preprocessed event.
+        Calculate the conditional distribution P(*| event) and the probability of the event.
 
         If the event is impossible, the conditional distribution is None and the probability is 0.
 
         :param event: The event to condition on.
-        :return: The conditional distribution of the model and the probability of the event.
+        :return: The conditional distribution and the probability of the event.
+        """
+        for simple_event in event.simple_sets:
+            simple_event.fill_missing_variables(self.variables)
+        conditional, log_probability = self.log_conditional(event)
+        return conditional, np.exp(log_probability)
+
+    @abstractmethod
+    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
+        """
+        Calculate the conditional distribution P(*| event) and the probability of the event.
+
+        Check the documentation of `conditional` for more information.
+
+        :param event: The event to condition on.
+        :return: The conditional distribution and the log-probability of the event.
         """
         raise NotImplementedError
 
-    def conditional(self, event: EventType) -> Tuple[Optional[Self], float]:
-        """
-        Calculate the conditional distribution of the model given an event.
-
-        The event belongs to the class of marginal queries.
-
-        If the event is impossible, the conditional distribution is None and the probability is 0.
-
-        .. Note:: You can read more about queries of this class in Definition 11 in :cite:p:`choi2020probabilistic`_
-            or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=8aEGIqmoDTiUR2u6&t=1089>`_.
-            :cite:p:`youtube2020probabilistic`
-
-        :param event: The event to condition on.
-        :return: The conditional distribution of the model and the probability of the event.
-        """
-        return self._conditional(self.preprocess_event(event))
-
-    def sample(self, amount: int) -> Iterable:
+    @abstractmethod
+    def sample(self, amount: int) -> np.array:
         """
         Sample from the model.
 
         :param amount: The number of samples to draw.
-        :return: The samples
+        :return: The samples.
         """
         raise NotImplementedError
 
@@ -217,7 +204,7 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def expectation(self, variables: Iterable[Union[Integer, Continuous]]) -> MomentType:
+    def expectation(self, variables: Iterable[Variable]) -> MomentType:
         """
         Calculate the expectation of the numeric variables in `variables`.
 
@@ -228,7 +215,7 @@ class ProbabilisticModel(abc.ABC):
         center = VariableMap({variable: 0 for variable in variables})
         return self.moment(order, center)
 
-    def variance(self, variables: Iterable[Union[Integer, Continuous]]) -> MomentType:
+    def variance(self, variables: Iterable[Variable]) -> MomentType:
         """
         Calculate the variance of the numeric variables in `variables`.
 
@@ -239,44 +226,181 @@ class ProbabilisticModel(abc.ABC):
         center = self.expectation(variables)
         return self.moment(order, center)
 
+    def universal_simple_event(self) -> SimpleEvent:
+        """
+        :return: A simple event that contains every possible value.
+        """
+        return SimpleEvent({variable: variable.domain for variable in self.variables})
 
-class ProbabilisticModelWrapper:
-    """
-    Wrapper class for probabilistic models.
-    """
+    def plotly_layout(self) -> Dict[str, Any]:
+        """
+        Create a layout for the plotly plot.
 
-    model: ProbabilisticModel
-    """The model that is wrapped."""
+        :return: The layout.
+        """
+        if len(self.variables) == 1:
+            return self.plotly_layout_1d()
+        elif len(self.variables) == 2:
+            return self.plotly_layout_2d()
+        elif len(self.variables) == 3:
+            return self.plotly_layout_3d()
+        else:
+            raise NotImplementedError("Plotting is only supported for models with up to three variables.")
 
-    def likelihood(self, event: Iterable) -> float:
-        return self.model.likelihood(event)
+    def plotly_layout_1d(self) -> Dict[str, Any]:
+        """
+        :return: The layout argument for plotly figures as dict
+        """
+        return {"title": f"{self.representation}", "xaxis": {"title": self.variables[0].name}}
 
-    def _likelihood(self, event: Iterable) -> float:
-        return self.model._likelihood(event)
+    def plotly_layout_2d(self) -> Dict[str, Any]:
+        """
+        :return: The layout argument for plotly figures as dict
+        """
+        return {"title": f"{self.representation}", "xaxis": {"title": self.variables[0].name},
+                "yaxis": {"title": self.variables[1].name}}
 
-    def probability(self, event: Event) -> float:
-        return self.model.probability(event)
+    def plotly_layout_3d(self) -> Dict[str, Any]:
+        """
+        :return: The layout argument for plotly figures as dict
+        """
+        return {"title": f"{self.representation}",
+                "scene": {"xaxis": {"title": self.variables[0].name}, "yaxis": {"title": self.variables[1].name},
+                          "zaxis": {"title": self.variables[2].name}}}
 
-    def _probability(self, event: EncodedEvent) -> float:
-        return self.model._probability(event)
+    def plot(self, number_of_samples: int = 1000) -> List:
+        """
+        Generate traces that can be plotted with plotly.
+        :return: The traces.
+        """
+        if len(self.variables) == 1:
+            return self.plot_1d(number_of_samples)
+        elif len(self.variables) == 2:
+            return self.plot_2d(number_of_samples)
+        elif len(self.variables) == 3:
+            return self.plot_3d(number_of_samples)
+        else:
+            raise NotImplementedError("Plotting is only supported for models with up to three variables.")
 
-    def mode(self) -> Tuple[List[Event], float]:
-        return self.model.mode()
+    def plot_1d(self, number_of_samples: int) -> List:
+        """
+        Plot a one-dimensional model using samples.
+        :param number_of_samples: The number of samples to draw.
+        :return: The traces.
+        """
+        samples = np.sort(self.sample(number_of_samples), axis=0)
+        likelihood = self.likelihood(samples)
 
-    def _mode(self) -> Tuple[Iterable[EncodedEvent], float]:
-        return self.model._mode()
+        try:
+            mode, maximum_likelihood = self.mode()
+        except NotImplementedError:
+            mode, maximum_likelihood = None, max(likelihood)
 
-    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
-        return self.model.marginal(variables)
+        height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 
-    def conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        return self.model.conditional(event)
+        x_and_likelihood = np.concatenate((samples, likelihood.reshape(-1, 1)), axis=1)
+        x_values = []
+        y_values = []
+        supporting_interval: Interval = self.support().simple_sets[0][self.variables[0]]
 
-    def _conditional(self, event: EncodedEvent) -> Tuple[Optional[Self], float]:
-        return self.model._conditional(event)
+        for simple_interval in supporting_interval.simple_sets:
+            simple_interval: SimpleInterval
+            filtered = x_and_likelihood[(x_and_likelihood[:, 0] >= simple_interval.lower) &
+                                        (x_and_likelihood[:, 0] <= simple_interval.upper)]
+            x_values += [simple_interval.lower] + filtered[:, 0].tolist() + [simple_interval.upper]
+            y_values += [None] + filtered[:, 1].tolist() + [None]
 
-    def sample(self, amount: int) -> Iterable:
-        return self.model.sample(amount)
+        pdf_trace = go.Scatter(x=x_values, y=y_values, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
+                               line=dict(color=PDF_TRACE_COLOR))
 
-    def moment(self, order: OrderType, center: CenterType) -> MomentType:
-        return self.model.moment(order, center)
+        mode_traces = self.univariate_mode_traces(mode, height)
+        return ([pdf_trace, self.univariate_expectation_trace(height)] + mode_traces +
+                self.univariate_complement_of_support_trace(min(samples)[0], max(samples)[0]))
+
+    def univariate_expectation_trace(self, height: float) -> go.Scatter:
+        """
+        Create a trace for the expectation of the model in 1d.
+        :param height: The height of the trace.
+        :return: The trace.
+        """
+        mean = self.expectation(self.variables)[self.variables[0]]
+        mean_trace = go.Scatter(x=[mean, mean], y=[0, height], mode="lines+markers", name=EXPECTATION_TRACE_NAME,
+                                marker=dict(color=EXPECTATION_TRACE_COLOR), line=dict(color=EXPECTATION_TRACE_COLOR))
+        return mean_trace
+
+    def univariate_mode_traces(self, mode: Optional[Event], height: float):
+        if mode is None:
+            return []
+
+        interval = mode.simple_sets[0][self.variables[0]]
+        x_values = []
+        y_values = []
+        for simple_interval in interval.simple_sets:
+            simple_interval: SimpleInterval
+            x_values += (
+                [simple_interval.lower, simple_interval.lower, simple_interval.upper, simple_interval.upper, None])
+            y_values += ([0, height, height, 0, None])
+        return [go.Scatter(x=x_values, y=y_values, mode="lines+markers", name=MODE_TRACE_NAME, fill="toself",
+                           line=dict(color=MODE_TRACE_COLOR))]
+
+    def univariate_complement_of_support_trace(self, min_of_samples: float, max_of_samples: float) -> List:
+        """
+        Create a trace for the complement of the support of the model in 1d.
+        :param min_of_samples: The minimum value of the samples.
+        :param max_of_samples: The maximum value of the samples.
+        :return: A list of traces for the support of the model.
+        """
+        supporting_interval: Interval = self.support().simple_sets[0][self.variables[0]]
+        complement_of_support = supporting_interval.complement()
+        limiting_interval = closed(min_of_samples - min_of_samples * PADDING_FACTOR_FOR_X_AXIS_IN_PLOT,
+                                   max_of_samples + max_of_samples * PADDING_FACTOR_FOR_X_AXIS_IN_PLOT)
+        limited_complement_of_support = complement_of_support & limiting_interval
+        traces = SimpleEvent({self.variables[0]: limited_complement_of_support}).plot()
+        for trace in traces:
+            trace.update(name=PDF_TRACE_NAME, marker=dict(color=PDF_TRACE_COLOR))
+        return traces
+
+    def plot_2d(self, number_of_samples: int) -> List:
+        """
+        Plot a two-dimensional model.
+        :param number_of_samples: The number of samples to draw.
+        :return: The traces.
+        """
+        samples = self.sample(number_of_samples)
+        likelihood = self.likelihood(samples)
+        expectation = self.expectation(self.variables)
+        likelihood_trace = go.Scatter(x=samples[:, 0], y=samples[:, 1], mode="markers", marker=dict(color=likelihood),
+                                      name=SAMPLES_TRACE_NAME)
+        expectation_trace = go.Scatter(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
+                                       mode="markers", marker=dict(color=EXPECTATION_TRACE_COLOR), name=EXPECTATION_TRACE_NAME)
+        return [likelihood_trace, expectation_trace] + self.multivariate_mode_traces()
+
+    def plot_3d(self, number_of_samples: int) -> List:
+        """
+        Plot a three-dimensional model using samples.
+        :param number_of_samples: The number of samples to draw.
+        :return: The traces.s
+        """
+        samples = self.sample(number_of_samples)
+        likelihood = self.likelihood(samples)
+        expectation = self.expectation(self.variables)
+        likelihood_trace = go.Scatter3d(x=samples[:, 0], y=samples[:, 1], z=samples[:, 2], mode="markers",
+                                        marker=dict(color=likelihood), name=SAMPLES_TRACE_NAME)
+        expectation_trace = go.Scatter3d(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
+                                         z=[expectation[self.variables[2]]], mode="markers",
+                                         name=EXPECTATION_TRACE_NAME, marker=dict(color=EXPECTATION_TRACE_COLOR))
+
+        return [likelihood_trace, expectation_trace] + self.multivariate_mode_traces()
+
+    def multivariate_mode_traces(self):
+        """
+        :return: traces for the mode of a multivariate model.
+        """
+        try:
+            mode, _ = self.mode()
+            mode_traces = mode.plot(color=MODE_TRACE_COLOR)
+            for trace in mode_traces:
+                trace.update(name=MODE_TRACE_NAME)
+        except NotImplementedError:
+            mode_traces = []
+        return mode_traces

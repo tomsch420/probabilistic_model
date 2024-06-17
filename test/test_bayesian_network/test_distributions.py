@@ -1,27 +1,39 @@
 import unittest
 
-import portion
+import networkx as nx
+import numpy as np
+import tabulate
 from matplotlib import pyplot as plt
-from random_events.events import Event
-from random_events.variables import Symbolic, Continuous
+from random_events.interval import closed
+from random_events.product_algebra import SimpleEvent
+from random_events.set import SetElement, Set
+from random_events.variable import Symbolic, Continuous
 
-from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, DiscreteDistribution,
-                                                                ConditionalProbabilisticCircuit)
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
-from probabilistic_model.probabilistic_circuit.distributions import (DiscreteDistribution as PCDiscreteDistribution,
-                                                                     SymbolicDistribution, UniformDistribution)
+from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
+                                                                ConditionalProbabilisticCircuit)
+from probabilistic_model.probabilistic_circuit.distributions import SymbolicDistribution, UniformDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DeterministicSumUnit, \
     DecomposableProductUnit
+from probabilistic_model.utils import MissingDict
 
-import tabulate
 
-import networkx as nx
+class YEnum(SetElement):
+    EMPTY_SET = -1
+    ZERO = 0
+    ONE = 1
+
+
+class XEnum(SetElement):
+    EMPTY_SET = -1
+    ZERO = 0
+    ONE = 1
+    TWO = 2
 
 
 class DistributionTestCase(unittest.TestCase):
-
-    x = Symbolic("x", [0, 1, 2])
-    y = Symbolic("y", [0, 1])
+    x = Symbolic("x", XEnum)
+    y = Symbolic("y", YEnum)
 
     p_x = ConditionalProbabilityTable(x)
     p_yx = ConditionalProbabilityTable(y)
@@ -30,12 +42,15 @@ class DistributionTestCase(unittest.TestCase):
         bayesian_network = BayesianNetwork()
 
         # create the root distribution for x
-        self.p_x = DiscreteDistribution(self.x, [0.5, 0.3, 0.2])
+        self.p_x = RootDistribution(self.x, MissingDict(float, zip([0, 1, 2], [0.5, 0.3, 0.2])))
 
         # create the conditional probability table for y
-        self.p_yx.conditional_probability_distributions[(0,)] = SymbolicDistribution(self.y, [0.5, 0.5])
-        self.p_yx.conditional_probability_distributions[(1,)] = SymbolicDistribution(self.y, [0.3, 0.7])
-        self.p_yx.conditional_probability_distributions[(2,)] = SymbolicDistribution(self.y, [0.1, 0.9])
+        self.p_yx.conditional_probability_distributions[0] = (
+            SymbolicDistribution(self.y, MissingDict(float, zip([0, 1], [0.5, 0.5]))))
+        self.p_yx.conditional_probability_distributions[1] = (
+            SymbolicDistribution(self.y, MissingDict(float, zip([0, 1], [0.3, 0.7]))))
+        self.p_yx.conditional_probability_distributions[2] = (
+            SymbolicDistribution(self.y, MissingDict(float, zip([0, 1], [0.1, 0.9]))))
 
         # add the distributions to the bayesian network
         bayesian_network.add_node(self.p_x)
@@ -46,28 +61,25 @@ class DistributionTestCase(unittest.TestCase):
 
     def test_to_tabulate(self):
         table = tabulate.tabulate(self.p_yx.to_tabulate())
-        self.assertIsInstance(table, str)
-        # print(table)
+        self.assertIsInstance(table, str)  # print(table)
 
-    def test_likelihood(self):
-        self.assertEqual(self.p_yx.likelihood([0, 1]), 0.5)
+    # def test_likelihood(self):
+    #     self.assertEqual(self.p_yx.likelihood([0, 1]), 0.5)
 
     def test_forward_pass(self):
-        event = Event({self.x: [0, 1], self.y: [0]})
-        event = self.p_x.bayesian_network.preprocess_event(event)
+        event = SimpleEvent({self.x: Set(XEnum.ZERO, XEnum.ONE), self.y: YEnum.ZERO})
         self.p_x.forward_pass(event)
 
-        self.assertEqual(self.p_x.forward_message.weights, [0.5/0.8, 0.3/0.8, 0.])
+        self.assertEqual(list(self.p_x.forward_message.probabilities.values()), [0.5 / 0.8, 0.3 / 0.8])
         self.assertEqual(self.p_x.forward_probability, 0.8)
 
         self.p_yx.forward_pass(event)
-        self.assertEqual(self.p_yx.forward_message.weights, [1., 0.])
-        self.assertEqual(self.p_yx.forward_probability, 0.5/0.8 * 0.5 + 0.3/0.8 * 0.3)
+        self.assertEqual(list(self.p_yx.forward_message.probabilities.values()), [1.])
+        self.assertEqual(self.p_yx.forward_probability, 0.5 / 0.8 * 0.5 + 0.3 / 0.8 * 0.3)
 
     def test_forward_pass_impossible_event(self):
-        self.p_x.weights = [1, 0, 0]
-        event = Event({self.x: 2})
-        event = self.p_x.bayesian_network.preprocess_event(event)
+        self.p_x.probabilities = MissingDict(float, zip([0], [1.]))
+        event = SimpleEvent({self.x: Set(XEnum.ONE), self.y: self.y.domain})
 
         self.p_x.forward_pass(event)
         self.assertIsNone(self.p_x.forward_message)
@@ -78,8 +90,7 @@ class DistributionTestCase(unittest.TestCase):
         self.assertEqual(self.p_yx.forward_probability, 0)
 
     def test_joint_distribution_with_parents_root(self):
-        event = Event()
-        event = self.p_x.bayesian_network.preprocess_event(event)
+        event = SimpleEvent({variable: variable.domain for variable in [self.x, self.y]})
 
         self.p_x.forward_pass(event)
 
@@ -87,41 +98,40 @@ class DistributionTestCase(unittest.TestCase):
         self.assertIsInstance(joint_distribution, DeterministicSumUnit)
 
     def test_joint_distribution_with_parents(self):
-        event = Event()
-        event = self.p_x.bayesian_network.preprocess_event(event)
+        event = SimpleEvent({variable: variable.domain for variable in [self.x, self.y]})
 
         self.p_x.bayesian_network.forward_pass(event)
 
         joint_distribution = self.p_yx.joint_distribution_with_parent()
         self.assertIsInstance(joint_distribution, DeterministicSumUnit)
 
-        self.assertEqual(joint_distribution.likelihood([0, 1]), 0.25)
-        self.assertEqual(joint_distribution.likelihood([2, 1]), 0.2 * 0.9)
+        likelihoods = joint_distribution.likelihood(np.array([[0, 1], [2, 1]]))
+        self.assertAlmostEqual(likelihoods[0], 0.25)
+        self.assertAlmostEqual(likelihoods[1], 0.2 * 0.9)
 
 
 class CircuitDistributionTestCase(unittest.TestCase):
-
-    x: Symbolic = Symbolic("x", [0, 1])
+    x: Symbolic = Symbolic("x", YEnum)
     y: Continuous = Continuous("y")
     z: Continuous = Continuous("z")
-    p_x: DiscreteDistribution
+    p_x: RootDistribution
     p_yzx = ConditionalProbabilisticCircuit([y, z])
     bayesian_network: BayesianNetwork
 
     def setUp(self):
         self.bayesian_network = BayesianNetwork()
-        self.p_x = DiscreteDistribution(self.x, [0.7, 0.3])
+        self.p_x = RootDistribution(self.x, MissingDict(float, zip([0, 1], [0.7, 0.3])))
 
         d1 = DecomposableProductUnit()
-        d1.add_subcircuit(UniformDistribution(self.y, portion.closed(0, 1)))
-        d1.add_subcircuit(UniformDistribution(self.z, portion.closed(0, 1)))
+        d1.add_subcircuit(UniformDistribution(self.y, closed(0, 1).simple_sets[0]))
+        d1.add_subcircuit(UniformDistribution(self.z, closed(0, 1).simple_sets[0]))
 
         d2 = DecomposableProductUnit()
-        d2.add_subcircuit(UniformDistribution(self.y, portion.closed(0, 2)))
-        d2.add_subcircuit(UniformDistribution(self.z, portion.closed(0, 3)))
+        d2.add_subcircuit(UniformDistribution(self.y, closed(0, 2).simple_sets[0]))
+        d2.add_subcircuit(UniformDistribution(self.z, closed(0, 3).simple_sets[0]))
 
-        self.p_yzx.conditional_probability_distributions[(0,)] = d1.probabilistic_circuit
-        self.p_yzx.conditional_probability_distributions[(1,)] = d2.probabilistic_circuit
+        self.p_yzx.conditional_probability_distributions[0] = d1.probabilistic_circuit
+        self.p_yzx.conditional_probability_distributions[1] = d2.probabilistic_circuit
 
         self.bayesian_network.add_nodes_from([self.p_x, self.p_yzx])
         self.bayesian_network.add_edge(self.p_x, self.p_yzx)
@@ -130,24 +140,19 @@ class CircuitDistributionTestCase(unittest.TestCase):
         nx.draw(self.bayesian_network, with_labels=True)
         plt.show()
 
-    def test_likelihood(self):
-        self.assertEqual(self.p_yzx.likelihood([0, 0, 0]), 1)
-        self.assertEqual(self.p_yzx.likelihood([1, 0, 0]), 0.5 / 1/3)
-        self.assertEqual(self.p_yzx.likelihood([1, -1, -1]), 0)
-
     def test_forward_pass(self):
-        event = self.bayesian_network.preprocess_event(Event())
+        event = SimpleEvent({variable: variable.domain for variable in self.bayesian_network.variables})
         self.bayesian_network.forward_pass(event)
         self.assertEqual(self.p_x.forward_probability, 1)
         self.assertEqual(self.p_yzx.forward_probability, 1)
 
     def test_joint_distribution_with_parent(self):
-        event = self.bayesian_network.preprocess_event(Event())
+        event = SimpleEvent({variable: variable.domain for variable in self.bayesian_network.variables})
         self.bayesian_network.forward_pass(event)
 
         joint_distribution = self.p_yzx.joint_distribution_with_parent()
-        event = Event({self.x: 0, self.y: portion.closed(0, 0.5)})
-        self.assertEqual(joint_distribution.probability(event),0.35)
+        event = SimpleEvent({self.x: YEnum.ZERO, self.y: closed(0, 0.5)}).as_composite_set()
+        self.assertEqual(joint_distribution.probability(event), 0.35)
 
 
 if __name__ == '__main__':

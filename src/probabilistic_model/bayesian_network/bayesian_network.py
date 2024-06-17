@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import itertools
+from abc import abstractmethod
 from functools import cached_property
 
 from matplotlib import pyplot as plt
-from random_events.events import EncodedEvent, Event, VariableMap
-from random_events.variables import Variable, Symbolic, Integer, Discrete
+from random_events.product_algebra import SimpleEvent, Event, VariableMap
+from random_events.variable import Variable, Symbolic, Integer
 from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict, TYPE_CHECKING
 
 from probabilistic_model.probabilistic_circuit.distributions import (SymbolicDistribution, IntegerDistribution,
@@ -19,18 +20,17 @@ from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit,
                                                            DecomposableProductUnit, ProbabilisticCircuitMixin,
                                                            SmoothSumUnit)
 
-if TYPE_CHECKING:
-    from .distributions import DiscreteDistribution as RootDistribution, ConditionalProbabilisticCircuit
 
-
-class BayesianNetworkMixin(ProbabilisticModel):
+class BayesianNetworkMixin:
     """
     Mixin class for conditional probability distributions in tree shaped bayesian networks.
+    These distributions do not inherit from probabilistic models,
+    since inference in Bayesian Networks is intractable.
     """
 
     bayesian_network: BayesianNetwork
 
-    forward_message: Optional[PCDiscreteDistribution]
+    forward_message: Optional[SymbolicDistribution]
     """
     The marginal distribution of this nodes variable (message) as calculated in the forward pass.
     """
@@ -39,6 +39,11 @@ class BayesianNetworkMixin(ProbabilisticModel):
     """
     The probability of the forward message at each node.
     """
+
+    @property
+    @abstractmethod
+    def variables(self) -> Tuple[Variable, ...]:
+        raise NotImplementedError
 
     @property
     def parent(self) -> Optional[Self]:
@@ -65,6 +70,7 @@ class BayesianNetworkMixin(ProbabilisticModel):
     def parent_and_node_variables(self) -> Tuple[Variable, ...]:
         """
         Get the parent variables together with this nodes variable.
+
         :return: A tuple containing first the parent variable and second this nodes variable.
         """
         if self.is_root:
@@ -85,7 +91,7 @@ class BayesianNetworkMixin(ProbabilisticModel):
         """
         raise NotImplementedError
 
-    def forward_pass(self, event: EncodedEvent):
+    def forward_pass(self, event: SimpleEvent):
         """
         Calculate the forward pass for this node given the event.
         This includes calculating the forward message and the forward probability of said event.
@@ -102,7 +108,7 @@ class BayesianNetworkMixin(ProbabilisticModel):
         """
         raise NotImplementedError
 
-    def interaction_term(self, node_latent_variable: Discrete, parent_latent_variable: Discrete) \
+    def interaction_term(self, node_latent_variable: Symbolic, parent_latent_variable: Symbolic) \
             -> ProbabilisticCircuit:
         """
         Generate the interaction term that is used for mounting into the parent circuit in the generation of a
@@ -112,14 +118,14 @@ class BayesianNetworkMixin(ProbabilisticModel):
         raise NotImplementedError
 
 
-class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
+class BayesianNetwork(nx.DiGraph):
     """
     Class for Bayesian Networks that are rooted, tree shaped and have univariate inner nodes.
-    This class cannot perform inference, but can be converted to a probabilistic circuit which can.
+    This class does not inherit from ProbabilisticModel since it cannot perform inference.
+    Bayesian Networks can be converted to a probabilistic circuit which can perform inference.
     """
 
     def __init__(self):
-        ProbabilisticModel.__init__(self, None)
         nx.DiGraph.__init__(self)
 
     @cached_property
@@ -146,15 +152,7 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
     def add_nodes_from(self, nodes: Iterable[BayesianNetworkMixin], **attr):
         [self.add_node(node) for node in nodes]
 
-    def _likelihood(self, event: Iterable) -> float:
-        event = VariableMap(zip(self.variables, event))
-        result = 1.
-        for node in self.nodes:
-            node_event = [event[variable] for variable in node.parent_and_node_variables]
-            result *= node._likelihood(node_event)
-        return result
-
-    def forward_pass(self, event: EncodedEvent):
+    def forward_pass(self, event: SimpleEvent):
         """
         Calculate all forward messages.
         """
@@ -162,29 +160,8 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         for node in nx.bfs_tree(self, self.root):
             node.forward_pass(event)
 
-    def brute_force_joint_distribution(self) -> MultinomialDistribution:
-        """
-        Compute the joint distribution of this bayes network variables by brute force.
-        This only works if only discrete variables are present in the network.
-
-        .. Warning::
-            This method is only feasible for a small number of variables as it has exponential runtime.
-
-        :return: A Multinomial distribution over all the variables.
-        """
-        assert all([isinstance(variable, Discrete) for variable in self.variables])
-
-        worlds = list(itertools.product(*[variable.domain for variable in self.variables]))
-        worlds = np.array(worlds)
-        potentials = np.zeros(tuple(len(variable.domain) for variable in self.variables))
-
-        for idx, world in enumerate(worlds):
-            potentials[tuple(world)] = self._likelihood(world)
-
-        return MultinomialDistribution(self.variables, potentials)
-
     @property
-    def root(self) -> RootDistribution:
+    def root(self) -> BayesianNetworkMixin:
         """
         The root of the circuit is the node with in-degree 0.
         This is the output node, that will perform the final computation.
@@ -194,7 +171,6 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         possible_roots = [node for node in self.nodes if self.in_degree(node) == 0]
         if len(possible_roots) > 1:
             raise ValueError(f"More than one root found. Possible roots are {possible_roots}")
-
         return possible_roots[0]
 
     def as_probabilistic_circuit(self) -> ProbabilisticCircuit:
@@ -207,7 +183,8 @@ class BayesianNetwork(ProbabilisticModel, nx.DiGraph):
         assert nx.is_tree(self)
 
         # calculate forward pass
-        self.forward_pass(self.preprocess_event(Event()))
+        event = SimpleEvent({variable: variable.domain for variable in self.variables})
+        self.forward_pass(event)
 
         pointers_to_sum_units: Dict[BayesianNetworkMixin, SmoothSumUnit] = dict()
 

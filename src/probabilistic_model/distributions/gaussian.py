@@ -1,17 +1,10 @@
+from __future__ import annotations
 import math
-import random
-from typing import Tuple, List, Optional, Dict, Any
 
-import numpy as np
-import portion
-from random_events.events import Event, EncodedEvent, VariableMap, ComplexEvent
-from random_events.variables import Continuous
 from scipy.stats import gamma, norm
-from typing_extensions import Self
 
-from .distributions import ContinuousDistribution
-from ..probabilistic_model import OrderType, CenterType, MomentType
-from .exponential import ExponentialDistribution
+from .distributions import *
+from ..utils import simple_interval_as_array
 
 
 class GaussianDistribution(ContinuousDistribution):
@@ -19,63 +12,40 @@ class GaussianDistribution(ContinuousDistribution):
     Class for Gaussian distributions.
     """
 
-    mean: float
+    location: float
     """
     The mean of the Gaussian distribution.
     """
 
     scale: float
     """
-    The variance of the Gaussian distribution.
+    The standard deviation of the Gaussian distribution.
     """
 
-    def __init__(self, variable: Continuous, mean: float, scale: float):
-        super().__init__(variable)
-        self.mean = mean
+    def __init__(self, variable: Continuous, location: float, scale: float):
+        super().__init__()
+        self.variable = variable
+        self.location = location
         self.scale = scale
 
     @property
-    def domain(self) -> ComplexEvent:
-        return ComplexEvent([Event({self.variable: portion.open(-portion.inf, portion.inf)})])
+    def univariate_support(self) -> Interval:
+        return reals()
 
-    def _pdf(self, value: float) -> float:
-        r"""
-            Helper method to calculate the pdf of a Gaussian distribution.
+    def log_likelihood(self, x: np.array) -> np.array:
+        return norm.logpdf(x[:, 0], loc=self.location, scale=self.scale)
 
-            .. math::
+    def cdf(self, x: np.array) -> np.array:
+        return norm.cdf(x[:, 0], loc=self.location, scale=self.scale)
 
-            \varphi\left( \frac{x-\mu}{\sigma} \right) = \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac{1}{2}
-            \left(\frac{x-\mu}{\sigma} \right )^2}
+    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
+        return singleton(self.location), self.log_likelihood(np.array([[self.location]]))[0]
 
-        """
-        if value == -portion.inf or value == portion.inf:
-            return 0
-        return 1 / math.sqrt(2 * math.pi * self.scale) * math.exp(-1 / 2 * (value - self.mean) ** 2 / self.scale)
-
-    def _cdf(self, value: float) -> float:
-        r"""
-            Helper method to calculate the cdf of a Gaussian distribution.
-
-            .. math::
-
-            \Phi \left( \frac{x-\mu}{\sigma} \right) = \frac{1}{2} \left[ 1 +
-            \mathbf{erf}\left( \frac{x-\mu}{\sigma\sqrt{2}} \right) \right]
-
-        """
-        if value == -portion.inf:
-            return 0
-        elif value == portion.inf:
-            return 1
-        return 0.5 * (1 + math.erf((value - self.mean) / math.sqrt(2 * self.scale)))
-
-    def _mode(self) -> Tuple[ComplexEvent, float]:
-        return ComplexEvent([EncodedEvent({self.variable: portion.singleton(self.mean)})]), self._pdf(self.mean)
-
-    def sample(self, amount: int) -> List[List[float]]:
-        return [[random.gauss(self.mean, self.scale)] for _ in range(amount)]
+    def sample(self, amount: int) -> np.array:
+        return norm.rvs(loc=self.location, scale=self.scale, size=(amount, 1))
 
     def ppf(self, value):
-        return norm.ppf(value, loc=self.mean, scale=self.scale)
+        return norm.ppf(value, loc=self.location, scale=self.scale)
 
     def raw_moment(self, order: int) -> float:
         r"""
@@ -91,11 +61,11 @@ class GaussianDistribution(ContinuousDistribution):
         """
         raw_moment = 0  # Initialize the raw moment
         for j in range(math.floor(order / 2) + 1):
-            mu_term = self.mean ** (order - 2 * j)
-            sigma_term = self.scale ** j
+            mu_term = self.location ** (order - 2 * j)
+            sigma_term = self.scale ** (2 * j)
 
             raw_moment += (math.comb(order, 2 * j) * mu_term * sigma_term * math.factorial(2 * j) / (
-                        math.factorial(j) * (2 ** j)))
+                    math.factorial(j) * (2 ** j)))
 
         return raw_moment
 
@@ -121,61 +91,39 @@ class GaussianDistribution(ContinuousDistribution):
 
         return VariableMap({self.variable: moment})
 
-    def conditional_from_simple_interval(self, interval: portion.Interval) -> Tuple[
-        Optional['TruncatedGaussianDistribution'], float]:
+    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> (
+            Tuple)[TruncatedGaussianDistribution, float]:
+        cdf_values = self.cdf(simple_interval_as_array(interval).reshape(-1, 1))
+        probability = cdf_values[1] - cdf_values[0]
+        return TruncatedGaussianDistribution(self.variable, interval, self.location, self.scale), np.log(probability)
 
-        # calculate the probability of the interval
-        probability = self._probability(EncodedEvent({self.variable: interval}))
-
-        # if the probability is 0, return None
-        if probability == 0:
-            return None, 0
-
-        # else, form the intersection of the interval and the domain
-        intersection = interval
-        resulting_distribution = TruncatedGaussianDistribution(self.variable, interval=intersection, mean=self.mean,
-                                                               scale=self.scale)
-        return resulting_distribution, probability
-
-    def __eq__(self, other):
-        return super().__eq__(other) and self.mean == other.mean and self.scale == other.scale
+    def __eq__(self, other: Self):
+        return super().__eq__(other) and self.location == other.location and self.scale == other.scale
 
     @property
     def representation(self):
-        return f"N({self.mean}, {self.scale})"
+        return f"N({self.variable.name} | {self.location}, {self.scale})"
 
     def __copy__(self):
-        return self.__class__(self.variable, self.mean, self.scale)
+        return self.__class__(self.variable, self.location, self.scale)
 
     def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "mean": self.mean, "variance": self.scale}
+        return {**super().to_json(), "location": self.location, "scale": self.scale}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable = Continuous.from_json(data["variable"])
-        return cls(variable, data["mean"], data["variance"])
+        return cls(variable, data["location"], data["scale"])
 
 
-class TruncatedGaussianDistribution(GaussianDistribution):
+class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, GaussianDistribution):
     """
     Class for Truncated Gaussian distributions.
     """
 
-    def __init__(self, variable: Continuous, interval: portion.Interval, mean: float, scale: float):
-        super().__init__(variable, mean, scale)
+    def __init__(self, variable: Continuous, interval: SimpleInterval, location: float, scale: float):
+        GaussianDistribution.__init__(self, variable, location, scale)
         self.interval = interval
-
-    @property
-    def domain(self) -> ComplexEvent:
-        return ComplexEvent([Event({self.variable: self.interval})])
-
-    @property
-    def lower(self) -> float:
-        return self.interval.lower
-
-    @property
-    def upper(self) -> float:
-        return self.interval.upper
 
     @property
     def normalizing_constant(self) -> float:
@@ -188,44 +136,47 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             \left( \frac{self.interval.lower-\mu}{\sigma} \right )}
 
         """
-        return super()._cdf(self.upper) - super()._cdf(self.lower)
+        return (GaussianDistribution.cdf(self, np.array([[self.upper]])) - GaussianDistribution.cdf(self, np.array(
+            [[self.lower]])))[0]
 
-    def _pdf(self, value: float) -> float:
+    @property
+    def cdf_of_lower(self):
+        return GaussianDistribution.cdf(self, np.array([[self.lower]]))[0]
 
-        if value in self.interval:
-            return super()._pdf(value) / self.normalizing_constant
+    def log_likelihood_without_bounds_check(self, x: np.array) -> np.array:
+        return GaussianDistribution.log_likelihood(self, x) - np.log(self.normalizing_constant)
+
+    def cdf(self, x: np.array) -> np.array:
+        result = np.zeros(len(x))
+        non_zero_condition = self.left_included_condition(x)
+        x_non_zero = x[non_zero_condition].reshape(-1, 1)
+        cdf_non_zero = GaussianDistribution.cdf(self, x_non_zero)
+        result[non_zero_condition[:, 0]] = (cdf_non_zero - self.cdf_of_lower) / self.normalizing_constant
+        result = np.minimum(1, result)
+        return result
+
+    def univariate_log_mode(self) -> Tuple[Interval, float]:
+        if self.interval.contains(self.location):
+            value = self.location
+        elif self.location < self.lower:
+            value = self.lower
         else:
-            return 0
+            value = self.upper
+        return singleton(value), self.log_likelihood_without_bounds_check(np.array([[value]]))[0]
 
-    def _cdf(self, value: float) -> float:
-
-        if value in self.interval:
-            return (super()._cdf(value) - super()._cdf(self.lower)) / self.normalizing_constant
-        elif value <= self.lower:
-            return 0
-        else:
-            return 1
-
-    def _mode(self) -> Tuple[ComplexEvent, float]:
-        if self.mean in self.interval:
-            mode, likelihood = [EncodedEvent({self.variable: portion.singleton(self.mean)})], self._pdf(self.mean)
-        elif self.mean < self.lower:
-            mode, likelihood = [EncodedEvent({self.variable: portion.singleton(self.lower)})], self._pdf(self.lower)
-        else:
-            mode, likelihood = [EncodedEvent({self.variable: portion.singleton(self.upper)})], self._pdf(self.upper)
-        return ComplexEvent(mode), likelihood
-
-    def rejection_sample(self, amount: int) -> List[List[float]]:
+    def rejection_sample(self, amount: int) -> np.array:
         """
         .. note::
             This uses rejection sampling and hence is inefficient.
+            The acceptance probability is self.normalizing_constant.
 
         """
         samples = super().sample(amount)
-        samples = [sample for sample in samples if sample[0] in self.interval]
+        log_likelihoods = self.log_likelihood(samples)
+        samples = samples[log_likelihoods > -np.inf]
         rejected_samples = amount - len(samples)
         if rejected_samples > 0:
-            samples.extend(self.rejection_sample(rejected_samples))
+            samples = np.concatenate((samples, self.rejection_sample(rejected_samples)))
         return samples
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
@@ -276,10 +227,9 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             gamma_term_upper = 0.5 * gamma.cdf(upper_bound ** 2 / 2, (k + 1) / 2) * bound_selection_upper
 
             truncated_moment += (
-                        multiplying_constant * (gamma_term_lower + gamma_term_upper) * (-normalized_center) ** (
-                            order - k))
+                    multiplying_constant * (gamma_term_lower + gamma_term_upper) * (-normalized_center) ** (order - k))
 
-        truncated_moment *= (math.sqrt(self.scale) ** order) / self.normalizing_constant
+        truncated_moment *= (self.scale ** order) / self.normalizing_constant
 
         return VariableMap({self.variable: truncated_moment})
 
@@ -288,19 +238,19 @@ class TruncatedGaussianDistribution(GaussianDistribution):
 
     @property
     def representation(self):
-        return f"N({self.mean},{self.scale} | {self.interval})"
+        return f"N({self.variable.name} | {self.location}, {self.scale}, {self.interval})"
 
     def __copy__(self):
-        return self.__class__(self.variable, self.interval, self.mean, self.scale)
+        return self.__class__(self.variable, self.interval, self.location, self.scale)
 
     def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "interval": portion.to_data(self.interval)}
+        return {**super().to_json(), "interval": self.interval.to_json()}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable = Continuous.from_json(data["variable"])
-        interval = portion.from_data(data["interval"])
-        return cls(variable, interval, data["mean"], data["variance"])
+        interval = SimpleInterval.from_json(data["interval"])
+        return cls(variable, interval, data["location"], data["scale"])
 
     def transform_to_standard_normal(self, number: float) -> float:
         """
@@ -308,13 +258,7 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         :param number: The number to transform
         :return: The transformed bound
         """
-        if number <= -portion.inf:
-            transformed_bound = -float("inf")
-        elif number >= portion.inf:
-            transformed_bound = float("inf")
-        else:
-            transformed_bound = (number - self.mean) / np.sqrt(self.scale)
-        return transformed_bound
+        return (number - self.location) / self.scale
 
     def robert_rejection_sample(self, amount: int) -> np.ndarray:
         """
@@ -324,26 +268,25 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         :return: The samples
         """
         # handle the case where the distribution is not the standard normal
-        new_interval = self.interval.replace(lower=self.transform_to_standard_normal(self.interval.lower),
-                                             upper=self.transform_to_standard_normal(self.interval.upper))
+        new_interval = SimpleInterval(self.transform_to_standard_normal(self.interval.lower),
+                                      self.transform_to_standard_normal(self.interval.upper), self.interval.left,
+                                      self.interval.right)
         standard_distribution = self.__class__(self.variable, new_interval, 0, 1)
 
         # enforce an upper bound if it is infinite
-        if standard_distribution.interval.upper >= float("inf"):
-            standard_distribution.interval = (standard_distribution.interval.
-                                              replace(upper=standard_distribution.interval.lower + 10))
+        if standard_distribution.interval.upper == np.inf:
+            standard_distribution.interval.upper = standard_distribution.interval.lower + 10
 
         # enforce a lower bound if it is infinite
-        if standard_distribution.interval.lower <= -float("inf"):
-            standard_distribution.interval = (standard_distribution.interval.
-                                              replace(lower=standard_distribution.interval.upper - 10))
+        if standard_distribution.interval.lower == -np.inf:
+            standard_distribution.interval.lower = standard_distribution.interval.upper - 10
 
         # sample from double truncated standard normal instead
         samples = standard_distribution.robert_rejection_sample_from_standard_normal_with_double_truncation(amount)
 
         # transform samples to this distributions mean and scale
-        samples *= np.sqrt(self.scale)
-        samples += self.mean
+        samples *= self.scale
+        samples += self.location
 
         return samples
 
@@ -355,13 +298,13 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         :param amount: The amount of samples to generate
         :return: The samples
         """
-        assert self.scale == 1 and self.mean == 0
+        assert self.scale == 1 and self.location == 0
         # sample from uniform distribution over this distribution's interval
         accepted_samples = np.array([])
         while len(accepted_samples) < amount:
-            accepted_samples = np.append(
-                accepted_samples,
-                self.robert_rejection_sample_from_standard_normal_with_double_truncation_helper(amount - len(accepted_samples)))
+            accepted_samples = np.append(accepted_samples,
+                self.robert_rejection_sample_from_standard_normal_with_double_truncation_helper(
+                    amount - len(accepted_samples)))
         return accepted_samples
 
     def robert_rejection_sample_from_standard_normal_with_double_truncation_helper(self, amount: int) -> np.ndarray:
@@ -372,18 +315,18 @@ class TruncatedGaussianDistribution(GaussianDistribution):
             rejection sampling.
         :return: The samples
         """
-        uniform_samples = np.random.uniform(self.interval.lower, self.interval.upper, amount)
+        uniform_samples = np.random.uniform(self.lower, self.upper, amount)
 
         # if the mean in the interval
-        if 0 in self.interval:
+        if self.interval.contains(0):
             limiting_function = np.exp((uniform_samples ** 2) / -2)
 
         # if the mean is below the interval
-        elif self.interval.upper <= 0:
+        elif self.upper <= 0:
             limiting_function = np.exp((self.interval.upper ** 2 - uniform_samples ** 2) / 2)
 
         # if the mean is above the interval
-        elif self.interval.lower >= 0:
+        elif self.lower >= 0:
             limiting_function = np.exp((self.interval.lower ** 2 - uniform_samples ** 2) / 2)
         else:
             raise ValueError("This should never happen")
@@ -395,7 +338,7 @@ class TruncatedGaussianDistribution(GaussianDistribution):
         accepted_samples = uniform_samples[acceptance_probabilities <= limiting_function]
         return accepted_samples
 
-    def sample(self, amount: int) -> List[List[float]]:
-        if self.interval.upper >= portion.inf and self.interval.lower <= -portion.inf:
+    def sample(self, amount: int) -> np.array:
+        if self.upper == np.inf and self.lower == -np.inf:
             return super().sample(amount)
-        return self.robert_rejection_sample(amount).reshape(-1, 1).tolist()
+        return self.robert_rejection_sample(amount).reshape(-1, 1)

@@ -1,104 +1,85 @@
 import unittest
 
-import plotly.graph_objects as go
-import portion
-from random_events.events import Event, VariableMap, ComplexEvent
-from random_events.variables import Continuous, Integer, Discrete
-
-from probabilistic_model.distributions.distributions import (UnivariateDistribution, ContinuousDistribution,
-                                                             DiscreteDistribution, IntegerDistribution,
-                                                             DiracDeltaDistribution)
-from probabilistic_model.utils import SubclassJSONSerializer
+from probabilistic_model.distributions.distributions import *
+from probabilistic_model.utils import SubclassJSONSerializer, MissingDict
 
 
-class UnivariateDistributionTestCase(unittest.TestCase):
-    variable = Continuous("x")
-    model: UnivariateDistribution
-
-    def setUp(self):
-        self.model = UnivariateDistribution(self.variable)
-
-    def test_variable(self):
-        self.assertEqual(self.model.variable, self.variable)
+class TestEnum(SetElement):
+    EMPTY_SET = -1
+    A = 0
+    B = 1
+    C = 2
 
 
-class ContinuousDistributionTestCase(unittest.TestCase):
-    variable = Continuous("x")
-    model: ContinuousDistribution
+class IntegerDistributionTestCase(unittest.TestCase):
+    x = Integer("x")
+    model: IntegerDistribution
 
     def setUp(self):
-        self.model = ContinuousDistribution(self.variable)
+        probabilities = MissingDict(float)
+        probabilities[1] = 4 / 20
+        probabilities[2] = 5 / 20
+        probabilities[4] = 11 / 20
+        self.model = IntegerDistribution(self.x, probabilities)
 
-    def test_cdf(self):
-        self.assertEqual(self.model.cdf(float("inf")), 1)
-        self.assertEqual(self.model.cdf(-float("inf")), 0)
-
-
-class DiscreteTestCase(unittest.TestCase):
-    variable = Discrete("x", (1, 2, 3))
-    model: DiscreteDistribution
-
-    def setUp(self):
-        self.model = DiscreteDistribution(self.variable, [4 / 20, 5 / 20, 11 / 20])
-
-    def test_creating_with_invalid_weights(self):
-        with self.assertRaises(ValueError):
-            DiscreteDistribution(self.variable, [0, 1])
-
-    def test_pdf(self):
-        self.assertEqual(self.model.pdf(1), 1 / 5)
+    def test_likelihood(self):
+        pdf = self.model.likelihood(np.array([1, 2, 3, 4]).reshape(-1, 1))
+        self.assertAlmostEqual(pdf[0], 4 / 20)
+        self.assertAlmostEqual(pdf[1], 5 / 20)
+        self.assertAlmostEqual(pdf[2], 0)
+        self.assertAlmostEqual(pdf[3], 11/20)
 
     def test_probability(self):
-        event = Event({self.variable: (1, 3)})
-        self.assertEqual(self.model.probability(event), 15 / 20)
+        event = SimpleEvent({self.x: closed(1, 3)}).as_composite_set()
+        self.assertEqual(self.model.probability(event), 9 / 20)
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
-        self.assertEqual(likelihood, 11 / 20)
-        self.assertEqual(mode, ComplexEvent([Event({self.variable: 3})]))
+        self.assertAlmostEqual(likelihood, 11 / 20)
+        self.assertEqual(mode, SimpleEvent({self.x: singleton(4)}).as_composite_set())
 
     def test_conditional(self):
-        event = Event({self.variable: (1, 2)})
-        conditional, likelihood = self.model.conditional(event)
-        self.assertEqual(likelihood, 9 / 20)
-        self.assertAlmostEqual(conditional.weights[0], 4 / 9)
-        self.assertAlmostEqual(conditional.weights[1], 5 / 9)
-        self.assertAlmostEqual(conditional.weights[2], 0.)
+        event = SimpleEvent({self.x: closed(0, 1) | closed(3, 4)}).as_composite_set()
+        conditional, probability = self.model.conditional(event)
+        self.assertEqual(probability, 15 / 20)
+        self.assertAlmostEqual(conditional.probabilities[1], 4 / 15)
+        self.assertAlmostEqual(conditional.probabilities[4], 11 / 15)
 
     def test_conditional_impossible(self):
-        event = Event({self.variable: []})
+        event = SimpleEvent({self.x: open(0, 1)}).as_composite_set()
 
         conditional, probability = self.model.conditional(event)
         self.assertIsNone(conditional)
         self.assertEqual(probability, 0)
 
     def test_sample(self):
-        samples = self.model.sample(10)
-        for sample in samples:
-            self.assertGreater(self.model.likelihood(sample), 0)
+        samples = self.model.sample(100)
+        likelihoods = self.model.likelihood(samples)
+        self.assertTrue(all(likelihoods > 0))
 
     def test_copy(self):
-        model = self.model.__copy__()
-        self.assertEqual(model.weights, self.model.weights)
-        model.weights = [1 / 3, 1 / 3, 1 / 3]
-        self.assertNotEqual(model.weights, self.model.weights)
+        copied = self.model.__copy__()
+        self.assertEqual(copied, self.model)
+        copied.probabilities = MissingDict(float)
+        self.assertNotEqual(copied, self.model)
 
     def test_fit(self):
         data = [1, 2, 2, 2]
         self.model.fit(data)
-        self.assertEqual(self.model.weights, [1 / 4, 3 / 4, 0])
+        self.assertEqual(self.model.probabilities[1], [1 / 4])
+        self.assertEqual(self.model.probabilities[2], [3 / 4])
 
     def test_domain(self):
-        domain = self.model.domain
-        self.assertEqual(domain, ComplexEvent([Event({self.variable: self.variable.domain})]))
+        support = self.model.univariate_support
+        self.assertEqual(support, singleton(1) | singleton(2) | singleton(4))
 
     def test_domain_if_weights_are_zero(self):
-        distribution = DiscreteDistribution(self.variable, [0, 0, 1])
-        domain = distribution.domain
-        self.assertEqual(domain.events[0], Event({distribution.variable: 3}))
+        distribution = IntegerDistribution(self.x, MissingDict(float))
+        self.assertTrue(distribution.univariate_support.is_empty())
 
     def test_plot(self):
-        fig = go.Figure(self.model.plot())  # fig.show()
+        fig = go.Figure(self.model.plot(), self.model.plotly_layout())
+        # fig.show()
 
     def test_serialization(self):
         serialized = self.model.to_json()
@@ -106,109 +87,124 @@ class DiscreteTestCase(unittest.TestCase):
         self.assertIsInstance(deserialized, DiscreteDistribution)
         self.assertEqual(deserialized, self.model)
 
-    def test_avm_same(self):
-        distribution1 = DiscreteDistribution(self.variable, [0, 4/12, 8/12])
-        distribution2 = DiscreteDistribution(self.variable, [0, 4/12, 8/12])
-        self.assertEqual(distribution1.area_validation_metric(distribution2), 0)
-
-    def test_avm_different(self):
-        distribution1 = DiscreteDistribution(self.variable, [8/12, 0, 4/12])
-        distribution2 = DiscreteDistribution(self.variable, [0, 4/12, 8/12])
-        self.assertEqual(distribution1.area_validation_metric(distribution2), 8/12)
+    def test_cdf(self):
+        cdf = self.model.cdf(np.array([0, 1, 2, 3, 4]).reshape(-1, 1))
+        self.assertAlmostEqual(cdf[0], 0)
+        self.assertAlmostEqual(cdf[1], 4 / 20)
+        self.assertAlmostEqual(cdf[2], 9 / 20)
+        self.assertAlmostEqual(cdf[3], 9 / 20)
+        self.assertAlmostEqual(cdf[4], 1)
 
 
-
-class IntegerDistributionTestCase(unittest.TestCase):
-    variable = Integer("x", (1, 2, 4))
-    model: IntegerDistribution
+class SymbolicDistributionTestCase(unittest.TestCase):
+    x = Symbolic("x", TestEnum)
+    model: SymbolicDistribution
 
     def setUp(self):
-        self.model = IntegerDistribution(self.variable, [1 / 4, 1 / 4, 1 / 2])
+        probabilities = MissingDict(float)
+        probabilities[int(TestEnum.A)] = 7 / 20
+        probabilities[int(TestEnum.B)] = 13 / 20
+        self.model = SymbolicDistribution(self.x, probabilities)
 
-    def test_cdf(self):
-        self.assertEqual(self.model.cdf(4), 0.5)
+    def test_sample(self):
+        samples = self.model.sample(100)
+        likelihoods = self.model.likelihood(samples)
+        self.assertTrue(all(likelihoods > 0))
 
-    def test_moment(self):
-        expectation = self.model.expectation(self.model.variables)
-        self.assertEqual(expectation[self.variable], 2.75)
+    def test_mode(self):
+        mode, likelihood = self.model.mode()
+        self.assertEqual(likelihood, 13 / 20)
+        self.assertEqual(mode, SimpleEvent({self.x: TestEnum.B}).as_composite_set())
 
     def test_plot(self):
-        fig = go.Figure(self.model.plot())
+        fig = go.Figure(self.model.plot(), self.model.plotly_layout())
         # fig.show()
 
-    def test_serialization(self):
-        serialized = self.model.to_json()
-        deserialized = SubclassJSONSerializer.from_json(serialized)
-        self.assertIsInstance(deserialized, IntegerDistribution)
-        self.assertEqual(deserialized, self.model)
+    def test_probability(self):
+        event = SimpleEvent({self.x: Set(TestEnum.A, TestEnum.C)}).as_composite_set()
+        self.assertEqual(self.model.probability(event), 7 / 20)
+
+    def test_support(self):
+        support = self.model.univariate_support
+        self.assertEqual(support, Set(TestEnum.A, TestEnum.B))
+
+    def test_fit(self):
+        data = [0, 1, 1, 1]
+        self.model.fit(data)
+        self.assertEqual(self.model.probabilities[0], [1 / 4])
+        self.assertEqual(self.model.probabilities[1], [3 / 4])
+        prob = self.model.probability(SimpleEvent({self.x: Set(TestEnum.A, TestEnum.B)}).as_composite_set())
+        self.assertEqual(prob, 1)
 
 
 class DiracDeltaDistributionTestCase(unittest.TestCase):
-    variable = Continuous("x")
+    x = Continuous("x")
     model: DiracDeltaDistribution
 
     def setUp(self):
-        self.model = DiracDeltaDistribution(self.variable, 0, 2)
+        self.model = DiracDeltaDistribution(self.x, 0, 2)
 
-    def test_pdf(self):
-        self.assertEqual(self.model.pdf(1), 0)
-        self.assertEqual(self.model.pdf(0), 2)
-        self.assertEqual(self.model.pdf(2), 0)
-        self.assertEqual(self.model.pdf(-1), 0)
-        self.assertEqual(self.model.pdf(3), 0)
+    def test_likelihood(self):
+        pdf = self.model.likelihood(np.array([0, 1]).reshape(-1, 1))
+        self.assertEqual(pdf[0], 2)
+        self.assertEqual(pdf[1], 0)
 
     def test_cdf(self):
-        self.assertEqual(self.model.cdf(1), 1)
-        self.assertEqual(self.model.cdf(0), 1)
-        self.assertEqual(self.model.cdf(2), 1)
-        self.assertEqual(self.model.cdf(-1), 0)
-        self.assertEqual(self.model.cdf(3), 1)
+        cdf = self.model.cdf(np.array([-1, 0, 1]).reshape(-1, 1))
+        self.assertEqual(cdf[0], 0)
+        self.assertEqual(cdf[1], 1)
+        self.assertEqual(cdf[2], 1)
 
     def test_probability(self):
-        event = Event({self.model.variable: portion.closed(0, 1) | portion.closed(1.5, 2)})
+        event = SimpleEvent({self.x: closed(0, 1) | closed(1.5, 2)}).as_composite_set()
         self.assertEqual(self.model.probability(event), 1)
 
     def test_probability_0(self):
-        event = Event({self.variable: portion.openclosed(0, 1)})
+        event = SimpleEvent({self.x: open_closed(0, 1)}).as_composite_set()
         self.assertEqual(self.model.probability(event), 0.)
 
     def test_conditional(self):
-        event = Event({self.model.variable: portion.closed(-1, 2)})
+        event = SimpleEvent({self.model.variable: closed(-1, 2)}).as_composite_set()
         conditional, probability = self.model.conditional(event)
         self.assertEqual(conditional, self.model)
-        self.assertEqual(probability, 1)
+        self.assertEqual(probability, 2)
 
     def test_conditional_impossible(self):
-        event = Event({self.model.variable: portion.closed(1, 2)})
+        event = SimpleEvent({self.model.variable: closed(1, 2)}).as_composite_set()
         conditional, probability = self.model.conditional(event)
         self.assertIsNone(conditional)
         self.assertEqual(0, probability)
 
     def test_mode(self):
-        mode, likelihood = self.model.mode()
-        self.assertEqual(mode, ComplexEvent([Event({self.model.variable: 0})]))
-        self.assertEqual(likelihood, 2)
+        mode, log_likelihood = self.model.univariate_log_mode()
+        self.assertEqual(mode, singleton(0))
+        self.assertEqual(log_likelihood, np.log(2))
 
     def test_sample(self):
         samples = self.model.sample(100)
-        self.assertTrue(all([self.model.likelihood(sample) > 0 for sample in samples]))
+        likelihoods = self.model.likelihood(samples)
+        self.assertTrue(all(likelihoods == 2))
 
     def test_expectation(self):
-        self.assertEqual(self.model.expectation([self.variable])[self.variable], 0)
+        self.assertEqual(self.model.expectation([self.x])[self.x], 0)
 
     def test_variance(self):
-        self.assertEqual(self.model.variance([self.variable])[self.variable], 0)
+        self.assertEqual(self.model.variance([self.x])[self.x], 0)
 
     def test_higher_order_moment(self):
-        center = self.model.expectation([self.variable])
-        order = VariableMap({self.variable: 3})
-        self.assertEqual(self.model.moment(order, center)[self.variable], 0)
+        center = self.model.expectation([self.x])
+        order = VariableMap({self.x: 3})
+        self.assertEqual(self.model.moment(order, center)[self.x], 0)
 
     def test_serialization(self):
         serialized = self.model.to_json()
         deserialized = SubclassJSONSerializer.from_json(serialized)
         self.assertIsInstance(deserialized, DiracDeltaDistribution)
         self.assertEqual(deserialized, self.model)
+
+    def test_plot(self):
+        fig = go.Figure(self.model.plot(), self.model.plotly_layout())  # fig.show()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,10 +1,10 @@
 import unittest
-from typing import List
 
 import numpy as np
 import plotly.graph_objects as go
-import portion
-from random_events.variables import Continuous
+from numpy import testing
+from random_events.interval import closed, closed_open
+from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
 from probabilistic_model.probabilistic_circuit.distributions import DiracDeltaDistribution
@@ -15,14 +15,18 @@ from probabilistic_model.utils import SubclassJSONSerializer
 
 class InductionStepTestCase(unittest.TestCase):
     variable: Continuous = Continuous("x")
-    sorted_data: List[float] = [1, 2, 3, 4, 7, 9]
-    weights: List[float] = [1 / 6] * 6
+    sorted_data: np.array = np.array([1, 2, 3, 4, 7, 9])
+    weights: np.array = np.ones((len(sorted_data),))
     induction_step: InductionStep
 
     def setUp(self) -> None:
         nyga_distribution = NygaDistribution(self.variable, min_samples_per_quantile=1, min_likelihood_improvement=0.01)
-        self.induction_step = InductionStep(self.sorted_data, 6, self.weights, 0, len(self.sorted_data),
-                                            nyga_distribution)
+        cumulative_log_weights = np.cumsum(np.log(self.weights))
+        cumulative_log_weights = np.append(0, cumulative_log_weights)
+        cumulative_weights = np.cumsum(self.weights)
+        cumulative_weights = np.append(0, cumulative_weights, )
+        self.induction_step = InductionStep(self.sorted_data, cumulative_weights, cumulative_log_weights, 0,
+                                            len(self.sorted_data), nyga_distribution)
 
     def test_variable(self):
         self.assertEqual(self.induction_step.variable, self.variable)
@@ -41,27 +45,65 @@ class InductionStepTestCase(unittest.TestCase):
 
     def test_create_uniform_distribution_edge_case(self):
         distribution = self.induction_step.create_uniform_distribution()
-        self.assertEqual(distribution, UniformDistribution(self.variable, portion.closed(1, 9)))
+        self.assertEqual(distribution, UniformDistribution(self.variable, closed(1, 9).simple_sets[0]))
 
     def test_create_uniform_distribution(self):
         distribution = self.induction_step.create_uniform_distribution_from_indices(3, 5)
-        self.assertEqual(distribution, UniformDistribution(self.variable, portion.closedopen(3.5, 8.0)))
+        self.assertEqual(distribution, UniformDistribution(self.variable, closed_open(3.5, 8.0).simple_sets[0]))
 
     def test_sum_weights(self):
-        self.assertAlmostEqual(self.induction_step.sum_weights(), 1)
+        self.assertAlmostEqual(self.induction_step.sum_weights(), 6)
 
     def test_sum_weights_from_indices(self):
-        self.assertAlmostEqual(self.induction_step.sum_weights_from_indices(3, 5), 1 / 3)
+        self.assertAlmostEqual(self.induction_step.sum_weights_from_indices(3, 5), 2)
+
+    def test_likelihood_of_split(self):
+        """
+        Test that the calculation of the likelihood of a split is correct and as it is in the notebook.
+        """
+
+        likelihood_without_split = self.induction_step.log_likelihood_without_split()
+        self.assertAlmostEqual(likelihood_without_split, -12.48, delta=0.01)
+
+        # k = 1
+        likelihood_of_split_left = self.induction_step.log_likelihood_of_split_side(1, 1)
+        self.assertAlmostEqual(likelihood_of_split_left, -1.1, delta=0.01)
+        likelihood_of_split_right = self.induction_step.log_likelihood_of_split_side(1, 9)
+        self.assertAlmostEqual(likelihood_of_split_right, -10.99, delta=0.01)
+
+        # k = 2
+        likelihood_of_split_left = self.induction_step.log_likelihood_of_split_side(2, 1)
+        self.assertAlmostEqual(likelihood_of_split_left, -3.01, delta=0.01)
+        likelihood_of_split_right = self.induction_step.log_likelihood_of_split_side(2, 9)
+        self.assertAlmostEqual(likelihood_of_split_right, -9.11, delta=0.01)
+
+        # k = 3
+        likelihood_of_split_left = self.induction_step.log_likelihood_of_split_side(3, 1)
+        self.assertAlmostEqual(likelihood_of_split_left, -4.83, delta=0.01)
+        likelihood_of_split_right = self.induction_step.log_likelihood_of_split_side(3, 9)
+        self.assertAlmostEqual(likelihood_of_split_right, -7.19, delta=0.01)
+
+        # k = 4
+        likelihood_of_split_left = self.induction_step.log_likelihood_of_split_side(4, 1)
+        self.assertAlmostEqual(likelihood_of_split_left, -7.64, delta=0.01)
+        likelihood_of_split_right = self.induction_step.log_likelihood_of_split_side(4, 9)
+        self.assertAlmostEqual(likelihood_of_split_right, -4.7, delta=0.01)
+
+        # k = 5
+        likelihood_of_split_left = self.induction_step.log_likelihood_of_split_side(5, 1)
+        self.assertAlmostEqual(likelihood_of_split_left, -10.64, delta=0.01)
+        likelihood_of_split_right = self.induction_step.log_likelihood_of_split_side(5, 9)
+        self.assertAlmostEqual(likelihood_of_split_right, -1.79, delta=0.01)
 
     def test_compute_best_split(self):
         maximum, index = self.induction_step.compute_best_split()
-        self.assertEqual(index, 1)
+        self.assertEqual(index, 3)
 
     def test_compute_best_split_without_result(self):
         self.induction_step.nyga_distribution.min_samples_per_quantile = 4
         maximum, index = self.induction_step.compute_best_split()
         self.assertEqual(index, None)
-        self.assertEqual(maximum, 0)
+        self.assertEqual(maximum, -float("inf"))
 
     def test_compute_best_split_with_induced_indices(self):
         self.induction_step.begin_index = 3
@@ -72,39 +114,44 @@ class InductionStepTestCase(unittest.TestCase):
         induction_step = self.induction_step.construct_left_induction_step(1)
         self.assertEqual(induction_step.begin_index, 0)
         self.assertEqual(induction_step.end_index, 1)
-        self.assertEqual(induction_step.data, self.induction_step.data)
-        self.assertEqual(induction_step.weights, self.induction_step.weights)
+        testing.assert_equal(induction_step.data, self.induction_step.data)
+        testing.assert_equal(induction_step.cumulative_log_weights, self.induction_step.cumulative_log_weights)
 
     def test_construct_right_induction_step(self):
         induction_step = self.induction_step.construct_right_induction_step(1)
         self.assertEqual(induction_step.begin_index, 1)
         self.assertEqual(induction_step.end_index, 6)
-        self.assertEqual(induction_step.data, self.induction_step.data)
-        self.assertEqual(induction_step.weights, self.induction_step.weights)
+        testing.assert_equal(induction_step.data, self.induction_step.data)
+        testing.assert_equal(induction_step.cumulative_log_weights, self.induction_step.cumulative_log_weights)
 
     def test_fit(self):
         np.random.seed(69)
-        data = np.random.normal(0, 1, 100).tolist()
+        self.induction_step.nyga_distribution.min_samples_per_quantile = 20
+        self.induction_step.nyga_distribution.min_likelihood_improvement = 0
+        data = np.random.normal(0, 1, 500).tolist()
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        self.assertAlmostEqual(sum([weight for weight, _ in distribution.weighted_subcircuits]), 1.)
+        self.assertLessEqual(len(distribution.subcircuits),
+                             int(len(data) / self.induction_step.nyga_distribution.min_samples_per_quantile))
+        self.assertAlmostEqual(sum(distribution.weights), 1.)
 
     def test_domain(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100).tolist()
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        domain = distribution.domain
-        self.assertEqual(len(domain.events), 1)
-        self.assertEqual(domain.events[0][self.variable], portion.closed(min(data), max(data)))
+        domain = distribution.support()
+        self.assertEqual(len(domain.simple_sets), 1)
+        self.assertEqual(domain.simple_sets[0][self.variable], closed(min(data), max(data)))
 
     def test_plot(self):
         np.random.seed(69)
-        data = np.random.normal(0, 1, 100).tolist()
+        data = np.random.normal(0, 1, 100)
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
         fig = go.Figure(distribution.plot())
-        self.assertIsNotNone(fig)  # fig.show()
+        self.assertIsNotNone(fig)
+        # fig.show()
 
     def test_fit_from_singular_data(self):
         data = [1., 1.]
@@ -133,8 +180,8 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertEqual(distribution, distribution_)
 
     def test_from_mixture_of_uniform_distributions(self):
-        u1 = UniformDistribution(self.variable, portion.closed(0, 5))
-        u2 = UniformDistribution(self.variable, portion.closed(2, 3))
+        u1 = UniformDistribution(self.variable, closed(0, 5).simple_sets[0])
+        u2 = UniformDistribution(self.variable, closed(2, 3).simple_sets[0])
         sum_unit = SmoothSumUnit()
         e1 = (sum_unit, u1, 0.5)
         e2 = (sum_unit, u2, 0.5)
@@ -143,9 +190,9 @@ class InductionStepTestCase(unittest.TestCase):
 
         solution_by_hand = NygaDistribution(self.variable)
         solution_by_hand.probabilistic_circuit = ProbabilisticCircuit()
-        leaf_1 = UniformDistribution(self.variable, portion.closedopen(0, 2))
-        leaf_2 = UniformDistribution(self.variable, portion.closedopen(2, 3))
-        leaf_3 = UniformDistribution(self.variable, portion.closed(3, 5))
+        leaf_1 = UniformDistribution(self.variable, closed_open(0, 2).simple_sets[0])
+        leaf_2 = UniformDistribution(self.variable, closed_open(2, 3).simple_sets[0])
+        leaf_3 = UniformDistribution(self.variable, closed(3, 5).simple_sets[0])
 
         e1 = (solution_by_hand, leaf_1, 0.2)
         e2 = (solution_by_hand, leaf_2, 0.6)
@@ -158,11 +205,11 @@ class InductionStepTestCase(unittest.TestCase):
     def test_deep_mount(self):
         np.random.seed(69)
         n1 = NygaDistribution(self.variable)
-        data = np.random.normal(0, 1, 100).tolist()
-        n2 = NygaDistribution(self.variable, min_likelihood_improvement=0.1)
+        data = np.random.normal(0, 1, 100)
+        n2 = NygaDistribution(self.variable, min_likelihood_improvement=1.1, min_samples_per_quantile=40)
         n2.fit(data)
         n1.mount(n2)
-        self.assertEqual(len(n2.probabilistic_circuit.nodes), 3)
+        self.assertEqual(len(n1.probabilistic_circuit.nodes), 4)
 
 
 class NygaDistributionTestCase(unittest.TestCase):
@@ -171,8 +218,8 @@ class NygaDistributionTestCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self.model = NygaDistribution(self.x)
-        self.model.add_subcircuit(UniformDistribution(self.x, portion.closed(-1.5, -0.5)), 0.5)
-        self.model.add_subcircuit(UniformDistribution(self.x, portion.closed(0.5, 1.5)), 0.5)
+        self.model.add_subcircuit(UniformDistribution(self.x, closed(-1.5, -0.5).simple_sets[0]), 0.5)
+        self.model.add_subcircuit(UniformDistribution(self.x, closed(0.5, 1.5).simple_sets[0]), 0.5)
 
     def test_plot(self):
         fig = go.Figure(self.model.plot())
@@ -202,8 +249,8 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
     model: NygaDistribution
 
     def setUp(self) -> None:
-        self.model = NygaDistribution(self.x, min_likelihood_improvement=0.05)
-        data = np.random.normal(0, 1, 100).tolist()
+        self.model = NygaDistribution(self.x, min_likelihood_improvement=0.001, min_samples_per_quantile=25)
+        data = np.random.normal(0, 1, 1000).tolist()
         self.model.fit(data)
 
     def test_plot(self):

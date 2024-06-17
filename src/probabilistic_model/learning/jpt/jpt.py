@@ -5,25 +5,26 @@ from typing import Tuple, Union, Optional, List, Iterable, Dict, Any
 
 import networkx as nx
 from matplotlib import pyplot as plt
+from random_events.interval import closed_open, closed
 from typing_extensions import Self
 
 import numpy as np
 import pandas as pd
-import portion
 
-from random_events.events import VariableMap, Event, EncodedEvent
-from random_events.variables import Variable, Discrete
-
-from .variables import Continuous, Integer, Symbolic
+from random_events.product_algebra import VariableMap, Event, SimpleEvent
+from random_events.variable import Variable
+from .variables import Continuous, Integer, Symbolic, ScaledContinuous
 from ..nyga_distribution import NygaDistribution
 from ...probabilistic_circuit.distributions.distributions import (DiracDeltaDistribution,
                                                                   SymbolicDistribution,
-                                                                  IntegerDistribution)
+                                                                  IntegerDistribution, UnivariateDistribution)
 from ...probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit,
                                                             DecomposableProductUnit as PMDecomposableProductUnit)
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+
+from ...utils import MissingDict
 
 
 class DecomposableProductUnit(PMDecomposableProductUnit):
@@ -198,8 +199,10 @@ class JPT(DeterministicSumUnit):
 
         for variable_index, variable in enumerate(self.variables_from_init):
             column = data[variable.name]
-            if not isinstance(variable, Integer):
-                column = variable.encode_many(column)
+            if isinstance(variable, ScaledContinuous):
+                column = variable.encode(column)
+            if isinstance(variable, Symbolic):
+                column = column.apply(lambda x: variable.domain.simple_sets[0].all_elements[x].value)
             result[:, variable_index] = column
 
         return result
@@ -281,15 +284,16 @@ class JPT(DeterministicSumUnit):
 
         :return: The splitting events left and right.
         """
+        return
         split_position = self.impurity.best_split_pos
         split_variable_index = self.impurity.best_var
         split_variable = self.variables[split_variable_index]
 
-        if isinstance(split_variable, Continuous):
+        if not isinstance(split_variable, Symbolic):
             split_value = (data[self.indices[start + split_position], split_variable_index] +
                            data[self.indices[start + split_position + 1], split_variable_index]) / 2
-            left_event = Event({split_variable: portion.closedopen(-np.inf, split_value)})
-            right_event = Event({split_variable: portion.closed(split_value, np.inf)})
+            left_event = SimpleEvent({split_variable: closed_open(-np.inf, split_value)}).as_composite_set()
+            right_event = SimpleEvent({split_variable: closed(split_value, np.inf)}).as_composite_set()
         else:
             split_value = int(data[self.indices[start + split_position], split_variable_index])
             left_event = EncodedEvent({split_variable: split_value}).decode()
@@ -311,18 +315,18 @@ class JPT(DeterministicSumUnit):
                 distribution = NygaDistribution(variable,
                                                 min_likelihood_improvement=variable.min_likelihood_improvement,
                                                 min_samples_per_quantile=variable.min_samples_per_quantile)
-                distribution._fit(data[:, index].tolist())
+                distribution.fit(data[:, index])
 
                 if isinstance(distribution.subcircuits[0], DiracDeltaDistribution):
                     distribution.subcircuits[0].density_cap = 1/variable.minimal_distance
 
             elif isinstance(variable, Symbolic):
-                distribution = SymbolicDistribution(variable, weights=[1/len(variable.domain)]*len(variable.domain))
-                distribution._fit(data[:, index].tolist())
+                distribution = SymbolicDistribution(variable, probabilities=MissingDict(float))
+                distribution.fit(data[:, index])
 
             elif isinstance(variable, Integer):
-                distribution = IntegerDistribution(variable, weights=[1/len(variable.domain)]*len(variable.domain))
-                distribution.fit(data[:, index].tolist())
+                distribution = IntegerDistribution(variable, probabilities=MissingDict(float))
+                distribution.fit(data[:, index])
             else:
                 raise ValueError(f"Variable {variable} is not supported.")
 
@@ -353,7 +357,7 @@ class JPT(DeterministicSumUnit):
             [index for index, variable in enumerate(self.variables_from_init)
              if variable in self.symbolic_features], dtype=int)
 
-        symbols = np.array([len(variable.domain) for variable in self.symbolic_variables])
+        symbols = np.array([len(variable.domain.simple_sets) for variable in self.symbolic_variables])
         max_variances = np.array([variable.std ** 2 for variable in self.numeric_variables])
 
         dependency_indices = dict()
@@ -383,6 +387,7 @@ class JPT(DeterministicSumUnit):
             child: DecomposableProductUnit
 
             for distribution_index, distribution in enumerate(child.subcircuits):
+                distribution: UnivariateDistribution
                 traces: List[go.Scatter] = distribution.plot()
                 legend_group = child_index * len(self.variables) + distribution_index + 1
                 traces = [trace.update(legendgroup=legend_group)
@@ -460,12 +465,11 @@ class JPT(DeterministicSumUnit):
         if isinstance(variable, Continuous):
             distribution = NygaDistribution.from_uniform_mixture(result)
 
-        elif isinstance(variable, Discrete):
-            weights = [result.probability(Event({variable: value})) for value in variable.domain]
+        elif isinstance(variable, (Integer, Symbolic)):
             if isinstance(variable, Symbolic):
-                distribution = SymbolicDistribution(variable, weights=weights)
+                distribution = SymbolicDistribution.from_sum_unit(result)
             elif isinstance(variable, Integer):
-                distribution = IntegerDistribution(variable, weights=weights)
+                distribution = IntegerDistribution.from_sum_unit(result)
             else:
                 raise NotImplementedError(f"Variable {variable} is not supported.")
             if as_deterministic_sum:
