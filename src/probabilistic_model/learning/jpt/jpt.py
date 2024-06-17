@@ -1,9 +1,11 @@
+import itertools
 import math
 from collections import deque
 from datetime import datetime
 from typing import Tuple, Union, Optional, List, Iterable, Dict, Any
 
 import networkx as nx
+import random_events
 from matplotlib import pyplot as plt
 from random_events.interval import closed_open, closed
 from typing_extensions import Self
@@ -38,6 +40,49 @@ class DecomposableProductUnit(PMDecomposableProductUnit):
     """
     The number of samples that are used to form this product unit.
     """
+
+    def events_of_higher_density(self, other: Self, own_node_weights, other_node_weights):
+        own_result = Event()
+        other_result = Event()
+        combination_map = {}
+
+        for own_univariate_unit in self.subcircuits:
+            other_univariate_unit = [s for s in other.subcircuits if s.variables == own_univariate_unit.variables][0]
+            variable = own_univariate_unit.variables[0]
+            if isinstance(variable, random_events.variable.Continuous):
+                own_univariate_unit: NygaDistribution
+                other_univariate_unit: NygaDistribution
+                all_mixture_points = own_univariate_unit.all_union_of_mixture_points_with(other_univariate_unit)
+                combination_map[variable] = all_mixture_points
+            elif isinstance(variable, random_events.variable.Symbolic):
+                own_univariate_unit: SymbolicDistribution
+                other_univariate_unit: SymbolicDistribution
+                support = own_univariate_unit.support() | other_univariate_unit.support()
+                combination_map[variable] = support
+            else:
+                raise NotImplementedError("Unknown Node Type")
+
+        # number_of_combinations = math.prod([len(value) for value in combination_map.values()])
+        own_weight = sum(own_node_weights.get(hash(self)))
+        other_weight = sum(other_node_weights.get(hash(other)))
+        for combination in itertools.product(*combination_map.values()): #tqdm.tqdm(itertools.product(*combination_map.values()), total=number_of_combinations):
+            full_evidence_state = list(((element.upper - element.lower) / 2) + element.lower  if isinstance(element, random_events.product_algebra.SimpleInterval) else element
+                                   for element in combination)
+            likelihood_in_self = self.likelihood(full_evidence_state) * own_weight
+            likelihood_in_other = other.likelihood(full_evidence_state) * other_weight
+
+            if likelihood_in_self > likelihood_in_other:
+                if not own_result:
+                    own_result = Event({variable: value for variable, value in zip(self.variables, combination)})
+                else:
+                    own_result = own_result.union(Event({variable: value for variable, value in zip(self.variables, combination)}))
+            elif likelihood_in_other > likelihood_in_self:
+                if not other_result:
+                    other_result = Event({variable: value for variable, value in zip(other.variables, combination)})
+                else:
+                    other_result = other_result.union(Event({variable: value for variable, value in zip(other.variables, combination)}))
+
+        return own_result, other_result
 
 
 class JPT(DeterministicSumUnit):
@@ -478,3 +523,33 @@ class JPT(DeterministicSumUnit):
             raise NotImplementedError(f"Variable {variable} not supported.")
 
         return distribution
+    def area_validation_metric(self, other: Self) -> float:
+
+        p_event, q_event = JPT.events_of_higher_density(self, other)
+        result = (self.probability(p_event) - other.probability(p_event)
+                  + other.probability(q_event) - self.probability(q_event))
+
+        return result/2
+
+    def events_of_higher_density(self, other: Self):
+        own_node_weights = self.probabilistic_circuit.nodes_weights()
+        other_node_weights = other.probabilistic_circuit.nodes_weights()
+        own_result = Event()
+        other_result = Event()
+        for own_pro_unit in self.subcircuits:
+            own_pro_unit: DecomposableProductUnit
+            for other_pro_unit in other.subcircuits:
+                other_pro_unit: DecomposableProductUnit
+                own_result_part, other_result_part = own_pro_unit.events_of_higher_density(other_pro_unit,
+                                                                                           own_node_weights,
+                                                                                           other_node_weights)
+                if own_result.is_empty():
+                    own_result = own_result_part
+                else:
+                    own_result = own_result.union(own_result_part)
+                if other_result.is_empty():
+                    other_result = other_result_part
+                else:
+                    other_result = other_result.union(other_result_part)
+
+        return own_result, other_result

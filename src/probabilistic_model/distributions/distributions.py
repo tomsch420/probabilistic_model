@@ -1,4 +1,4 @@
-import abc
+from abc import abstractmethod
 import random
 from typing import Optional
 import os
@@ -9,7 +9,7 @@ from random_events.interval import *
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 import plotly.graph_objects as go
 from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
-
+from ..probabilistic_circuit.distributions import DiracDeltaDistribution
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
 from ..utils import SubclassJSONSerializer, MissingDict, interval_as_array
@@ -341,20 +341,30 @@ class DiscreteDistribution(UnivariateDistribution):
         sample_probabilities = np.array([value for value in self.probabilities.values()])
         return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
 
-    def area_validation_metric(self, other: Self) -> float:
-        """
-        Calculate the area validation metric of this distribution and another.
-
-        ..math:: \sum_{x \in self \cup other} |self(x) - other(x)| dx
-
-        """
-        distance = 0.
+    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights):
+        resulting_elements = []
         if isinstance(other, DiscreteDistribution):
-            for p_probability, q_probability in zip(self.weights, other.weights):
-                distance += abs(p_probability - q_probability)
-        else:
-            raise NotImplementedError(f"AVM between DiscreteDistribution and {type(other)} is not known.")
-        return distance/2
+            own_weight = sum(own_node_weights.get(hash(self)))
+            other_weight = sum(other_node_weights.get(hash(other)))
+            for i in range(len(self.variable.domain.simple_sets)):
+                p_probability = self.weights[i]
+                q_probability = other.weights[i]
+                if p_probability * own_weight > q_probability * other_weight:
+                    resulting_elements.append(self.variable.domain.simple_sets[i])
+    # def area_validation_metric(self, other: Self) -> float:
+    #     """
+    #     Calculate the area validation metric of this distribution and another.
+    #
+    #     ..math:: \sum_{x \in self \cup other} |self(x) - other(x)| dx
+    #
+    #     """
+    #     distance = 0.
+    #     if isinstance(other, DiscreteDistribution):
+    #         for p_probability, q_probability in zip(self.weights, other.weights):
+    #             distance += abs(p_probability - q_probability)
+    #     else:
+    #         raise NotImplementedError(f"AVM between DiscreteDistribution and {type(other)} is not known.")
+    #     return distance/2
 
 class SymbolicDistribution(DiscreteDistribution):
     """
@@ -390,6 +400,17 @@ class SymbolicDistribution(DiscreteDistribution):
     @property
     def image(self):
         return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
+
+    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights):
+        resulting_elements = []
+        if isinstance(other, DiscreteDistribution):
+            own_weight = sum(own_node_weights.get(hash(self)))
+            other_weight = sum(other_node_weights.get(hash(other)))
+            for i in range(len(self.variable.domain.simple_sets)):
+                p_probability = self.weights[i]
+                q_probability = other.weights[i]
+                if p_probability * own_weight > q_probability * other_weight:
+                    resulting_elements.append(self.variable.domain.simple_sets[i])
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
