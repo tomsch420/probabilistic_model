@@ -864,14 +864,14 @@ class AreaValidationMetricTestCase(unittest.TestCase):
     standard_circuit.add_subcircuit(UniformDistribution(y, SimpleInterval(0, 1)))
     standard_circuit = standard_circuit.probabilistic_circuit
 
-    event_1 = Event({x: SimpleInterval(0, .25), y: SimpleInterval(0, .25)})
-    event_2 = Event({x: SimpleInterval(0.75, 1), y: SimpleInterval(0.75, 1)})
+    event_1 = SimpleEvent({x: closed(0, .25), y: closed(0, .25)})
+    event_2 = SimpleEvent({x: closed(0.75, 1), y: closed(0.75, 1)})
 
 
-    circuit_1, _ = standard_circuit.conditional(event_1.complement())
-    circuit_2, _ = standard_circuit.conditional(event_2.complement())
-    circuit_3, _ = circuit_2.conditional(event_1)
-    circuit_4, _ = circuit_1.conditional(event_2)
+    circuit_1, _ = standard_circuit.conditional(event_1.as_composite_set().complement())
+    circuit_2, _ = standard_circuit.conditional(event_2.as_composite_set().complement())
+    circuit_3, _ = circuit_2.conditional(event_1.as_composite_set())
+    circuit_4, _ = circuit_1.conditional(event_2.as_composite_set())
 
 
 
@@ -880,9 +880,9 @@ class AreaValidationMetricTestCase(unittest.TestCase):
 
         p_event_by_hand = self.event_2
         q_event_by_hand = self.event_1
-        self.assertEqual(self.circuit_2.probability(p_event_by_hand), 0)
-        self.assertEqual(self.circuit_1.probability(q_event_by_hand), 0)
-        result_by_hand = self.circuit_1.probability(p_event_by_hand) + self.circuit_2.probability(q_event_by_hand)
+        self.assertEqual(self.circuit_2.probability(p_event_by_hand.as_composite_set()), 0)
+        self.assertEqual(self.circuit_1.probability(q_event_by_hand.as_composite_set()), 0)
+        result_by_hand = self.circuit_1.probability(p_event_by_hand.as_composite_set()) + self.circuit_2.probability(q_event_by_hand.as_composite_set())
         self.assertAlmostEqual(result, result_by_hand/2, 4)
 
     def test_jpt_avm_same_input(self):
@@ -898,5 +898,5 @@ class AreaValidationMetricTestCase(unittest.TestCase):
         import probabilistic_model.Monte_Carlo_Estimator as mc
         result = mc.monte_carlo_estimation_area_validation_metric(sample_amount=1000, first_model=self.circuit_1, senc_model=self.circuit_2)
 
-        self.assertEqual(result, 0.13333333333333336/2)
+        self.assertEqual(result/2, 0.13333333333333336)
 

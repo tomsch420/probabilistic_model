@@ -25,8 +25,8 @@ def monte_carlo_densty_event(sample_amount: int, fist_model: ProbabilisticModel,
     first_amount = 0
     sample_amount = fist_model.sample(sample_amount)
     for sample in sample_amount:
-        own_likli = fist_model.likelihood(sample)
-        other_likli = senc_model.likelihood(sample)
+        own_likli = fist_model.likelihood(np.array([sample]))
+        other_likli = senc_model.likelihood(np.array([sample]))
         if own_likli > other_likli:
             first_amount += 1
 

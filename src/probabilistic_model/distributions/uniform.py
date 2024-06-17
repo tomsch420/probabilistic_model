@@ -139,7 +139,7 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
     def all_union_of_mixture_points_with(self, other: Self):
         points = SortedSet([self.interval.lower, self.interval.upper, other.interval.lower, other.interval.upper])
-        result = [SimpleInterval(lower, upper) for lower, upper in zip(points[:-1], points[1:])]
+        result = [closed(lower, upper) for lower, upper in zip(points[:-1], points[1:])]
         return result
     def area_validation_metric(self, other: ContinuousDistribution) -> float:
         """

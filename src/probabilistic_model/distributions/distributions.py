@@ -1,7 +1,9 @@
-from abc import abstractmethod
-import random
-from typing import Optional
+from __future__ import annotations
+
 import os
+from abc import abstractmethod
+from typing import Optional
+
 import numpy as np
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import *
@@ -9,11 +11,10 @@ from random_events.interval import *
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 import plotly.graph_objects as go
 from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
-from ..probabilistic_circuit.distributions import DiracDeltaDistribution
+
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
 from ..utils import SubclassJSONSerializer, MissingDict, interval_as_array
-
 
 class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """

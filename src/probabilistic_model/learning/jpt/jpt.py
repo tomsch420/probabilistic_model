@@ -66,21 +66,24 @@ class DecomposableProductUnit(PMDecomposableProductUnit):
         own_weight = sum(own_node_weights.get(hash(self)))
         other_weight = sum(other_node_weights.get(hash(other)))
         for combination in itertools.product(*combination_map.values()): #tqdm.tqdm(itertools.product(*combination_map.values()), total=number_of_combinations):
-            full_evidence_state = list(((element.upper - element.lower) / 2) + element.lower  if isinstance(element, random_events.product_algebra.SimpleInterval) else element
+            full_evidence_state = list(((element.simple_sets[-1].upper - element.simple_sets[0].lower) / 2) + element.simple_sets[0].lower if isinstance(element, random_events.interval.Interval) else element
                                    for element in combination)
-            likelihood_in_self = self.likelihood(full_evidence_state) * own_weight
-            likelihood_in_other = other.likelihood(full_evidence_state) * other_weight
+            a = self.likelihood(np.array([[2,2]]))
+
+            likelihood_in_self = self.likelihood(np.array([full_evidence_state])) * own_weight
+            likelihood_in_other = other.likelihood(np.array([full_evidence_state])) * other_weight
 
             if likelihood_in_self > likelihood_in_other:
                 if not own_result:
                     own_result = Event({variable: value for variable, value in zip(self.variables, combination)})
                 else:
-                    own_result = own_result.union(Event({variable: value for variable, value in zip(self.variables, combination)}))
+
+                    own_result = own_result.union_with(SimpleEvent({variable: value for variable, value in zip(self.variables, combination)}).as_composite_set())
             elif likelihood_in_other > likelihood_in_self:
                 if not other_result:
                     other_result = Event({variable: value for variable, value in zip(other.variables, combination)})
                 else:
-                    other_result = other_result.union(Event({variable: value for variable, value in zip(other.variables, combination)}))
+                    other_result = other_result.union_with(SimpleEvent({variable: value for variable, value in zip(other.variables, combination)}).as_composite_set())
 
         return own_result, other_result
 
@@ -546,10 +549,10 @@ class JPT(DeterministicSumUnit):
                 if own_result.is_empty():
                     own_result = own_result_part
                 else:
-                    own_result = own_result.union(own_result_part)
+                    own_result = own_result.union_with(own_result_part)
                 if other_result.is_empty():
                     other_result = other_result_part
                 else:
-                    other_result = other_result.union(other_result_part)
+                    other_result = other_result.union_with(other_result_part)
 
         return own_result, other_result
