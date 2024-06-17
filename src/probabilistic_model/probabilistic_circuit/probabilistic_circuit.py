@@ -290,18 +290,15 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         }
 
     def area_validation_metric(self, other: Self) -> float:
-        assert self.variables == other.variables, "The AVM can only be evaluated on models with the same variables"
-        avm = 0.
-        own_nodes_weights = nodes_weights(self)
-        other_nodes_weights = nodes_weights(other)
+        """
+          Calculate the area validation metric of the circuit.
+          This is forwarded from avm of ProbabilisticCircuit Class
+        """
+        return self.probabilistic_circuit.root.area_validation_metric(other.probabilistic_circuit.root)
 
-        for own_leaf in self.leaves:
-            for other_leaf in other.leaves:
-                if own_leaf.variable == other_leaf.variable:
-                    p_own_leaf = sum(own_nodes_weights[hash(own_leaf)])
-                    p_other_leaf = sum(own_nodes_weights[hash(other_leaf)])
-                    avm += p_own_leaf * p_other_leaf * own_leaf.area_validation_metric(other_leaf)
-        return avm
+    def event_of_higher_density(self, other, own_node_weights, other_node_weights):
+        return self.event_of_higher_density(other, own_node_weights, other_node_weights)
+
 
 def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
     node_weights = {hash(circuit.root): [1]}
@@ -312,10 +309,6 @@ def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
     to_visit_nodes.put(circuit.root)
     while not to_visit_nodes.empty():
         node = to_visit_nodes.get()
-        # sollte schon garantiert sein durch Beirten Suche
-        # if len([x for x in pc.predecessors(node) if x not in visted_nodes]) != 0:
-        #     to_visit_nodes.put(node)
-        #     continue
         succ_iter = circuit.successors(node)
         for succ in succ_iter:
             if circuit.has_edge(node, succ):
@@ -326,6 +319,8 @@ def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
                     seen_nodes.add(hash(succ))
                     to_visit_nodes.put(succ)
     return node_weights
+def event_of_higher_density(self, other: Self,  own_node_weights, other_node_weights) -> Event:
+    return self.probabilistic_circuit.root.event_of_higher_density(other.probabilistic_circuit.root, own_node_weights, other_node_weights)
 
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
@@ -651,6 +646,19 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
     def log_mode(self) -> Tuple[Event, float]:
         raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
+    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights) -> Event:
+        result = Event()
+        for i in range(len(self.subcircuits)):
+            for j in range(i, len(other.subcircuits)):
+                own_subcircuit = self.subcircuits[i]
+                other_subcircuit = other.subcircuits[j]
+                density = own_subcircuit.event_of_higher_density(other_subcircuit, own_node_weights, other_node_weights)
+                if own_subcircuit.variables in result:
+                    result = result.union(density)
+                else:
+                    for var, value in density.items():
+                        result[var] = value
+        return result
 
 class DeterministicSumUnit(SmoothSumUnit):
     """
@@ -897,6 +905,18 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             else:
                 # mount the simplified subcircuit
                 result.add_subcircuit(simplified_subcircuit)
+
+        return result
+
+    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights)-> Event:
+        result = Event()
+        for i in range(len(self.subcircuits)):
+            for j in range(i, len(other.subcircuits)):
+                own_subcircuit = self.subcircuits[i]
+                other_subcircuit = other.subcircuits[j]
+                if own_subcircuit.variables == other_subcircuit.variables:
+                    density = own_subcircuit.event_of_higher_density(other_subcircuit, own_node_weights, other_node_weights)
+                    result = result.intersection(density)
 
         return result
 
@@ -1149,3 +1169,88 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def plotly_layout(self, **kwargs):
         return self.root.plotly_layout()
+
+
+    def area_validation_metric(self, other: Self) -> float:
+        """
+        Calculate the area validation metric of self and other.
+        This is the header of the recusiv area validation metric functions.
+        it tests for all needed Chracktistics of the PCs and correctly transforms the Value.
+        :param other: The other circuit.
+        """
+
+        self.simplify()
+        other.simplify()
+        assert self.variables == other.variables, "The AVM can only be evaluated on models with the same variables"
+        #given on jpt
+        #assert self.decomposes_as(other), "The AVM can only be evaluated on models with the same variables"
+
+        own_node_weights = self.nodes_weights()
+        other_node_weights = other.nodes_weights()
+
+        p_event = self.root.event_of_higher_density(other.root, own_node_weights, other_node_weights)
+        q_event = other.root.event_of_higher_density(self.root, other_node_weights, own_node_weights)
+
+        print(p_event)
+        print(q_event)
+
+        return (self.probability(p_event) - other.probability(p_event)
+                + self.probability(q_event) - other.probability(q_event))
+    def nodes_weights(self) -> dict:
+        """
+        """
+        node_weights = {hash(self.root): [1]}
+        seen_nodes = set()
+        seen_nodes.add(hash(self.root))
+        import queue
+        to_visit_nodes = queue.Queue()
+
+        to_visit_nodes.put(self.root)
+        while not to_visit_nodes.empty():
+            node = to_visit_nodes.get()
+            succ_iter = self.successors(node)
+            for succ in succ_iter:
+                if self.has_edge(node, succ):
+                    weight = self.get_edge_data(node, succ).get("weight", 1)
+                    node_weights[hash(succ)] = [old * weight for old in node_weights[hash(node)]] + node_weights.get(
+                        hash(succ), [])
+                    if hash(succ) not in seen_nodes:
+                        seen_nodes.add(hash(succ))
+                        to_visit_nodes.put(succ)
+        return node_weights
+
+    def all_leaf_avm(self, other: Self):
+        """
+        """
+        own_leaf_avm = {hash(k): [] for k in self.leaves}
+        other_leaf_avm = {hash(k): [] for k in other.leaves}
+        for own_leaf in self.leaves:
+            for other_leaf in other.leaves:
+                #for comman PC case: need a check_up to root if same Structur
+                # or better said avm value got a condtion which type ther come form
+                # if it becomes illigal later kick out
+                #this is enough for JPTs
+                #QUESTION predessors only 1 or none jpt wise?
+                # own_pres_var = [(p.variables) for p in self.predecessors(own_leaf)]
+                # other_pres_var = [(p.variables) for p in self.predecessors(other_leaf)]
+                if (own_leaf.variables == other_leaf.variables):
+                    self_avm_value = own_leaf.area_validation_metric(other_leaf)
+                    other_avm_value = other_leaf.area_validation_metric(own_leaf)
+
+                    own_leaf_avm[hash(own_leaf)].append(self_avm_value)
+
+                    other_leaf_avm[hash(other_leaf)].append(other_avm_value)
+
+        return own_leaf_avm, other_leaf_avm
+
+
+# Product Interesction Summe Union
+# AVM-> higher_densty *"
+# recursive leaf leaf
+class ShallowProbabilisticCircuit(ProbabilisticCircuit):
+
+    @classmethod
+    def from_probabilistic_circuit(cls, probabilistic_circuit: ProbabilisticCircuit):
+        result = cls()
+        # funny calculation
+        return result
