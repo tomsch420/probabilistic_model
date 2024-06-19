@@ -3,6 +3,10 @@ from __future__ import annotations
 import itertools
 from abc import abstractmethod
 
+import queue
+import random
+from typing import Tuple, Iterable, TYPE_CHECKING
+
 import networkx as nx
 import numpy as np
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
@@ -14,6 +18,10 @@ from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, 
 
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
+
+import matplotlib.pyplot as plt
+import os
+import PIL
 
 if TYPE_CHECKING:
     from .distributions import UnivariateDistribution
@@ -273,10 +281,52 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         raise NotImplementedError()
 
+    def draw_io_style(self) -> Dict[str, Any]:
+        return {
+            "style": self.label,
+            "width": 30,
+            "height": 30,
+            "label": self.representation
+        }
+
+    def area_validation_metric(self, other: Self) -> float:
+        """
+          Calculate the area validation metric of the circuit.
+          This is forwarded from avm of ProbabilisticCircuit Class
+        """
+        return self.probabilistic_circuit.root.area_validation_metric(other.probabilistic_circuit.root)
+
+    def event_of_higher_density(self, other, own_node_weights, other_node_weights):
+        return self.event_of_higher_density(other, own_node_weights, other_node_weights)
+
+
+def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
+    node_weights = {hash(circuit.root): [1]}
+    seen_nodes = set()
+    seen_nodes.add(hash(circuit.root))
+    to_visit_nodes = queue.Queue()
+
+    to_visit_nodes.put(circuit.root)
+    while not to_visit_nodes.empty():
+        node = to_visit_nodes.get()
+        succ_iter = circuit.successors(node)
+        for succ in succ_iter:
+            if circuit.has_edge(node, succ):
+                weight = circuit.get_edge_data(node, succ)["weight"]
+                node_weights[hash(succ)] = [old * weight for old in node_weights[hash(node)]] + node_weights.get(
+                    hash(succ), [])
+                if hash(succ) not in seen_nodes:
+                    seen_nodes.add(hash(succ))
+                    to_visit_nodes.put(succ)
+    return node_weights
+def event_of_higher_density(self, other: Self,  own_node_weights, other_node_weights) -> Event:
+    return self.probabilistic_circuit.root.event_of_higher_density(other.probabilistic_circuit.root, own_node_weights, other_node_weights)
+
 
 class SmoothSumUnit(ProbabilisticCircuitMixin):
-
-    representation = "+"
+    label = 'shape=stencil(tZVtb4MgEMc/DW8XHmLSt43bvgdTOkkpEKBr9+2LoGvxgXULGqPh/tzPu5MDQGrbUc0Ahh0grwBjBKF/+vFlMqZWs8ZF44FfWRvN1hl1ZBfeugHAZccMd71K3gDc+zn9TepGSekJXEmbKA+6h1EuvS+8Rtjw7e9kpD3/xBwzQ4TRCvD789iXahsw2ijeFDtGXzzecuA0YrTVjysGRv/Hktpb1hY3qT9oc/w06izbudeqdlCGLQg/MhciNl4mzTihUUIZb4jvkAfABIYrX6bHzvbbwb3Dcd5P037iTBjlk/pi97pXk4VS5dgjQnC5jtg9hUijQOmqqrKVWY5i9xdE+PkrdRoLX6rCi1toPjMmBNf2N8b0gJgeIEVTD26zrgjWeIAFww0=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+    image = os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", "Smoothsum.png")
+    representation = '+'
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
@@ -596,13 +646,28 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
     def log_mode(self) -> Tuple[Event, float]:
         raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
+    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights) -> Event:
+        result = Event()
+        for i in range(len(self.subcircuits)):
+            for j in range(i, len(other.subcircuits)):
+                own_subcircuit = self.subcircuits[i]
+                other_subcircuit = other.subcircuits[j]
+                density = own_subcircuit.event_of_higher_density(other_subcircuit, own_node_weights, other_node_weights)
+                if own_subcircuit.variables in result:
+                    result = result.union(density)
+                else:
+                    for var, value in density.items():
+                        result[var] = value
+        return result
 
 class DeterministicSumUnit(SmoothSumUnit):
     """
     Deterministic Sum Units for Probabilistic Circuits
     """
 
-    representation = "⊕"
+    label = 'shape=stencil(vZVtb4MgEMc/DW8XhLj6dnHb92B6naQUDLC1+/ZD0LX4QLtFZ4zm7uDn3d8DEC1Nw1pABDeIPiNCMozd09mnkc1MC5UNzj0/Qx3cxmp1gBOvbQ/gsgHNbRelLwg/uTHdTctKSekIXEkTRa7iDsa4dHPxOcD6b39FVuv4R7Cg+wyDF5HX+7EP+TbgbKN8Y+yQ/er5rgeOM862+nGrgbO/Y2npPEvNTcs3Vh3etfqQ9XTWYmyvNMwEfsJciLDwEmWGAZUSSjtHePs6EKHYX2mZrle22w4uK5yk57WsGzgJDOGj+oSL7vmoUfIUe0AILpcRxV2IOIss7qo8qcx8FsVvEP7nL+g0CL+WwrNbaLoyEIK35hZjfECMD5BNSl9syhtr/t8l20WMXSRZ8RgpNpirCuanTbYR7w0nvnd8Aw==);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
+    representation = '⊕'
+    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DeterministicSumUnit.png')
 
     def log_mode(self) -> Tuple[Event, float]:
         modes = []
@@ -644,7 +709,9 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
     Decomposable Product Units for Probabilistic Circuits
     """
 
+    label = 'shape=stencil(tZXbboQgEIafhtsGIY3XjW3fg+psJcsCAbe7ffsiSFc8dduiMZqZYT5/BgcQrWzLNCCCW0SfESEFxu7p7MvEZlZD3QXngV+hCW7bGXWEC2+6AcBlC4Z3fZS+IPzkxvQ3rWolpSNwJW0SGcUdjHHpcvE1wIZvfyaWdvwTdGAGhcGLyOv92IfHfcDFTnpTbFSfXW8+cKq42GvhsoGLv2Np5TxrPzet3lh9fDfqLJt51mrsoAwsBL7DXIjQeBvTDANqJZRxjvD280CEYn9tl2nc2W47uHU42c7TrB84C8TwSX3Are4kXc9oLrMjQnA5QpQporwLkaoo/6+C/EaFX/yVOsXC56rw4ha6PTMQgmv7E2N6QEwPkKxT92mzrvDecIB5xxc=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
     representation = "⊗"
+    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DecomposableProductUnit.png')
 
     @property
     def variables(self) -> SortedSet:
@@ -838,6 +905,18 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             else:
                 # mount the simplified subcircuit
                 result.add_subcircuit(simplified_subcircuit)
+
+        return result
+
+    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights)-> Event:
+        result = Event()
+        for i in range(len(self.subcircuits)):
+            for j in range(i, len(other.subcircuits)):
+                own_subcircuit = self.subcircuits[i]
+                other_subcircuit = other.subcircuits[j]
+                if own_subcircuit.variables == other_subcircuit.variables:
+                    density = own_subcircuit.event_of_higher_density(other_subcircuit, own_node_weights, other_node_weights)
+                    result = result.intersection(density)
 
         return result
 
@@ -1035,6 +1114,50 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return unweighted_edges
 
+    def plot_structure(self):
+
+        images = dict()
+        for node in self.nodes:
+            images[hash(node)] = PIL.Image.open(node.image)
+
+        fig, ax = plt.subplots(dpi=200, figsize=(10, 10))
+        graph_pos = nx.nx_agraph.graphviz_layout(self, prog="twopi", args="")
+        pos = nx.spring_layout(self, scale=0.5, pos=graph_pos, threshold=2.0531, k=2, weight=1, iterations=100)
+        nx.draw_networkx_edges(
+            self,
+            pos=pos,
+            ax=ax,
+            arrows=True,
+            min_source_margin=10,
+            min_target_margin=10,
+        )
+
+        tr_figure = ax.transData.transform
+        tr_axes = fig.transFigure.inverted().transform
+        icon_size = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.02
+        icon_center = icon_size / 2.0
+
+        for node in self.nodes:
+
+            xf, yf = tr_figure(pos[node])
+            xa, ya = tr_axes((xf, yf))
+
+            a = plt.axes([xa - icon_center, ya - icon_center, icon_size, icon_size])
+            a.imshow(images[hash(node)])
+            a.axis("off")
+
+            text_margin = 5
+            text_x = xa - icon_center + text_margin
+            text_y = ya + icon_center - text_margin
+            plt.text(text_x, text_y, node.representation, color='black', fontsize=3, ha='left', va='top')
+        plt.show()
+
+    def plot(self):
+        return self.root.plot()
+
+    def plotly_layout(self):
+        return self.root.plotly_layout()
+
     def is_deterministic(self) -> bool:
         """
         :return: Rather this circuit is deterministic or not.
@@ -1046,3 +1169,88 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def plotly_layout(self, **kwargs):
         return self.root.plotly_layout()
+
+
+    def area_validation_metric(self, other: Self) -> float:
+        """
+        Calculate the area validation metric of self and other.
+        This is the header of the recusiv area validation metric functions.
+        it tests for all needed Chracktistics of the PCs and correctly transforms the Value.
+        :param other: The other circuit.
+        """
+
+        self.simplify()
+        other.simplify()
+        assert self.variables == other.variables, "The AVM can only be evaluated on models with the same variables"
+        #given on jpt
+        #assert self.decomposes_as(other), "The AVM can only be evaluated on models with the same variables"
+
+        own_node_weights = self.nodes_weights()
+        other_node_weights = other.nodes_weights()
+
+        p_event = self.root.event_of_higher_density(other.root, own_node_weights, other_node_weights)
+        q_event = other.root.event_of_higher_density(self.root, other_node_weights, own_node_weights)
+
+        print(p_event)
+        print(q_event)
+
+        return (self.probability(p_event) - other.probability(p_event)
+                + self.probability(q_event) - other.probability(q_event))
+    def nodes_weights(self) -> dict:
+        """
+        """
+        node_weights = {hash(self.root): [1]}
+        seen_nodes = set()
+        seen_nodes.add(hash(self.root))
+        import queue
+        to_visit_nodes = queue.Queue()
+
+        to_visit_nodes.put(self.root)
+        while not to_visit_nodes.empty():
+            node = to_visit_nodes.get()
+            succ_iter = self.successors(node)
+            for succ in succ_iter:
+                if self.has_edge(node, succ):
+                    weight = self.get_edge_data(node, succ).get("weight", 1)
+                    node_weights[hash(succ)] = [old * weight for old in node_weights[hash(node)]] + node_weights.get(
+                        hash(succ), [])
+                    if hash(succ) not in seen_nodes:
+                        seen_nodes.add(hash(succ))
+                        to_visit_nodes.put(succ)
+        return node_weights
+
+    def all_leaf_avm(self, other: Self):
+        """
+        """
+        own_leaf_avm = {hash(k): [] for k in self.leaves}
+        other_leaf_avm = {hash(k): [] for k in other.leaves}
+        for own_leaf in self.leaves:
+            for other_leaf in other.leaves:
+                #for comman PC case: need a check_up to root if same Structur
+                # or better said avm value got a condtion which type ther come form
+                # if it becomes illigal later kick out
+                #this is enough for JPTs
+                #QUESTION predessors only 1 or none jpt wise?
+                # own_pres_var = [(p.variables) for p in self.predecessors(own_leaf)]
+                # other_pres_var = [(p.variables) for p in self.predecessors(other_leaf)]
+                if (own_leaf.variables == other_leaf.variables):
+                    self_avm_value = own_leaf.area_validation_metric(other_leaf)
+                    other_avm_value = other_leaf.area_validation_metric(own_leaf)
+
+                    own_leaf_avm[hash(own_leaf)].append(self_avm_value)
+
+                    other_leaf_avm[hash(other_leaf)].append(other_avm_value)
+
+        return own_leaf_avm, other_leaf_avm
+
+
+# Product Interesction Summe Union
+# AVM-> higher_densty *"
+# recursive leaf leaf
+class ShallowProbabilisticCircuit(ProbabilisticCircuit):
+
+    @classmethod
+    def from_probabilistic_circuit(cls, probabilistic_circuit: ProbabilisticCircuit):
+        result = cls()
+        # funny calculation
+        return result

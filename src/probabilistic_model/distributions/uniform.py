@@ -1,8 +1,14 @@
 import numpy as np
+import os
+import random
+from typing import Tuple, Optional
+
+from random_events.product_algebra import SimpleInterval
 
 from .distributions import *
 from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT
-
+from typing_extensions import List, Dict, Any, Self
+from plotly import graph_objects as go
 
 class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     """
@@ -69,8 +75,15 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
                 and self.variable == other.variable)
 
     @property
+    def label(self):
+        return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
+    @property
     def representation(self):
         return f"U({self.variable.name} | {self.interval})"
+
+    @property
+    def image(self):
+        return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval)
@@ -121,3 +134,35 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))
+
+
+
+    def all_union_of_mixture_points_with(self, other: Self):
+        points = SortedSet([self.interval.lower, self.interval.upper, other.interval.lower, other.interval.upper])
+        result = [closed(lower, upper) for lower, upper in zip(points[:-1], points[1:])]
+        return result
+    def area_validation_metric(self, other: ContinuousDistribution) -> float:
+        """
+        Calculate the area validation metric of this distribution and another.
+
+        ..math:: \int_{-\infty}^\infty |self(x) - other(x)| dx
+        """
+        distance = 0.
+        if isinstance(other, UniformDistribution):
+
+            # calculate AVM of intersecting part
+            intersection = self.interval.intersection(other.interval)
+
+            if not intersection.empty:
+                difference_of_pdfs = abs(self.pdf_value() - other.pdf_value())
+                distance += difference_of_pdfs * (intersection.upper - intersection.lower)
+
+            # calculate AVM of non-intersecting parts
+            difference = self.interval.union(other.interval).difference(intersection)
+            for interval in difference:
+                pdf_value = self.pdf_value() if interval in self.interval else other.pdf_value()
+                distance += pdf_value * (interval.upper - interval.lower)
+
+        else:
+            raise NotImplementedError(f"AVM between UniformDistribution and {type(other)} is not known.")
+        return distance/2
