@@ -294,7 +294,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
     def latent_variable(self) -> Symbolic:
         name = f"{hash(self)}.latent"
         enum_elements = {"EMPTY_SET": -1}
-        enum_elements |= {str(hash(subcircuit)): index for index, subcircuit in enumerate(self.subcircuits)}
+        enum_elements.update({str(hash(subcircuit)): index for index, subcircuit in enumerate(self.subcircuits)})
         domain = SetElement(name, enum_elements)
         return Symbolic(name, domain)
 

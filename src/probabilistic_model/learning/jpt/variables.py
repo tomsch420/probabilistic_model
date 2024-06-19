@@ -54,7 +54,7 @@ def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: b
                 unique_values = data[column].unique()
                 unique_values.sort()
                 enum_elements = {"EMPTY_SET": -1}
-                enum_elements |= {unique_value: index for index, unique_value in enumerate(unique_values)}
+                enum_elements.update({unique_value: index for index, unique_value in enumerate(unique_values)})
                 domain = SetElement(column, enum_elements)
                 variable = Symbolic(column, domain)
             else:
