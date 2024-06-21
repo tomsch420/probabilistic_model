@@ -1,2 +1,6 @@
 doc/build
 .idea
+
+src/probabilistic_model.egg-info
+build
+book/_build
