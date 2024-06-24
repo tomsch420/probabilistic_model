@@ -46,6 +46,8 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
     def empty_copy(self) -> Self:
         return self.__copy__()
 
+    def support_property(self) -> Event:
+        return self.support()
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin, ABC):
 

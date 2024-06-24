@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 from abc import abstractmethod
+from functools import cached_property
 
 import networkx as nx
 import numpy as np
@@ -105,6 +106,14 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         :return: The subcircuits of this unit.
         """
         return list(self.probabilistic_circuit.successors(self))
+
+    def support(self) -> Event:
+        return self.support_property
+
+    @abstractmethod
+    @cached_property
+    def support_property(self) -> Event:
+        raise NotImplementedError
 
     @property
     @abstractmethod
@@ -316,7 +325,8 @@ class SumUnit(ProbabilisticCircuitMixin):
         self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
 
-    def support(self) -> Event:
+    @cached_property
+    def support_property(self) -> Event:
         support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
             support |= subcircuit.support()
@@ -642,7 +652,8 @@ class ProductUnit(ProbabilisticCircuitMixin):
             result = result.union(subcircuit.variables)
         return result
 
-    def support(self) -> Event:
+    @cached_property
+    def support_property(self) -> Event:
         support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
             support &= subcircuit.support()
@@ -706,7 +717,7 @@ class ProductUnit(ProbabilisticCircuitMixin):
         # initialize probability
         log_probability = 0.
 
-        # create new node with new circuit attached to it
+        # create a new node with new circuit attached to it
         resulting_node = self.empty_copy()
 
         for subcircuit in self.subcircuits:
@@ -861,7 +872,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def add_node(self, node: ProbabilisticCircuitMixin, **attr):
 
-        # write self as the nodes circuit
+        # write self as the nodes' circuit
         node.probabilistic_circuit = self
 
         # call super
