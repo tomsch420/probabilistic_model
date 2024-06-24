@@ -28,6 +28,54 @@ The example below shows such a query.
 
 
 ```{code-cell} ipython3
+:tags: [hide-input]
+
+from random_events.set import SetElement, Set
+from random_events.variable import Symbolic, Continuous, Integer
+from random_events.product_algebra import Event, SimpleEvent
+from random_events.interval import *
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import itertools
+from probabilistic_model.distributions.multinomial import MultinomialDistribution
+import numpy as np
+
+
+class Color(SetElement):
+    EMPTY_SET = -1
+    BLUE = 0
+    RED = 1
+
+
+class Shape(SetElement):
+    EMPTY_SET = -1
+    CIRCLE = 0
+    RECTANGLE = 1
+    TRIANGLE = 2
+
+
+color = Symbolic("color", Color)
+shape = Symbolic("shape", Shape)
+
+probabilities = np.array([[2 / 15, 1 / 15, 1 / 5],
+                          [1 / 5, 1 / 10, 3 / 10]])
+
+distribution = MultinomialDistribution((color, shape), probabilities)
+
+from sklearn.datasets import load_iris
+
+data = load_iris(as_frame=True)
+
+dataframe = data.data
+target = data.target.astype(str)
+target[target == "0"] = "Setosa"
+target[target == "1"] = "Versicolour"
+target[target == "2"] = "Virginica"
+dataframe["plant"] = target
+
+```
+
+```{code-cell} ipython3
 possible_world = np.array([[Color.BLUE, Shape.CIRCLE]])
 print(f"p({color.name}={possible_world[0, 0]}, {shape.name}={possible_world[0, 1]}) = {distribution.likelihood(possible_world)}")
 ```
@@ -44,10 +92,18 @@ It is the basic formula this is evaluated a vast number of times in the maximum 
 
 Formally,
 
-$L(\theta)$ is called the likelihood function. Goal: Determine 
-$$\hat{\theta}_{MLE}=\underset{\theta\in\Theta}{arg \,max} L(\theta)=\underset{\theta\in\Theta}{arg \,max}\prod_{i=1}^NP(\mathcal{D}_i | \theta),$$
-which is called the Maximum Likelihood Estimate (MLE), where $\theta$ are the parameters of the distribution $p$ and $N$ being the number of observations.
+````{prf:definition} Maximum Likelihood Estimate
+:label: def-mle
 
+$L(\theta)$ is called the likelihood function. 
+Goal: Determine 
+
+$$\hat{\theta}_{MLE}=\underset{\theta\in\Theta}{arg \,max} L(\theta)=
+\underset{\theta\in\Theta}{arg \,max}\prod_{i=1}^NP(\mathcal{D}_i | \theta),$$
+
+which is called the Maximum Likelihood Estimate (MLE), 
+where $\theta$ are the parameters of the distribution $p$ and $N$ being the number of observations.
+````
 As gradient descent is a common way to maximize the likelihood function, 
 the gradient of said function is also of interest. 
 Calculating the gradient of a big product of functions is problematic due to the complexity of the [product rule](https://en.wikipedia.org/wiki/Product_rule). 
@@ -56,8 +112,19 @@ the function itself.
 
 Formally,
 
-$$\hat{\theta}_{MLE}=\underset{\theta\in\Theta}{arg \,max} log(L(\theta)) = \underset{\theta\in\Theta}{arg \,max}\sum_{i=1}^N log(P(\mathcal{D}_i | \theta))$$
+````{prf:theorem} Maximum Log-Likelihood Estimate
+:label: def-mlle
 
+The function
+
+$$\hat{\theta}_{MLLE}=\underset{\theta\in\Theta}{arg \,max} log(L(\theta)) = 
+\underset{\theta\in\Theta}{arg \,max}\sum_{i=1}^N log(P(\mathcal{D}_i | \theta))$$
+
+calculates the log-likelihood of the data $\mathcal{D}$ given the parameters $\theta$.
+The log-likelihood function has the same optimal parameter-vector as the likelihood function, 
+$\hat{\theta}_{MLLE} = \hat{\theta}_{MLE}$.
+
+````
 
 ## Independently and Identically Distributed
 
@@ -66,8 +133,10 @@ As we can see in the maximum likelihood estimate, the likelihood function is a p
     observed data D assuming each world being independently drawn from the identical
     underlying distribution (i.i.d. assumption)
     
-Since determining the exact computations needed for a maximum likelihood estimate is subject to calculus I will not annoy you with that and instead show you a practical example.
-For a Normal Distribution we know that the maximum likelihood estimate for the mean is the sample mean and for the variance the sample variance.
+Since determining the exact computations needed for a maximum likelihood estimate is subject to calculus, 
+I will not annoy you with that and instead show you a practical example.
+For a Normal Distribution, we know that the maximum likelihood estimate for the mean is the sample mean and for the 
+variance the sample variance.
 
 
 
@@ -75,7 +144,7 @@ For a Normal Distribution we know that the maximum likelihood estimate for the m
 ```{code-cell} ipython3
 from probabilistic_model.probabilistic_circuit.distributions import GaussianDistribution
 mean = dataframe["sepal length (cm)"].mean()
-variance = dataframe["sepal length (cm)"].var()
+variance = dataframe["sepal length (cm)"].std()
 
 sepal_length = Continuous("sepal length (cm)")
 distribution = GaussianDistribution(sepal_length, mean, variance)
@@ -83,45 +152,55 @@ fig = go.Figure(distribution.plot(), distribution.plotly_layout())
 fig.show()
 ```
 
-The plot shows the normal distribution that is the maximum likelihood estimate for the data, if we assume the data is i. i. d. and drawn from a normal distribution.
+The plot shows the normal distribution that is the maximum likelihood estimate for the data if we assume the data 
+is i. i. d. and drawn from a normal distribution.
 
 
 ## Marginals
 
 The marginal query is the next interesting quantity we investigate.
-A common scenario in applications of probability theory is reasoning under uncertainty. Consider the distribution from above that describes the sepal length in centimeters. How probable is it that a plant has a sepal length between 6 and 7 cm?
-Answering such questions requires the integration over the described area.  In this scenario we can get the probability by the following piece of code.
+A common scenario in applications of probability theory is reasoning under uncertainty. 
+Consider the distribution from above that describes the sepal length in centimeters. 
+How probable is it that a plant has a sepal length between 6 and 7 cm?
+Answering such questions requires the integration over the described area.  
+In this scenario, we can get the probability by the following piece of code.
 
 ```{code-cell} ipython3
 event = SimpleEvent({sepal_length: closed(6, 7)}).as_composite_set()
 distribution.probability(event)
 ```
 
-We can see that the probability of such event is approximately $34\%$.
+We can see that the probability of such an event is approximately $34\%$.
 Formally, we can describe such a query as:
 
+````{prf:definition} Marginal Query class
+:label: def-marginal
 
-Let $p(X)$ be a joint distribution over random variables $X$. The
-class of marginal queries over $p$ is the set of functions that compute:
-$$p(E = e, Z \in \mathcal{I}) = \int_\mathcal{I} p(z, e) dZ$$
-where $e \in dom(E)$ is a partial state for any subset of random variables $E \subseteq X$, and 
-$Z = X \setminus E$ is the set of $k$ random variables to be integrated over intervals 
+Let $p(X)$ be a joint distribution over random variables $X$. 
+The class of marginal queries over $p$ is the set of functions that compute
+
+$$p(E = e, Z \in \mathcal{I}) = \int_\mathcal{I} p(z, e) dZ.$$
+
+where $e \in dom(E)$ is a partial state for any subset of random variables $E \subseteq X$, 
+and  $Z = X \setminus E$ is the set of $k$ random variables to be integrated over intervals 
 $I = I_1 \times \cdots \times I_k$ each of which is defined over the domain of its corresponding 
 random variables in $Z: I_i \subseteq dom(Z_i) $ for $ i = 1, \cdots, k.$
 
+````
 
-While this definition may be a bit weird to think about, it essentially says that marginal queries are integrations over axis aligned bounding boxes. Furthermore, marginal queries can also contain (partial) point descriptions, just as in the likelihood. [This tutorial](https://random-events.readthedocs.io/en/latest/notebooks/independent_constraints.html) dives deeper into the visualization of such events.
+While this definition may be a bit weird to think about, 
+it essentially says that marginal queries are integrations over axis aligned bounding boxes. 
+Furthermore, marginal queries can also contain (partial) point descriptions, just as in the likelihood. 
 
-The intervals can also be unions of intervals, such as
+[This tutorial](https://random-events.readthedocs.io/en/latest/conceptual_guide.html) dives deeper in the product 
+algebra that is constructed by the marginal query class. 
 
-```{code-cell} ipython3
-event = SimpleEvent({sepal_length: closed(6, 7) | closed(5, 5.5)}).as_composite_set()
-distribution.probability(event)
-```
 
 ## Conditionals
 
-While marginal queries already allow for the calculations of conditional probabilities using the definition of the conditional probability, it is, in most scenarios, more interesting to consider the conditional probability space. We can construct such a thing by invoking the `conditional` method with the corresponding event.
+While marginal queries already allow for the calculations of conditional probabilities using the definition of the 
+conditional probability, it is, in most scenarios, more interesting to consider the conditional probability space. 
+We can construct such a thing by invoking the `conditional` method with the corresponding event.
 
 ```{code-cell} ipython3
 event = SimpleEvent({sepal_length: closed(6, 7)}).as_composite_set()
@@ -130,7 +209,12 @@ fig = go.Figure(distribution.plot(), distribution.plotly_layout())
 fig.show()
 ```
 
-We can see that conditioning on the event that the sepal length is between 6 and 7 cm, the resulting distribution is a zoomed in version of the original distribution. The resulting type of distribution is not a Gaussian distribution anymore, but a truncated Gaussian distribution. The probability of the event that the sepal length is between 6 and 7 cm is now $100\%$. Since the truncated Gaussian is a much more complicated object than the ordinary Gaussian distribution, you can read more about it [here](https://probabilistic-model.readthedocs.io/en/latest/examples/truncated_gaussians.html).
+We can see that conditioning on the event that the sepal length is between 6 and 7 cm, the resulting distribution is a 
+zoomed in version of the original distribution. 
+The resulting type of distribution is not a Gaussian distribution anymore, but a truncated Gaussian distribution. 
+The probability of the event that the sepal length is between 6 and 7 cm is now $100\%$. 
+Since the truncated Gaussian is a much more complicated object than the ordinary Gaussian distribution, y
+ou can read more about it [here](https://probabilistic-model.readthedocs.io/en/latest/examples/truncated_gaussians.html).
 
 ```{code-cell} ipython3
 distribution.probability(event)
@@ -220,6 +304,11 @@ go.Figure(uniform.plot(), uniform.plotly_layout()).show()
 ```
 
 The mode of the uniform distribution is the entire interval of the uniform distribution $(-1, 1)$. The mode is particular useful when we want to find the best (most likely) solution to a problem und not just any.
+
+
+## Sampling
+
+## Monte Carlo Estimate
 
 
 ## Practical Example

@@ -373,6 +373,25 @@ print(
 
 We can see that both events are independent as their joint probability can be decomposed to the product of the marginal
 probabilities.
+However, in most applications one is interested in independence between entire variables (dimensions).
+Checking independence over entire dimensions requires either analysis of the computation or
+checking independence over all possible events.
+Let's verify if the variables are independent.
+
+```{code-cell} ipython3
+for color_value, shape_value in itertools.product(color.domain.simple_sets, shape.domain.simple_sets):
+        joint_event = SimpleEvent({color: color_value, shape: shape_value}).as_composite_set()
+        color_event = SimpleEvent({color: color_value}).as_composite_set()
+        shape_event = SimpleEvent({shape: shape_value}).as_composite_set()
+        print(f"P({joint_event}) = {distribution.probability(joint_event)}")
+        print(f"P({color_event}) * P(shape={shape_event}) = {distribution.probability(color_event) * distribution.probability(shape_event)}")
+        print(np.allclose(distribution.probability(joint_event), 
+                          distribution.probability(color_event) * distribution.probability(shape_event)))
+```
+
+As we can see, the entire variables are independent.
+
+
 The definition of independence can be expanded to conditional independence. Formally,
 
 ### Conditional Independence
@@ -452,9 +471,7 @@ fig.for_each_trace(lambda trace: trace.update(visible='legendonly') if trace.nam
 
 The figure above visualizes the objects we just discussed for a univariate normal distribution.
 
-## Summary
-
-TODO
+TODO Summary
 
 ```{bibliography}
 ```
