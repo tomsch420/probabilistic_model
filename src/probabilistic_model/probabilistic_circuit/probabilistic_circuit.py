@@ -109,9 +109,8 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return list(self.probabilistic_circuit.successors(self))
 
     def support(self) -> Event:
-        return self.support_property
+        return self.support_property()
 
-    @property
     def support_property(self) -> Event:
         """
         Caching wrapper for the support.
