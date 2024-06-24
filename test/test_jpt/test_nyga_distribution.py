@@ -241,7 +241,6 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
         self.model.support()
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
-        fig.show()
 
 
 if __name__ == '__main__':
