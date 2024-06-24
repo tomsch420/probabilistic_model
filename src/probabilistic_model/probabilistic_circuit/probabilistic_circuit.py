@@ -15,7 +15,7 @@ from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, 
 
 from ..error import IntractableError
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
-from ..utils import SubclassJSONSerializer
+from random_events.utils import SubclassJSONSerializer
 
 if TYPE_CHECKING:
     from .distributions import UnivariateDistribution

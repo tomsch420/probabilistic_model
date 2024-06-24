@@ -1,7 +1,8 @@
 import unittest
 
 from probabilistic_model.distributions.distributions import *
-from probabilistic_model.utils import SubclassJSONSerializer, MissingDict
+from probabilistic_model.utils import MissingDict
+from random_events.utils import SubclassJSONSerializer
 
 
 class TestEnum(SetElement):

@@ -5,7 +5,7 @@ from random_events.product_algebra import *
 
 from probabilistic_model.distributions.distributions import DiracDeltaDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.utils import SubclassJSONSerializer
+from random_events.utils import SubclassJSONSerializer
 
 
 class UniformDistributionTestCase(unittest.TestCase):

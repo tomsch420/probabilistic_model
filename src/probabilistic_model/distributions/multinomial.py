@@ -9,7 +9,8 @@ from typing_extensions import Self, Any, Union, Iterable, List, Optional, Tuple,
 from ..probabilistic_circuit.distributions.distributions import SymbolicDistribution, IntegerDistribution
 from ..probabilistic_circuit.probabilistic_circuit import (ProductUnit, SumUnit)
 from ..probabilistic_model import ProbabilisticModel
-from ..utils import SubclassJSONSerializer, MissingDict
+from random_events.utils import SubclassJSONSerializer
+from ..utils import MissingDict
 
 
 class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):

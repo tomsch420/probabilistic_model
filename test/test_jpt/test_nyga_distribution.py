@@ -11,7 +11,7 @@ from probabilistic_model.learning.nyga_distribution import NygaDistribution, Ind
 from probabilistic_model.probabilistic_circuit.distributions import DiracDeltaDistribution
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SumUnit
-from probabilistic_model.utils import SubclassJSONSerializer
+from random_events.utils import SubclassJSONSerializer
 
 
 class InductionStepTestCase(unittest.TestCase):
