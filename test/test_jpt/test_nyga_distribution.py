@@ -4,6 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 from numpy import testing
 from random_events.interval import closed, closed_open
+from random_events.product_algebra import Event
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
@@ -232,14 +233,15 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
     model: NygaDistribution
 
     def setUp(self) -> None:
-        self.model = NygaDistribution(self.x, min_likelihood_improvement=0.001, min_samples_per_quantile=25)
+        self.model = NygaDistribution(self.x, min_likelihood_improvement=0.001, min_samples_per_quantile=300)
         data = np.random.normal(0, 1, 1000).tolist()
         self.model.fit(data)
 
     def test_plot(self):
+        self.model.support()
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
-        # fig.show()
+        fig.show()
 
 
 if __name__ == '__main__':

@@ -319,11 +319,7 @@ class SumUnit(ProbabilisticCircuitMixin):
     def support(self) -> Event:
         support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
-            try:
-                support |= subcircuit.support()
-            except AttributeError:
-                return Event()
-
+            support |= subcircuit.support()
         return support
 
     @property
@@ -929,10 +925,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return self.root.simplify().probabilistic_circuit
 
     def support(self) -> Event:
-        root = self.root
-        result = self.root.support()
-        root.reset_result_of_current_query()
-        return result
+        return self.root.support()
 
     def is_decomposable(self) -> bool:
         """

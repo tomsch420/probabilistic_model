@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from abc import abstractmethod
 from typing import Optional
 
@@ -175,7 +176,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
 
     @property
     def univariate_support(self) -> Interval:
-        return self.interval.as_composite_set()
+        return copy.deepcopy(self.interval).as_composite_set()
 
     def left_included_condition(self, x: np.array) -> np.array:
         """
