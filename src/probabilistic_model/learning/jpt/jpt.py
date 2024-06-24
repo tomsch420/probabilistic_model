@@ -18,7 +18,7 @@ from ..nyga_distribution import NygaDistribution
 from ...probabilistic_circuit.distributions.distributions import (DiracDeltaDistribution,
                                                                   SymbolicDistribution,
                                                                   IntegerDistribution, UnivariateDistribution)
-from ...probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit,
+from ...probabilistic_circuit.probabilistic_circuit import (SumUnit,
                                                             DecomposableProductUnit as PMDecomposableProductUnit)
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
@@ -40,7 +40,7 @@ class DecomposableProductUnit(PMDecomposableProductUnit):
     """
 
 
-class JPT(DeterministicSumUnit):
+class JPT(SumUnit):
 
     targets: Tuple[Variable, ...]
     """
@@ -227,7 +227,6 @@ class JPT(DeterministicSumUnit):
 
         while self.c45queue:
             self.c45(*self.c45queue.popleft())
-
         return self
 
     def c45(self, data: np.ndarray, start: int, end: int, depth: int):
@@ -254,9 +253,8 @@ class JPT(DeterministicSumUnit):
 
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
-            self.mount(leaf_node)
             weight = number_of_samples / len(data)
-            self.probabilistic_circuit.add_edge(self, leaf_node, weight=weight)
+            self.add_subcircuit(leaf_node, weight)
 
             if self.keep_sample_indices:
                 leaf_node.sample_indices = self.indices[start:end]
@@ -284,21 +282,7 @@ class JPT(DeterministicSumUnit):
 
         :return: The splitting events left and right.
         """
-        return
-        split_position = self.impurity.best_split_pos
-        split_variable_index = self.impurity.best_var
-        split_variable = self.variables[split_variable_index]
-
-        if not isinstance(split_variable, Symbolic):
-            split_value = (data[self.indices[start + split_position], split_variable_index] +
-                           data[self.indices[start + split_position + 1], split_variable_index]) / 2
-            left_event = SimpleEvent({split_variable: closed_open(-np.inf, split_value)}).as_composite_set()
-            right_event = SimpleEvent({split_variable: closed(split_value, np.inf)}).as_composite_set()
-        else:
-            split_value = int(data[self.indices[start + split_position], split_variable_index])
-            left_event = EncodedEvent({split_variable: split_value}).decode()
-            right_event = Event() - left_event
-        return left_event, right_event
+        raise NotImplementedError("This method is not implemented yet.")
 
     def create_leaf_node(self, data: np.ndarray) -> DecomposableProductUnit:
         """
@@ -315,6 +299,7 @@ class JPT(DeterministicSumUnit):
                 distribution = NygaDistribution(variable,
                                                 min_likelihood_improvement=variable.min_likelihood_improvement,
                                                 min_samples_per_quantile=variable.min_samples_per_quantile)
+
                 distribution.fit(data[:, index])
 
                 if isinstance(distribution.subcircuits[0], DiracDeltaDistribution):
@@ -329,10 +314,7 @@ class JPT(DeterministicSumUnit):
                 distribution.fit(data[:, index])
             else:
                 raise ValueError(f"Variable {variable} is not supported.")
-
-            result.mount(distribution)
-            result.probabilistic_circuit.add_edge(result, distribution)
-
+            result.add_subcircuit(distribution)
         return result
 
     def construct_impurity(self) -> Impurity:
@@ -435,7 +417,7 @@ class JPT(DeterministicSumUnit):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
-        sum_unit = DeterministicSumUnit._from_json(data)
+        sum_unit = SumUnit._from_json(data)
         variables = [Variable.from_json(variable) for variable in data["variables_from_init"]]
         result = cls(variables, min_samples_leaf=data["_min_samples_leaf"],
                      min_impurity_improvement=data["min_impurity_improvement"],

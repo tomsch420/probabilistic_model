@@ -8,6 +8,7 @@ from random_events.set import *
 from random_events.variable import *
 
 from .constants import *
+from .exceptions import IntractableException
 
 # Type definitions
 FullEvidenceType = np.array  # [Union[float, int, SetElement]]
@@ -293,7 +294,7 @@ class ProbabilisticModel(abc.ABC):
 
         try:
             mode, maximum_likelihood = self.mode()
-        except NotImplementedError:
+        except IntractableException:
             mode, maximum_likelihood = None, max(likelihood)
 
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT

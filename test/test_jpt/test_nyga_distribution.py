@@ -9,7 +9,7 @@ from random_events.variable import Continuous
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
 from probabilistic_model.probabilistic_circuit.distributions import DiracDeltaDistribution
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SmoothSumUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SumUnit
 from probabilistic_model.utils import SubclassJSONSerializer
 
 
@@ -182,7 +182,7 @@ class InductionStepTestCase(unittest.TestCase):
     def test_from_mixture_of_uniform_distributions(self):
         u1 = UniformDistribution(self.variable, closed(0, 5).simple_sets[0])
         u2 = UniformDistribution(self.variable, closed(2, 3).simple_sets[0])
-        sum_unit = SmoothSumUnit()
+        sum_unit = SumUnit()
         e1 = (sum_unit, u1, 0.5)
         e2 = (sum_unit, u2, 0.5)
         sum_unit.probabilistic_circuit.add_weighted_edges_from([e1, e2])
