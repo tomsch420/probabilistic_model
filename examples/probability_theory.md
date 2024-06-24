@@ -554,11 +554,12 @@ fig.show()
 Let's now say, that we want a position to access the fridge. We want to be as close to the fridge as possible. Naturally, we need a gaussian model for that. We now construct a gaussian distribution over the free space to describe locations and their probabilities to access the fridge.
 
 ```python
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProductUnit
 from probabilistic_model.probabilistic_circuit.distributions import GaussianDistribution
+
 p_x = GaussianDistribution(Continuous("x"), 5.5, 0.5)
 p_y = GaussianDistribution(Continuous("y"), 6.65, 0.5)
-p_xy = DecomposableProductUnit()
+p_xy = ProductUnit()
 p_xy.add_subcircuit(p_x)
 p_xy.add_subcircuit(p_y)
 p_xy = p_xy.probabilistic_circuit

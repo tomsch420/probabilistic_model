@@ -12,6 +12,7 @@ from sortedcontainers import SortedSet
 
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, TYPE_CHECKING
 
+from ..error import IntractableError
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
 
@@ -482,7 +483,7 @@ class SumUnit(ProbabilisticCircuitMixin):
                 continue
 
             # create proxy nodes for mounting
-            proxy_product_node = DecomposableProductUnit()
+            proxy_product_node = ProductUnit()
             proxy_sum_node = other.empty_copy()
             self.probabilistic_circuit.add_nodes_from([proxy_product_node, proxy_sum_node])
 
@@ -528,7 +529,7 @@ class SumUnit(ProbabilisticCircuitMixin):
         for (own_weight, own_subcircuit), other_subcircuit in zip(self.weighted_subcircuits, other.subcircuits):
 
             # create proxy nodes for mounting
-            proxy_product_node = DecomposableProductUnit()
+            proxy_product_node = ProductUnit()
             self.probabilistic_circuit.add_node(proxy_product_node)
 
             # remove edge to old child and replace it by product proxy
@@ -598,7 +599,7 @@ class SumUnit(ProbabilisticCircuitMixin):
     def log_mode(self) -> Tuple[Event, float]:
 
         if not self.is_deterministic():
-            raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
+            raise IntractableError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
         modes = []
         log_likelihoods = []
@@ -631,7 +632,7 @@ class SumUnit(ProbabilisticCircuitMixin):
         return result
 
 
-class DecomposableProductUnit(ProbabilisticCircuitMixin):
+class ProductUnit(ProbabilisticCircuitMixin):
     """
     Decomposable Product Units for Probabilistic Circuits
     """
@@ -942,7 +943,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         :return: if the whole circuit is decomposed
         """
         return all([subcircuit.is_decomposable() for subcircuit in self.leaves if
-                    isinstance(subcircuit, DecomposableProductUnit)])
+                    isinstance(subcircuit, ProductUnit)])
 
     def __eq__(self, other: 'ProbabilisticCircuit'):
         return self.root == other.root

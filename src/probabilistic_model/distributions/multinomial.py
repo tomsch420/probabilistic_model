@@ -7,7 +7,7 @@ from sortedcontainers import SortedSet
 from typing_extensions import Self, Any, Union, Iterable, List, Optional, Tuple, Dict
 
 from ..probabilistic_circuit.distributions.distributions import SymbolicDistribution, IntegerDistribution
-from ..probabilistic_circuit.probabilistic_circuit import (DecomposableProductUnit, SumUnit)
+from ..probabilistic_circuit.probabilistic_circuit import (ProductUnit, SumUnit)
 from ..probabilistic_model import ProbabilisticModel
 from ..utils import SubclassJSONSerializer, MissingDict
 
@@ -166,7 +166,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         for event in itertools.product(*[variable.domain.simple_sets for variable in self.variables]):
 
             # create a product unit for the current state
-            product_unit = DecomposableProductUnit()
+            product_unit = ProductUnit()
 
             # iterate through all variables
             for variable, value in zip(self.variables, event):

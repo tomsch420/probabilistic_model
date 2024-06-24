@@ -6,7 +6,7 @@ from typing_extensions import Tuple, Dict, Iterable, List, Union, Self
 from .bayesian_network import BayesianNetworkMixin
 from ..distributions.multinomial import MultinomialDistribution
 from ..probabilistic_circuit.distributions import (SymbolicDistribution as PCSymbolicDistribution)
-from ..probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
+from ..probabilistic_circuit.probabilistic_circuit import ProductUnit
 from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit,
                                                            ProbabilisticCircuitMixin, SumUnit)
 from ..utils import MissingDict
@@ -139,7 +139,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
             for child_event_index, child_probability in distribution.probabilities.items():
                 # initialize the product unit
-                product_unit = DecomposableProductUnit()
+                product_unit = ProductUnit()
 
                 # add the encoded parent distribution and a copy of this distribution to the product unit
                 product_unit.add_subcircuit(parent_distribution)
@@ -229,7 +229,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
             if parent_distribution is None:
                 continue
 
-            product_unit = DecomposableProductUnit()
+            product_unit = ProductUnit()
             product_unit.add_subcircuit(parent_distribution)
             product_unit.add_subcircuit(distribution.root)
 
@@ -250,7 +250,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
         for state, weight in self.parent.forward_message.probabilities.items():
             probabilities = MissingDict(float)
             probabilities[int(state)] = 1
-            product_unit = DecomposableProductUnit()
+            product_unit = ProductUnit()
             product_unit.add_subcircuit(PCSymbolicDistribution(parent_latent_variable, probabilities))
             product_unit.add_subcircuit(PCSymbolicDistribution(node_latent_variable, probabilities))
             result.add_subcircuit(product_unit, weight)

@@ -19,7 +19,7 @@ from ...probabilistic_circuit.distributions.distributions import (DiracDeltaDist
                                                                   SymbolicDistribution,
                                                                   IntegerDistribution, UnivariateDistribution)
 from ...probabilistic_circuit.probabilistic_circuit import (SumUnit,
-                                                            DecomposableProductUnit as PMDecomposableProductUnit)
+                                                            ProductUnit as PMDecomposableProductUnit)
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go

@@ -123,7 +123,7 @@ class ContinuousDistribution(UnivariateDistribution):
         :param interval: The singleton event
         :return: The conditional distribution and the log-probability of the event.
         """
-        log_pdf_value = self.log_likelihood(np.array([[interval.lower]]))
+        log_pdf_value = self.log_likelihood(np.array([[interval.lower]]))[0]
         return DiracDeltaDistribution(self.variable, interval.lower, np.exp(log_pdf_value)), log_pdf_value
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
@@ -134,7 +134,7 @@ class ContinuousDistribution(UnivariateDistribution):
         :param interval: The simple interval
         :return: The conditional distribution and the log-probability of the interval.
         """
-        if interval.lower == interval.upper:
+        if interval.is_singleton():
             return self.log_conditional_from_singleton(interval)
         return self.log_conditional_from_non_singleton_simple_interval(interval)
 

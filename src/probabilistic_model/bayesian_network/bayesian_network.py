@@ -17,7 +17,7 @@ import networkx as nx
 import numpy as np
 
 from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, SumUnit,
-                                                           DecomposableProductUnit, ProbabilisticCircuitMixin)
+                                                           ProductUnit, ProbabilisticCircuitMixin)
 
 
 class BayesianNetworkMixin:

@@ -29,7 +29,7 @@ from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
     SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProductUnit, \
     SumUnit, ProbabilisticCircuit
 from probabilistic_model.utils import MissingDict
 
@@ -442,7 +442,7 @@ class BayesianJPTTestCase(unittest.TestCase):
         # mount the distributions of the sepal variables
         p_sepal = ConditionalProbabilisticCircuit(self.model_sl_sw.variables)
         p_sepal.from_unit(self.model_sl_sw)
-        [self.assertIsInstance(circuit.root, DecomposableProductUnit) for circuit in
+        [self.assertIsInstance(circuit.root, ProductUnit) for circuit in
          p_sepal.conditional_probability_distributions.values()]
         bayesian_network.add_node(p_sepal)
         bayesian_network.add_edge(p_sepal_species, p_sepal)
@@ -456,7 +456,7 @@ class BayesianJPTTestCase(unittest.TestCase):
         # mount the distributions of the petal variables
         p_petal = ConditionalProbabilisticCircuit(self.model_pl_pw.variables)
         p_petal.from_unit(self.model_pl_pw)
-        [self.assertIsInstance(circuit.root, DecomposableProductUnit) for circuit in
+        [self.assertIsInstance(circuit.root, ProductUnit) for circuit in
          p_petal.conditional_probability_distributions.values()]
         bayesian_network.add_node(p_petal)
         bayesian_network.add_edge(p_petal_species, p_petal)

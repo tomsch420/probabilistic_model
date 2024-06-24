@@ -8,6 +8,7 @@ from random_events.set import *
 from random_events.variable import *
 
 from .constants import *
+from .error import IntractableError
 
 # Type definitions
 FullEvidenceType = np.array  # [Union[float, int, SetElement]]
@@ -293,7 +294,7 @@ class ProbabilisticModel(abc.ABC):
 
         try:
             mode, maximum_likelihood = self.mode()
-        except NotImplementedError:
+        except IntractableError:
             mode, maximum_likelihood = None, max(likelihood)
 
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
@@ -401,6 +402,6 @@ class ProbabilisticModel(abc.ABC):
             mode_traces = mode.plot(color=MODE_TRACE_COLOR)
             for trace in mode_traces:
                 trace.update(name=MODE_TRACE_NAME)
-        except NotImplementedError:
+        except IntractableError:
             mode_traces = []
         return mode_traces

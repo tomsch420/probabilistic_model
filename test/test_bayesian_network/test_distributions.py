@@ -13,7 +13,7 @@ from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwor
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
                                                                 ConditionalProbabilisticCircuit)
 from probabilistic_model.probabilistic_circuit.distributions import SymbolicDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import  SumUnit, DecomposableProductUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import  SumUnit, ProductUnit
 from probabilistic_model.utils import MissingDict
 
 
@@ -121,11 +121,11 @@ class CircuitDistributionTestCase(unittest.TestCase):
         self.bayesian_network = BayesianNetwork()
         self.p_x = RootDistribution(self.x, MissingDict(float, zip([0, 1], [0.7, 0.3])))
 
-        d1 = DecomposableProductUnit()
+        d1 = ProductUnit()
         d1.add_subcircuit(UniformDistribution(self.y, closed(0, 1).simple_sets[0]))
         d1.add_subcircuit(UniformDistribution(self.z, closed(0, 1).simple_sets[0]))
 
-        d2 = DecomposableProductUnit()
+        d2 = ProductUnit()
         d2.add_subcircuit(UniformDistribution(self.y, closed(0, 2).simple_sets[0]))
         d2.add_subcircuit(UniformDistribution(self.z, closed(0, 3).simple_sets[0]))
 

@@ -41,13 +41,13 @@ class ShowMixin:
 class ProductUnitTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
-    model: DecomposableProductUnit
+    model: ProductUnit
 
     def setUp(self):
         u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
         u2 = UniformDistribution(self.y, closed(3, 4).simple_sets[0])
 
-        product_unit = DecomposableProductUnit()
+        product_unit = ProductUnit()
         product_unit.add_subcircuit(u1)
         product_unit.add_subcircuit(u2)
         self.model = product_unit
@@ -93,8 +93,8 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         result, probability = self.model.conditional(event)
         self.assertEqual(probability, 0.5)
         self.assertEqual(len(result.probabilistic_circuit.nodes()), 3)
-        self.assertIsInstance(result, DecomposableProductUnit)
-        self.assertIsInstance(result.probabilistic_circuit.root, DecomposableProductUnit)
+        self.assertIsInstance(result, ProductUnit)
+        self.assertIsInstance(result.probabilistic_circuit.root, ProductUnit)
 
     def test_conditional_with_0_evidence(self):
         event = SimpleEvent({self.x: closed(1.5, 2)}).as_composite_set()
@@ -119,7 +119,7 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
 
     def test_serialization(self):
         serialized = self.model.to_json()
-        deserialized = DecomposableProductUnit.from_json(serialized)
+        deserialized = ProductUnit.from_json(serialized)
         self.assertEqual(self.model, deserialized)
 
     def test_copy(self):
@@ -286,7 +286,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         e4 = (sum_unit_2, u4, 0.3)
         model.add_weighted_edges_from([e3, e4])
 
-        product_1 = DecomposableProductUnit()
+        product_1 = ProductUnit()
         model.add_node(product_1)
 
         e5 = (product_1, sum_unit_1)
@@ -306,7 +306,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         self.assertTrue(self.model.is_valid())
 
     def test_root(self):
-        self.assertIsInstance(self.model.root, DecomposableProductUnit)
+        self.assertIsInstance(self.model.root, ProductUnit)
 
     def test_variables_of_component(self):
         self.assertEqual(self.model.root.variables, SortedSet([self.real, self.real2]))
@@ -359,7 +359,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(mode, SimpleEvent({self.real: closed(0, 1)}).as_composite_set())
 
     def test_mode_raising(self):
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(IntractableError):
             _ = self.model.mode()
 
     def test_conditional(self):
@@ -435,7 +435,7 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
         self.assertIsInstance(self.sum_unit_1.probabilistic_circuit.root, SumUnit)
 
         for subcircuit in self.sum_unit_1.subcircuits:
-            self.assertIsInstance(subcircuit, DecomposableProductUnit)
+            self.assertIsInstance(subcircuit, ProductUnit)
 
         self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.nodes()), 9)
         self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.edges()), 9)
@@ -579,7 +579,7 @@ class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
     model: ProbabilisticCircuit
 
     def setUp(self):
-        product = DecomposableProductUnit()
+        product = ProductUnit()
         n1 = GaussianDistribution(self.x, 0, 1)
         n2 = GaussianDistribution(self.y, 0.5, 2)
         product.add_subcircuit(n1)
@@ -639,7 +639,7 @@ class ComplexInferenceTestCase(unittest.TestCase):
     event: Event = e1 | e2
 
     def setUp(self):
-        root = DecomposableProductUnit()
+        root = ProductUnit()
         px = UniformDistribution(self.x, closed(0, 2).simple_sets[0])
         py = UniformDistribution(self.y, closed(0, 3).simple_sets[0])
         root.add_subcircuit(px)
@@ -671,7 +671,7 @@ class KitchenCircuitTestCase(unittest.TestCase, ShowMixin):
     free_space = kitchen - occupied_spaces
 
     def setUp(self):
-        root = DecomposableProductUnit()
+        root = ProductUnit()
         root.add_subcircuit(GaussianDistribution(self.x, 5.5, 0.25))
         root.add_subcircuit(GaussianDistribution(self.y, 6.65, 0.25))
         self.model = root.probabilistic_circuit
