@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import itertools
 from abc import abstractmethod
-from functools import cached_property
 
 import networkx as nx
 import numpy as np
-import plotly.graph_objects as go
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.variable import Variable, Symbolic
@@ -14,7 +12,6 @@ from sortedcontainers import SortedSet
 
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, TYPE_CHECKING
 
-from ..exceptions import IntractableException
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ..utils import SubclassJSONSerializer
 
@@ -108,23 +105,6 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         return list(self.probabilistic_circuit.successors(self))
 
-    def support(self) -> Event:
-        return self.support_property
-
-    @property
-    def support_property(self) -> Event:
-        """
-        Caching wrapper for the support.
-        """
-        return self.calculate_support()
-
-    @abstractmethod
-    def calculate_support(self) -> Event:
-        """
-        Calculate the support of this distribution.
-        """
-        raise NotImplementedError
-
     @property
     @abstractmethod
     def variables(self) -> SortedSet:
@@ -137,8 +117,8 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     @cache_result.setter
     def cache_result(self, value: bool):
         """
-        Set the caching of the result flag in this and every subcircuit.
-        If a subcircuit has the flag already set to the value, it will not recurse in that subcircuit.
+        Set the caching of the result flag in this and every sub-circuit.
+        If a sub-circuit has the flag already set to the value, it will not recurse in that sub-circuit.
         :param value: The value to set the flag to.
         """
         self._cache_result = value
@@ -190,7 +170,6 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         self.probabilistic_circuit.add_weighted_edges_from(weighted_edges)
 
     @abstractmethod
-    @cached_property
     def is_deterministic(self) -> bool:
         """
         Calculate if this circuit is deterministic or not.
@@ -219,7 +198,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             return self.log_conditional_of_simple_event(event.simple_sets[0])
 
         # construct the proxy node
-        result = SumUnit()
+        result = DeterministicSumUnit()
         total_probability = 0
 
         for simple_event in event.simple_sets:
@@ -288,32 +267,16 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     def simplify(self) -> Self:
         """
         Simplify the circuit by removing nodes and redirected edges that have no impact.
-        Essentially, this method transforms the circuit into an alternating order of sum and product units.
+        Essentially, this method transform the circuit into an alternating order of sum and product units.
 
         :return: The simplified circuit.
         """
         raise NotImplementedError()
 
-    def clear_structure_dependent_cache(self):
-        """
-        Clear the cache of this circuit and all subcircuits.
-        """
-        return
-        if 'support_property' in self.__dict__:
-            del self.support_property
 
-        if "is_deterministic" in self.__dict__:
-            del self.is_deterministic
+class SmoothSumUnit(ProbabilisticCircuitMixin):
 
-        for predecessor in self.probabilistic_circuit.predecessors(self):
-            predecessor.clear_structure_dependent_cache()
-
-
-class SumUnit(ProbabilisticCircuitMixin):
-
-    @property
-    def representation(self):
-        return "⊕" if self.is_deterministic else "+"
+    representation = "+"
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
@@ -349,12 +312,15 @@ class SumUnit(ProbabilisticCircuitMixin):
         """
         self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
-        self.clear_structure_dependent_cache()
 
-    def calculate_support(self) -> Event:
+    def support(self) -> Event:
         support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
-            support |= subcircuit.support()
+            try:
+                support |= subcircuit.support()
+            except AttributeError:
+                return Event()
+
         return support
 
     @property
@@ -481,7 +447,7 @@ class SumUnit(ProbabilisticCircuitMixin):
             result.probabilistic_circuit.add_edge(result, copied_subcircuit, weight=weight)
         return result
 
-    def mount_with_interaction_terms(self, other: 'SumUnit', interaction_model: ProbabilisticModel):
+    def mount_with_interaction_terms(self, other: 'SmoothSumUnit', interaction_model: ProbabilisticModel):
         """
         Create a distribution that factorizes as follows:
 
@@ -544,7 +510,7 @@ class SumUnit(ProbabilisticCircuitMixin):
                 # create edge from proxy to subcircuit
                 proxy_sum_node.add_subcircuit(other_subcircuit, weight=weight)
 
-    def mount_from_bayesian_network(self, other: 'SumUnit'):
+    def mount_from_bayesian_network(self, other: 'SmoothSumUnit'):
         """
         Mount a distribution from tge `to_probabilistic_circuit` method in bayesian networks.
         The distribution is mounted as follows:
@@ -617,7 +583,6 @@ class SumUnit(ProbabilisticCircuitMixin):
         for subcircuit in self.subcircuits:
             self.probabilistic_circuit.edges[self, subcircuit]["weight"] /= total_weight
 
-    @property
     def is_deterministic(self) -> bool:
         # for every unique combination of subcircuits
         for subcircuit_a, subcircuit_b in itertools.combinations(self.subcircuits, 2):
@@ -629,10 +594,17 @@ class SumUnit(ProbabilisticCircuitMixin):
         return True
 
     def log_mode(self) -> Tuple[Event, float]:
+        raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
-        if not self.is_deterministic:
-            raise IntractableException("The mode of a non-deterministic sum unit is intractable.")
 
+class DeterministicSumUnit(SmoothSumUnit):
+    """
+    Deterministic Sum Units for Probabilistic Circuits
+    """
+
+    representation = "⊕"
+
+    def log_mode(self) -> Tuple[Event, float]:
         modes = []
         log_likelihoods = []
 
@@ -663,6 +635,9 @@ class SumUnit(ProbabilisticCircuitMixin):
             result[likelihood > 0] = index
         return result
 
+    def is_deterministic(self) -> bool:
+        return True
+
 
 class DecomposableProductUnit(ProbabilisticCircuitMixin):
     """
@@ -678,7 +653,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             result = result.union(subcircuit.variables)
         return result
 
-    def calculate_support(self) -> Event:
+    def support(self) -> Event:
         support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
             support &= subcircuit.support()
@@ -692,7 +667,6 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         """
         self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit)
-        self.clear_structure_dependent_cache()
 
     @cache_inference_result
     def log_likelihood(self, events: np.array) -> np.array:
@@ -713,11 +687,9 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
                 return 0.
         return result
 
-    @cached_property
     def is_deterministic(self) -> bool:
         return True
 
-    @property
     def is_decomposable(self):
         for index, subcircuit in enumerate(self.subcircuits):
             variables = subcircuit.variables
@@ -726,6 +698,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
                     return False
         return True
 
+    @cache_inference_result
     def log_mode(self) -> Tuple[Event, float]:
 
         # initialize mode and log likelihood
@@ -899,7 +872,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def add_node(self, node: ProbabilisticCircuitMixin, **attr):
 
-        # write self as the nodes' circuit
+        # write self as the nodes circuit
         node.probabilistic_circuit = self
 
         # call super
@@ -963,10 +936,11 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return self.root.simplify().probabilistic_circuit
 
     def support(self) -> Event:
+        root = self.root
         result = self.root.support()
+        root.reset_result_of_current_query()
         return result
 
-    @property
     def is_decomposable(self) -> bool:
         """
         Check if the whole circuit is decomposed.
@@ -1061,12 +1035,11 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return unweighted_edges
 
-    @property
     def is_deterministic(self) -> bool:
         """
-        :return: Rather, this circuit is deterministic or not.
+        :return: Rather this circuit is deterministic or not.
         """
-        return all(node.is_deterministic for node in self.nodes if isinstance(node, SumUnit))
+        return all(node.is_deterministic() for node in self.nodes if isinstance(node, SmoothSumUnit))
 
     def plot(self, **kwargs):
         return self.root.plot(**kwargs)

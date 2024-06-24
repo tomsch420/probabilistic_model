@@ -13,7 +13,7 @@ from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwor
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
                                                                 ConditionalProbabilisticCircuit)
 from probabilistic_model.probabilistic_circuit.distributions import SymbolicDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit, \
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DeterministicSumUnit, \
     DecomposableProductUnit
 from probabilistic_model.utils import MissingDict
 
@@ -95,7 +95,7 @@ class DistributionTestCase(unittest.TestCase):
         self.p_x.forward_pass(event)
 
         joint_distribution = self.p_x.joint_distribution_with_parent()
-        self.assertIsInstance(joint_distribution, SumUnit)
+        self.assertIsInstance(joint_distribution, DeterministicSumUnit)
 
     def test_joint_distribution_with_parents(self):
         event = SimpleEvent({variable: variable.domain for variable in [self.x, self.y]})
@@ -103,7 +103,7 @@ class DistributionTestCase(unittest.TestCase):
         self.p_x.bayesian_network.forward_pass(event)
 
         joint_distribution = self.p_yx.joint_distribution_with_parent()
-        self.assertIsInstance(joint_distribution, SumUnit)
+        self.assertIsInstance(joint_distribution, DeterministicSumUnit)
 
         likelihoods = joint_distribution.likelihood(np.array([[0, 1], [2, 1]]))
         self.assertAlmostEqual(likelihoods[0], 0.25)

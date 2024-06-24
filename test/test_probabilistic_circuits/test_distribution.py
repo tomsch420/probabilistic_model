@@ -55,7 +55,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         event = SimpleEvent({self.variable: interval}).as_composite_set()
         model, likelihood = self.model.conditional(event)
         self.assertEqual(len(list(model.probabilistic_circuit.nodes)), 4)
-        self.assertIsInstance(model.probabilistic_circuit.root, SumUnit)
+        self.assertIsInstance(model.probabilistic_circuit.root, DeterministicSumUnit)
 
     def test_conditional_with_none(self):
         event = SimpleEvent({self.variable: singleton(2)}).as_composite_set()
@@ -87,7 +87,7 @@ class DiscreteDistributionTestCase(unittest.TestCase):
         result = self.symbolic_distribution.as_deterministic_sum()
         self.assertEqual(len(result.subcircuits), 3)
         self.assertTrue(np.allclose(result.weights, np.array(list(self.symbolic_distribution.probabilities.values()))))
-        self.assertIsInstance(result.probabilistic_circuit.root, SumUnit)
+        self.assertIsInstance(result.probabilistic_circuit.root, DeterministicSumUnit)
 
 
 class GaussianDistributionTestCase(unittest.TestCase):
@@ -121,10 +121,10 @@ class GaussianDistributionTestCase(unittest.TestCase):
 class IntegerDistributionTestCase(unittest.TestCase):
     x = Integer("x")
 
-    model: SumUnit
+    model: SmoothSumUnit
 
     def setUp(self):
-        sum_unit = SumUnit()
+        sum_unit = SmoothSumUnit()
         i1 = IntegerDistribution(self.x, MissingDict(float, {0: 1}))
         sum_unit.add_subcircuit(i1, 0.4)
         i2 = IntegerDistribution(self.x, MissingDict(float, {1: 1}))

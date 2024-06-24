@@ -1,4 +1,3 @@
-import itertools
 import json
 import math
 import tempfile
@@ -31,7 +30,7 @@ from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
     SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
-    SumUnit, ProbabilisticCircuit
+    DeterministicSumUnit, ProbabilisticCircuit
 from probabilistic_model.utils import MissingDict
 
 
@@ -249,7 +248,7 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         df["malignant"] = target
         cls.data = df
 
-        variables = infer_variables_from_dataframe(cls.data, scale_continuous_types=False, min_samples_per_quantile=20)
+        variables = infer_variables_from_dataframe(cls.data, scale_continuous_types=False)
 
         cls.model = JPT(variables, min_samples_leaf=0.4)
         cls.model.fit(cls.data)
@@ -291,7 +290,7 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
     def test_univariate_symbolic_marginal_as_sum_unit(self):
         variables = [v for v in self.model.variables if v.name == "malignant"]
         marginal = self.model.marginal(variables, as_deterministic_sum=True)
-        self.assertIsInstance(marginal, SumUnit)
+        self.assertIsInstance(marginal, DeterministicSumUnit)
 
     def test_serialization_of_circuit(self):
         json_dict = self.model.probabilistic_circuit.to_json()
@@ -307,8 +306,6 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
-        import plotly.graph_objects as go
-        go.Figure(self.model.plot()).show()
         self.assertGreater(len(mode.simple_sets), 0)
 
 

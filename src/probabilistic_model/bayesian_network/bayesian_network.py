@@ -16,9 +16,9 @@ from probabilistic_model.distributions.multinomial import MultinomialDistributio
 import networkx as nx
 import numpy as np
 
-from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit,
+from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
                                                            DecomposableProductUnit, ProbabilisticCircuitMixin,
-                                                           SumUnit)
+                                                           SmoothSumUnit)
 
 
 class BayesianNetworkMixin:
@@ -81,7 +81,7 @@ class BayesianNetworkMixin:
     def __hash__(self):
         return id(self)
 
-    def joint_distribution_with_parent(self) -> SumUnit:
+    def joint_distribution_with_parent(self) -> DeterministicSumUnit:
         """
         Calculate the joint distribution of the node and its parent.
         The joint distribution is formed w. r. t. the forward message of the parent.
@@ -99,7 +99,7 @@ class BayesianNetworkMixin:
         """
         raise NotImplementedError
 
-    def forward_message_as_sum_unit(self) -> SumUnit:
+    def forward_message_as_sum_unit(self) -> SmoothSumUnit:
         """
         Convert this leaf nodes forward message to a sum unit.
         This is used for the start of the conversion to a probabilistic circuit and only called for leaf nodes.
@@ -186,7 +186,7 @@ class BayesianNetwork(nx.DiGraph):
         event = SimpleEvent({variable: variable.domain for variable in self.variables})
         self.forward_pass(event)
 
-        pointers_to_sum_units: Dict[BayesianNetworkMixin, SumUnit] = dict()
+        pointers_to_sum_units: Dict[BayesianNetworkMixin, SmoothSumUnit] = dict()
 
         for leaf in self.leaves:
             pointers_to_sum_units[leaf] = leaf.forward_message_as_sum_unit()

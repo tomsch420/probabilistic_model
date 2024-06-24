@@ -14,7 +14,8 @@ from sortedcontainers import SortedSet
 from typing_extensions import Self
 
 from ..probabilistic_circuit.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
-from ..probabilistic_circuit.probabilistic_circuit import SumUnit
+from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, SmoothSumUnit, cache_inference_result,
+                                                           ProbabilisticCircuitMixin)
 from ..constants import *
 
 
@@ -319,7 +320,7 @@ class InductionStep:
             return []
 
 
-class NygaDistribution(SumUnit):
+class NygaDistribution(DeterministicSumUnit):
     """
     A Nyga distribution is a deterministic mixture of uniform distributions.
     """
@@ -335,6 +336,10 @@ class NygaDistribution(SumUnit):
     """
 
     @property
+    def univariate_support(self) -> Interval:
+        raise NotImplementedError("This should not be called.")
+
+    @property
     def subcircuits(self) -> List[UniformDistribution]:
         return super().subcircuits
 
@@ -342,12 +347,8 @@ class NygaDistribution(SumUnit):
     def weighted_subcircuits(self) -> List[Tuple[float, UniformDistribution]]:
         return super().weighted_subcircuits
 
-    @property
-    def is_deterministic(self) -> bool:
-        return True
-
     def log_pdf(self, x: np.array) -> np.array:
-        return SumUnit.log_likelihood(self, x.reshape(-1, 1))[:, 0]
+        return DeterministicSumUnit.log_likelihood(self, x.reshape(-1, 1))[:, 0]
 
     def cdf(self, x: np.array) -> np.array:
         result = np.zeros(len(x))
@@ -355,9 +356,12 @@ class NygaDistribution(SumUnit):
             result += weight * subcircuit.cdf(x)
         return result
 
+    def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
+        raise NotImplementedError("This should not be called.")
+
     def __init__(self, variable: Continuous, min_samples_per_quantile: Optional[int] = 1,
                  min_likelihood_improvement: Optional[float] = 0.1):
-        SumUnit.__init__(self)
+        DeterministicSumUnit.__init__(self)
         ContinuousDistribution.__init__(self)
         self.variable = variable
         self.min_samples_per_quantile = min_samples_per_quantile
@@ -415,6 +419,7 @@ class NygaDistribution(SumUnit):
             induction_step = induction_steps.popleft()
             new_induction_steps = induction_step.induce()
             induction_steps.extend(new_induction_steps)
+
         self.normalize()
         return self
 
@@ -433,7 +438,7 @@ class NygaDistribution(SumUnit):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
-        smooth_sum_unit = SumUnit()._from_json(data)
+        smooth_sum_unit = DeterministicSumUnit()._from_json(data)
         result = cls(None, min_samples_per_quantile=data["min_samples_per_quantile"],
                      min_likelihood_improvement=data["min_likelihood_improvement"])
         for weight, subcircuit in smooth_sum_unit.weighted_subcircuits:
@@ -442,7 +447,7 @@ class NygaDistribution(SumUnit):
         return result
 
     @classmethod
-    def from_uniform_mixture(cls, mixture: SumUnit) -> Self:
+    def from_uniform_mixture(cls, mixture: SmoothSumUnit) -> Self:
         """
         Construct a Nyga Distribution from a mixture of uniform distributions.
         The mixture does not have to be deterministic.

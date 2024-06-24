@@ -15,8 +15,8 @@ from ...distributions.distributions import (ContinuousDistribution as PMContinuo
                                             IntegerDistribution as PMIntegerDistribution,
                                             DiscreteDistribution as PMDiscreteDistribution,
                                             UnivariateDistribution as PMUnivariateDistribution)
-from ..probabilistic_circuit import (ProbabilisticCircuitMixin, cache_inference_result,
-                                     SumUnit)
+from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin, cache_inference_result,
+                                     SmoothSumUnit)
 from ...distributions.uniform import UniformDistribution as PMUniformDistribution
 from ...distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
                                        TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
@@ -25,16 +25,12 @@ from ...utils import MissingDict
 
 class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin, ABC):
 
-    @property
     def is_deterministic(self) -> bool:
         return True
 
     @property
     def variables(self) -> SortedSet:
         return SortedSet([self.variable])
-
-    def calculate_support(self) -> Event:
-        return self.support()
 
     def __hash__(self):
         return ProbabilisticCircuitMixin.__hash__(self)
@@ -53,8 +49,8 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin, ABC):
 
-    def log_conditional_from_interval(self, interval: Interval) -> Tuple[SumUnit, float]:
-        result = SumUnit()
+    def log_conditional_from_interval(self, interval: Interval) -> Tuple[DeterministicSumUnit, float]:
+        result = DeterministicSumUnit()
         total_probability = 0.
 
         for simple_interval in interval.simple_sets:
@@ -75,14 +71,14 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, P
 
 class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, ProbabilisticCircuitMixin, ABC):
 
-    def as_deterministic_sum(self) -> SumUnit:
+    def as_deterministic_sum(self) -> DeterministicSumUnit:
         """
         Convert this distribution to a deterministic sum unit that encodes the same distribution.
         The result has as many children as the domain of the variable and each child encodes the value of the variable.
 
         :return: A deterministic sum unit that encodes the same distribution.
         """
-        result = SumUnit()
+        result = DeterministicSumUnit()
 
         for event in self.variable.domain.simple_sets:
             event = SimpleEvent({self.variable: event}).as_composite_set()
@@ -92,7 +88,7 @@ class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, Proba
         return result
 
     @classmethod
-    def from_sum_unit(cls, sum_unit: SumUnit):
+    def from_sum_unit(cls, sum_unit: SmoothSumUnit):
         """
         Create a discrete distribution from a sum unit.
 
