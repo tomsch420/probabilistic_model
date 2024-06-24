@@ -33,7 +33,6 @@ from probabilistic_model.probabilistic_circuit.distributions.distributions impor
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
     SumUnit, ProbabilisticCircuit
 from probabilistic_model.utils import MissingDict
-import plotly.graph_objects as go
 
 
 class ShowMixin:
@@ -307,11 +306,10 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         conditional, probability = model.conditional(SimpleEvent({x: closed(0, 10)}).as_composite_set())
 
     def test_mode(self):
+        mode, likelihood = self.model.mode()
+        import plotly.graph_objects as go
         go.Figure(self.model.plot()).show()
-        self.model.support()
-        # mode, likelihood = self.model.mode()
-        go.Figure(self.model.plot()).show()
-        # self.assertGreater(len(mode.simple_sets), 0)
+        self.assertGreater(len(mode.simple_sets), 0)
 
 
 class MNISTTestCase(unittest.TestCase):

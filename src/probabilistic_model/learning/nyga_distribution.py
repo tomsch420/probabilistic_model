@@ -358,6 +358,7 @@ class NygaDistribution(SumUnit):
     def __init__(self, variable: Continuous, min_samples_per_quantile: Optional[int] = 1,
                  min_likelihood_improvement: Optional[float] = 0.1):
         SumUnit.__init__(self)
+        ContinuousDistribution.__init__(self)
         self.variable = variable
         self.min_samples_per_quantile = min_samples_per_quantile
         self.min_likelihood_improvement = min_likelihood_improvement
