@@ -15,8 +15,8 @@ from ...distributions.distributions import (ContinuousDistribution as PMContinuo
                                             IntegerDistribution as PMIntegerDistribution,
                                             DiscreteDistribution as PMDiscreteDistribution,
                                             UnivariateDistribution as PMUnivariateDistribution)
-from ..probabilistic_circuit import (DeterministicSumUnit, ProbabilisticCircuitMixin, cache_inference_result,
-                                     SmoothSumUnit)
+from ..probabilistic_circuit import (ProbabilisticCircuitMixin, cache_inference_result,
+                                     SumUnit)
 from ...distributions.uniform import UniformDistribution as PMUniformDistribution
 from ...distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
                                        TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
@@ -49,8 +49,8 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin, ABC):
 
-    def log_conditional_from_interval(self, interval: Interval) -> Tuple[DeterministicSumUnit, float]:
-        result = DeterministicSumUnit()
+    def log_conditional_from_interval(self, interval: Interval) -> Tuple[SumUnit, float]:
+        result = SumUnit()
         total_probability = 0.
 
         for simple_interval in interval.simple_sets:
@@ -71,14 +71,14 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, P
 
 class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, ProbabilisticCircuitMixin, ABC):
 
-    def as_deterministic_sum(self) -> DeterministicSumUnit:
+    def as_deterministic_sum(self) -> SumUnit:
         """
         Convert this distribution to a deterministic sum unit that encodes the same distribution.
         The result has as many children as the domain of the variable and each child encodes the value of the variable.
 
         :return: A deterministic sum unit that encodes the same distribution.
         """
-        result = DeterministicSumUnit()
+        result = SumUnit()
 
         for event in self.variable.domain.simple_sets:
             event = SimpleEvent({self.variable: event}).as_composite_set()
@@ -88,7 +88,7 @@ class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, Proba
         return result
 
     @classmethod
-    def from_sum_unit(cls, sum_unit: SmoothSumUnit):
+    def from_sum_unit(cls, sum_unit: SumUnit):
         """
         Create a discrete distribution from a sum unit.
 

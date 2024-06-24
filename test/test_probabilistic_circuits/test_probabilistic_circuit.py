@@ -138,13 +138,13 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
 
 class SumUnitTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
-    model: DeterministicSumUnit
+    model: SumUnit
 
     def setUp(self):
         u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
         u2 = UniformDistribution(self.x, closed(3, 4).simple_sets[0])
 
-        self.model = DeterministicSumUnit()
+        self.model = SumUnit()
         self.model.add_subcircuit(u1, 0.6)
         self.model.add_subcircuit(u2, 0.4)
 
@@ -183,8 +183,8 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         result, probability = self.model.conditional(event)
         self.assertAlmostEqual(probability, 0.3)
         self.assertEqual(len(result.probabilistic_circuit.nodes()), 2)
-        self.assertIsInstance(result, DeterministicSumUnit)
-        self.assertIsInstance(result.probabilistic_circuit.root, DeterministicSumUnit)
+        self.assertIsInstance(result, SumUnit)
+        self.assertIsInstance(result.probabilistic_circuit.root, SumUnit)
         self.assertEqual(len(result.weighted_subcircuits), 1)
         self.assertEqual(result.weighted_subcircuits[0][0], 1)
 
@@ -214,7 +214,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
 
     def test_serialization(self):
         serialized = self.model.to_json()
-        deserialized = SmoothSumUnit.from_json(serialized)
+        deserialized = SumUnit.from_json(serialized)
         self.assertEqual(self.model, deserialized)
 
     def test_copy(self):
@@ -228,9 +228,9 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(result.probability(event), 1)
 
     def test_deep_mount(self):
-        s1 = SmoothSumUnit()
-        s2 = SmoothSumUnit()
-        s3 = SmoothSumUnit()
+        s1 = SumUnit()
+        s2 = SumUnit()
+        s3 = SumUnit()
         u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
         s2.probabilistic_circuit.add_nodes_from([s2, s3, u1])
         s2.probabilistic_circuit.add_weighted_edges_from([(s2, s3, 1.), (s3, u1, 1.)])
@@ -270,7 +270,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         model.add_node(u1)
         model.add_node(u2)
 
-        sum_unit_1 = DeterministicSumUnit()
+        sum_unit_1 = SumUnit()
 
         model.add_node(sum_unit_1)
 
@@ -279,7 +279,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
 
         u3 = UniformDistribution(self.real2, closed(2, 2.25).simple_sets[0])
         u4 = UniformDistribution(self.real2, closed(2, 5).simple_sets[0])
-        sum_unit_2 = SmoothSumUnit()
+        sum_unit_2 = SumUnit()
         model.add_nodes_from([u3, u4, sum_unit_2])
 
         e3 = (sum_unit_2, u3, 0.7)
@@ -394,21 +394,21 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
     z: Continuous = Continuous("z")
-    sum_unit_1: SmoothSumUnit
-    sum_unit_2: SmoothSumUnit
+    sum_unit_1: SumUnit
+    sum_unit_2: SumUnit
     interaction_model: MultinomialDistribution
 
     def setUp(self):
         u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
         u2 = UniformDistribution(self.x, closed(3, 4).simple_sets[0])
-        sum_unit_1 = DeterministicSumUnit()
+        sum_unit_1 = SumUnit()
         sum_unit_1.add_subcircuit(u1, 0.5)
         sum_unit_1.add_subcircuit(u2, 0.5)
         self.sum_unit_1 = sum_unit_1
 
         u3 = UniformDistribution(self.y, closed(0, 1).simple_sets[0])
         u4 = UniformDistribution(self.y, closed(5, 6).simple_sets[0])
-        sum_unit_2 = DeterministicSumUnit()
+        sum_unit_2 = SumUnit()
         sum_unit_2.add_subcircuit(u3, 0.5)
         sum_unit_2.add_subcircuit(u4, 0.5)
         self.sum_unit_2 = sum_unit_2
@@ -432,7 +432,7 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
 
     def test_mount_with_interaction(self):
         self.sum_unit_1.mount_with_interaction_terms(self.sum_unit_2, self.interaction_model)
-        self.assertIsInstance(self.sum_unit_1.probabilistic_circuit.root, DeterministicSumUnit)
+        self.assertIsInstance(self.sum_unit_1.probabilistic_circuit.root, SumUnit)
 
         for subcircuit in self.sum_unit_1.subcircuits:
             self.assertIsInstance(subcircuit, DecomposableProductUnit)
@@ -449,11 +449,11 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
 
     probabilities = np.array([[0, 1],
                               [1, 0]])
-    model: DeterministicSumUnit
+    model: SumUnit
 
     def setUp(self):
         np.random.seed(69)
-        model = DeterministicSumUnit()
+        model = SumUnit()
         model.add_subcircuit(UniformDistribution(self.x, closed(-1.5, -0.5).simple_sets[0]), 0.5)
         model.add_subcircuit(UniformDistribution(self.x, closed(0.5, 1.5).simple_sets[0]), 0.5)
         next_model = model.__copy__()
@@ -490,7 +490,7 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
     def test_plot_non_deterministic(self):
         gaussian_1 = GaussianDistribution(Continuous("x"), 0, 1)
         gaussian_2 = GaussianDistribution(Continuous("x"), 5, 0.5)
-        mixture = SmoothSumUnit()
+        mixture = SumUnit()
         mixture.add_subcircuit(gaussian_1, 0.5)
         mixture.add_subcircuit(gaussian_2, 0.5)
         traces = mixture.plot()
@@ -509,11 +509,11 @@ class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
 
     probabilities = np.array([[0.9, 0.1],
                               [0.3, 0.7]])
-    model: DeterministicSumUnit
+    model: SumUnit
 
     def setUp(self):
         np.random.seed(69)
-        model = DeterministicSumUnit()
+        model = SumUnit()
         model.add_subcircuit(UniformDistribution(self.x, closed(-1.5, -0.5).simple_sets[0]), 0.5)
         model.add_subcircuit(UniformDistribution(self.x, closed(0.5, 1.5).simple_sets[0]), 0.5)
         next_model = model.__copy__()
@@ -553,7 +553,7 @@ class NormalizationTestCase(unittest.TestCase):
     def test_normalization(self):
         u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
         u2 = UniformDistribution(self.x, closed(3, 4).simple_sets[0])
-        sum_unit = DeterministicSumUnit()
+        sum_unit = SumUnit()
         sum_unit.add_subcircuit(u1, 0.5)
         sum_unit.add_subcircuit(u2, 0.3)
         sum_unit.normalize()
@@ -563,7 +563,7 @@ class NormalizationTestCase(unittest.TestCase):
     def test_plot(self):
         u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
         u2 = UniformDistribution(self.x, closed(3, 4).simple_sets[0])
-        sum_unit = DeterministicSumUnit()
+        sum_unit = SumUnit()
         sum_unit.add_subcircuit(u1, 0.5)
         sum_unit.add_subcircuit(u2, 0.3)
         sum_unit.normalize()

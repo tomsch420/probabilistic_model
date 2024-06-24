@@ -7,7 +7,7 @@ from sortedcontainers import SortedSet
 from typing_extensions import Self, Any, Union, Iterable, List, Optional, Tuple, Dict
 
 from ..probabilistic_circuit.distributions.distributions import SymbolicDistribution, IntegerDistribution
-from ..probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit, DecomposableProductUnit)
+from ..probabilistic_circuit.probabilistic_circuit import (DecomposableProductUnit, SumUnit)
 from ..probabilistic_model import ProbabilisticModel
 from ..utils import SubclassJSONSerializer, MissingDict
 
@@ -152,7 +152,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         normalized_probabilities = self.probabilities / np.sum(self.probabilities)
         self.probabilities = normalized_probabilities
 
-    def as_probabilistic_circuit(self) -> DeterministicSumUnit:
+    def as_probabilistic_circuit(self) -> SumUnit:
         """
         Convert this distribution to a probabilistic circuit. A deterministic sum unit with decomposable children is
         used to describe every state. The size of the circuit is equal to the size of `self.probabilities`.
@@ -160,7 +160,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         :return: The distribution as a probabilistic circuit.
         """
         # initialize the result as a deterministic sum unit
-        result = DeterministicSumUnit()
+        result = SumUnit()
 
         # iterate through all states of this distribution
         for event in itertools.product(*[variable.domain.simple_sets for variable in self.variables]):

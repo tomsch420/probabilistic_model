@@ -198,7 +198,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             return self.log_conditional_of_simple_event(event.simple_sets[0])
 
         # construct the proxy node
-        result = DeterministicSumUnit()
+        result = SumUnit()
         total_probability = 0
 
         for simple_event in event.simple_sets:
@@ -274,9 +274,11 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         raise NotImplementedError()
 
 
-class SmoothSumUnit(ProbabilisticCircuitMixin):
+class SumUnit(ProbabilisticCircuitMixin):
 
-    representation = "+"
+    @property
+    def representation(self) -> str:
+        return "⊕" if self.is_deterministic() else "+"
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
@@ -447,7 +449,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
             result.probabilistic_circuit.add_edge(result, copied_subcircuit, weight=weight)
         return result
 
-    def mount_with_interaction_terms(self, other: 'SmoothSumUnit', interaction_model: ProbabilisticModel):
+    def mount_with_interaction_terms(self, other: 'SumUnit', interaction_model: ProbabilisticModel):
         """
         Create a distribution that factorizes as follows:
 
@@ -510,7 +512,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
                 # create edge from proxy to subcircuit
                 proxy_sum_node.add_subcircuit(other_subcircuit, weight=weight)
 
-    def mount_from_bayesian_network(self, other: 'SmoothSumUnit'):
+    def mount_from_bayesian_network(self, other: 'SumUnit'):
         """
         Mount a distribution from tge `to_probabilistic_circuit` method in bayesian networks.
         The distribution is mounted as follows:
@@ -594,17 +596,10 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         return True
 
     def log_mode(self) -> Tuple[Event, float]:
-        raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
+        if not self.is_deterministic():
+            raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
-class DeterministicSumUnit(SmoothSumUnit):
-    """
-    Deterministic Sum Units for Probabilistic Circuits
-    """
-
-    representation = "⊕"
-
-    def log_mode(self) -> Tuple[Event, float]:
         modes = []
         log_likelihoods = []
 
@@ -634,9 +629,6 @@ class DeterministicSumUnit(SmoothSumUnit):
             likelihood = subcircuit.likelihood(samples)
             result[likelihood > 0] = index
         return result
-
-    def is_deterministic(self) -> bool:
-        return True
 
 
 class DecomposableProductUnit(ProbabilisticCircuitMixin):
@@ -1039,7 +1031,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         :return: Rather this circuit is deterministic or not.
         """
-        return all(node.is_deterministic() for node in self.nodes if isinstance(node, SmoothSumUnit))
+        return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
 
     def plot(self, **kwargs):
         return self.root.plot(**kwargs)
