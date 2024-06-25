@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import unittest
 from abc import abstractmethod
 
 import queue
@@ -1243,14 +1244,114 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return own_leaf_avm, other_leaf_avm
 
+from probabilistic_model.probabilistic_circuit.exporter import draw_io_expoter
 
-# Product Interesction Summe Union
-# AVM-> higher_densty *"
-# recursive leaf leaf
 class ShallowProbabilisticCircuit(ProbabilisticCircuit):
-
     @classmethod
     def from_probabilistic_circuit(cls, probabilistic_circuit: ProbabilisticCircuit):
         result = cls()
-        # funny calculation
+        shallow_pc = probabilistic_circuit
+        #shallow_pc.simplify()
+        # d = draw_io_expoter.DrawIoExporter(shallow_pc)
+        # e = d.export()
+        # e.dump_file("test.drawio")
+        cls.shallowing(result, node=shallow_pc.root, presucc=None)
+
+        # d = draw_io_expoter.DrawIoExporter(shallow_pc)
+        # e = d.export()
+        # e.dump_file("test.drawio")
         return result
+
+    def shallowing(self, node: ProbabilisticCircuitMixin, presucc: ProbabilisticCircuitMixin | None):
+        probabilistic_circuit = node.probabilistic_circuit
+        succ_list: List = list(probabilistic_circuit.successors(node))
+        presucc_list: List = list(probabilistic_circuit.predecessors(node))
+        if not isinstance(node, SmoothSumUnit) and not isinstance(node, DeterministicSumUnit) and not isinstance(node, DecomposableProductUnit):
+            sum_unit = DeterministicSumUnit()
+            product_unit = DecomposableProductUnit()
+            probabilistic_circuit.add_node(sum_unit)
+            probabilistic_circuit.add_node(product_unit)
+            probabilistic_circuit.add_edge(product_unit, node)
+            probabilistic_circuit.add_edge(sum_unit, product_unit, weight=1)
+            for presucc in presucc_list:
+                data = probabilistic_circuit.get_edge_data(presucc, node, {"weight": 1})
+                probabilistic_circuit.add_edge(presucc, sum_unit, **data)
+                probabilistic_circuit.remove_edge(presucc, node)
+            # d = draw_io_expoter.DrawIoExporter(node.probabilistic_circuit)
+            # e = d.export()
+            # e.dump_file("test.drawio")
+            return
+        elif isinstance(node, DeterministicSumUnit) or isinstance(node, SmoothSumUnit):
+            for succ in succ_list:
+                self.shallowing(succ)
+            new_succ_list = list(probabilistic_circuit.successors(node))
+            for sum_succ in new_succ_list:
+                first_weight = probabilistic_circuit.get_edge_data(node, sum_succ, {"weight": 1}).get("weight", 1)
+
+                for succ_succ in list(probabilistic_circuit.successors(sum_succ)):
+                    second_weight = probabilistic_circuit.get_edge_data(sum_succ, succ_succ, {"weight": 1}).get("weight", 1)
+                    probabilistic_circuit.add_edge(node, succ_succ, weight=first_weight * second_weight)
+                probabilistic_circuit.remove_edge(node, sum_succ)
+                if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
+                    self.remove_node_and_successor_structure(sum_succ)
+            # d = draw_io_expoter.DrawIoExporter(node.probabilistic_circuit)
+            # e = d.export()
+            # e.dump_file("test.drawio")
+            return
+
+        elif isinstance(node, DecomposableProductUnit):
+            for succ in succ_list:
+                self.shallowing(succ)
+            new_succ_list = list(probabilistic_circuit.successors(node))
+            combination_li = list()
+            sum_unit = DeterministicSumUnit()
+            probabilistic_circuit.add_node(sum_unit)
+            for pre_succ in presucc_list:
+                data = probabilistic_circuit.get_edge_data(pre_succ, node, {"weight": 1})
+                probabilistic_circuit.add_edge(pre_succ, sum_unit, **data)
+                probabilistic_circuit.remove_edge(pre_succ, node)
+            probabilistic_circuit.remove_node(node)
+
+            for sum_succ in new_succ_list:
+                pro_li = []
+                for pro_succ in list(probabilistic_circuit.successors(sum_succ)):
+                    data = probabilistic_circuit.get_edge_data(sum_succ, pro_succ, {"weight": 1})
+                    pro_li.append((pro_succ, data.get("weight", 1)))
+                # probabilistic_circuit.remove_edge(node, sum_succ)
+                if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
+                    probabilistic_circuit.remove_node(sum_succ)
+
+            for combination in itertools.product(*combination_li):
+                product_unit = DecomposableProductUnit()
+                probabilistic_circuit.add_node(product_unit)
+                total_weight = 1
+                for pro_tuple in combination:
+                    under_node, weight = pro_tuple[0], pro_tuple[1]
+                    total_weight *= weight
+                    under_succ_li = probabilistic_circuit.successors(under_node)
+                    for under_succ in under_succ_li:
+                        data = probabilistic_circuit.get_edge_data(under_node, under_succ, {"weight": 1})
+                        #FUCK FUCK FRAGE WICHTIG ERSTMAL WEIGHT +1 umd dopplung etc. noch mit zunehem aaaaah
+                        if probabilistic_circuit.has_edge(product_unit, under_succ):
+                            data["weight"] = data.get(weight, 1) + 1
+                        probabilistic_circuit.add_edge(product_unit, under_succ, **data)
+                probabilistic_circuit.add_edge(sum_unit, product_unit, weight=total_weight)
+            for combi_node in [c[0] for c in combination_li]:
+                if len(list(probabilistic_circuit.predecessors(combi_node))) == 0:
+                    self.remove_node_and_successor_structure(combi_node)
+
+            # d = draw_io_expoter.DrawIoExporter(node.probabilistic_circuit)
+            # e = d.export()
+            # e.dump_file("test.drawio")
+            return
+
+        else:
+            raise TypeError(f"{type(node)} is not supported")
+
+    def remove_node_and_successor_structure(self, node: ProbabilisticCircuitMixin):
+        probabilistic_circuit = node.probabilistic_circuit
+        succ_list: List = list(probabilistic_circuit.successors(node))
+        probabilistic_circuit.remove_node(node)
+        for succ in succ_list:
+            if len(list(probabilistic_circuit.predecessors(succ))) == 0:
+                self.remove_node_and_successor_structure(succ)

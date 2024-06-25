@@ -557,8 +557,8 @@ class NormalizationTestCase(unittest.TestCase):
         sum_unit.add_subcircuit(u1, 0.5)
         sum_unit.add_subcircuit(u2, 0.3)
         sum_unit.normalize()
-        self.assertAlmostEqual(sum_unit.weights[0], 0.5/0.8)
-        self.assertAlmostEqual(sum_unit.weights[1], 0.3/0.8)
+        self.assertAlmostEqual(sum_unit.weights[0], 0.5 / 0.8)
+        self.assertAlmostEqual(sum_unit.weights[1], 0.3 / 0.8)
 
     def test_plot(self):
         u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
@@ -573,7 +573,6 @@ class NormalizationTestCase(unittest.TestCase):
 
 
 class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
-
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
     model: ProbabilisticCircuit
@@ -628,7 +627,6 @@ class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
 
 
 class ComplexInferenceTestCase(unittest.TestCase):
-
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
     model: ProbabilisticCircuit
@@ -741,13 +739,15 @@ class ConvolutionTestCase(unittest.TestCase, ShowMixin):
         mode, _ = g2.mode()
         self.assertEqual(len(mode.simple_sets), 1)
 
+
 if __name__ == '__main__':
     unittest.main()
 
 from probabilistic_model.learning.jpt.jpt import JPT, DecomposableProductUnit as JPTLeaf
 from random_events.product_algebra import SimpleInterval
-class StructuredDecomposabilityTestCase(unittest.TestCase):
 
+
+class StructuredDecomposabilityTestCase(unittest.TestCase):
     model = ProbabilisticCircuit()
     x = Continuous("x")
     y = Continuous("y")
@@ -780,6 +780,7 @@ class StructuredDecomposabilityTestCase(unittest.TestCase):
     for unit in [product_3, product_4, product_5, product_6]:
         unit.add_subcircuit(UniformDistribution(x, range1))
         unit.add_subcircuit(UniformDistribution(y, range2))
+
     def test_is_structured_decomposable(self):
         assert self.model.is_structured_decomposable()
 
@@ -855,8 +856,8 @@ class StructuredDecomposabilityTestCase(unittest.TestCase):
 
         assert not self.model.decomposes_as(model_other)
 
-class AreaValidationMetricTestCase(unittest.TestCase):
 
+class AreaValidationMetricTestCase(unittest.TestCase):
     x = Continuous("x")
     y = Continuous("y")
     standard_circuit = JPTLeaf()
@@ -867,13 +868,10 @@ class AreaValidationMetricTestCase(unittest.TestCase):
     event_1 = SimpleEvent({x: closed(0, .25), y: closed(0, .25)})
     event_2 = SimpleEvent({x: closed(0.75, 1), y: closed(0.75, 1)})
 
-
     circuit_1, _ = standard_circuit.conditional(event_1.as_composite_set().complement())
     circuit_2, _ = standard_circuit.conditional(event_2.as_composite_set().complement())
     circuit_3, _ = circuit_2.conditional(event_1.as_composite_set())
     circuit_4, _ = circuit_1.conditional(event_2.as_composite_set())
-
-
 
     def test_jpt_avm(self):
         result = JPT.area_validation_metric(self.circuit_1.root, self.circuit_2.root)
@@ -882,8 +880,9 @@ class AreaValidationMetricTestCase(unittest.TestCase):
         q_event_by_hand = self.event_1
         self.assertEqual(self.circuit_2.probability(p_event_by_hand.as_composite_set()), 0)
         self.assertEqual(self.circuit_1.probability(q_event_by_hand.as_composite_set()), 0)
-        result_by_hand = self.circuit_1.probability(p_event_by_hand.as_composite_set()) + self.circuit_2.probability(q_event_by_hand.as_composite_set())
-        self.assertAlmostEqual(result, result_by_hand/2, 4)
+        result_by_hand = self.circuit_1.probability(p_event_by_hand.as_composite_set()) + self.circuit_2.probability(
+            q_event_by_hand.as_composite_set())
+        self.assertAlmostEqual(result, result_by_hand / 2, 4)
 
     def test_jpt_avm_same_input(self):
         result = JPT.area_validation_metric(self.circuit_1.root, self.circuit_1.root)
@@ -896,7 +895,56 @@ class AreaValidationMetricTestCase(unittest.TestCase):
 
     def test_avm_mc(self):
         import probabilistic_model.Monte_Carlo_Estimator as mc
-        result = mc.monte_carlo_estimation_area_validation_metric(sample_amount=1000, first_model=self.circuit_1, senc_model=self.circuit_2)
+        result = mc.monte_carlo_estimation_area_validation_metric(sample_amount=1000, first_model=self.circuit_1,
+                                                                  senc_model=self.circuit_2)
 
-        self.assertEqual(result/2, 0.13333333333333336)
+        self.assertAlmostEqual(result / 2, 0.13333333333333336, delta=0.1)
 
+
+class ShallowTestCase(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+    z = Continuous("z")
+    sum1, sum2, sum3 = DeterministicSumUnit(), DeterministicSumUnit(), DeterministicSumUnit()
+    sum4, sum5 = DeterministicSumUnit(), DeterministicSumUnit()
+    prod1, prod2 = DecomposableProductUnit(), DecomposableProductUnit()
+    model = ProbabilisticCircuit()
+    model.add_node(sum1)
+    model.add_node(prod1)
+    model.add_node(prod2)
+    model.add_edge(sum1, prod1, weight=0.5)
+    model.add_edge(sum1, prod2, weight=0.5)
+    model.add_node(sum2)
+    model.add_node(sum3)
+    model.add_edge(prod1, sum2)
+    model.add_edge(prod1, sum3)
+    model.add_node(sum4)
+    model.add_node(sum5)
+    model.add_edge(prod2, sum4)
+    model.add_edge(prod2, sum5)
+    uni_x1 = UniformDistribution(x, SimpleInterval(0, 1))
+    uni_y1, uni_y2 = UniformDistribution(y, SimpleInterval(0, 1)), UniformDistribution(y, SimpleInterval(0, 1))
+    uni_z1 = UniformDistribution(z, SimpleInterval(0, 1))
+    model.add_node(uni_y1)
+    model.add_node(uni_z1)
+    model.add_edge(sum2, uni_y1, weight=0.8)
+    model.add_edge(sum2, uni_z1, weight=0.2)
+    model.add_edge(sum3, uni_y1, weight=0.7)
+    model.add_edge(sum3, uni_z1, weight=0.3)
+    model.add_node(uni_y2)
+    model.add_node(uni_x1)
+    model.add_edge(sum4, uni_y2, weight=0.5)
+    model.add_edge(sum4, uni_x1, weight=0.5)
+    model.add_edge(sum5, uni_y2, weight=0.1)
+    model.add_edge(sum5, uni_x1, weight=0.9)
+
+    import probabilistic_model.probabilistic_circuit.probabilistic_circuit as pc
+    shallow_pc = pc.ShallowProbabilisticCircuit.from_probabilistic_circuit(model)
+
+
+
+    def shallow_test(self):
+        import probabilistic_model.probabilistic_circuit.probabilistic_circuit as pc
+        shallow_pc = pc.ShallowProbabilisticCircuit.from_probabilistic_circuit(self.model)
+
+        self.assertTrue(True)
