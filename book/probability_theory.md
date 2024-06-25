@@ -472,6 +472,8 @@ print(np.allclose(p_shape_given_large * p_color_given_large, p_shape_and_color_g
 
 In this example, we can observe that the variables are conditionally independent if the size of the object is small.
 They are conditionally dependent if the size of the object is large.
+In contrast to the previous example, the variables are not independent over the entire domain, only certain 
+configurations (events) of the variables are independent.
 
 ### Continuous Random Variables
 
