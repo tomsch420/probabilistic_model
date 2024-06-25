@@ -490,7 +490,7 @@ class NygaDistribution(SumUnit):
         for subcircuit in self.subcircuits:
             x_values += [subcircuit.interval.lower, subcircuit.interval.upper]
         x_values = sorted(x_values)
-        y_values = self.cdf(np.array(x_values))
+        y_values = self.cdf(np.array(x_values).reshape(-1, 1))
         return go.Scatter(x=x_values, y=y_values, mode="lines", name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))
 
     def plot(self, **kwargs) -> List[go.Scatter]:

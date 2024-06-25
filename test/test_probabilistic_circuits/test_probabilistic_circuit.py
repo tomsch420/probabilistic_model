@@ -569,7 +569,7 @@ class NormalizationTestCase(unittest.TestCase):
         sum_unit.normalize()
         traces = sum_unit.plot()
         self.assertGreater(len(traces), 0)
-        # go.Figure(sum_unit.plot(), sum_unit.plotly_layout()).show()
+        # go.Figure(traces, sum_unit.plotly_layout()).show()
 
 
 class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):

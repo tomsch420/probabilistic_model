@@ -25,7 +25,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.probability(self.distribution.support()), 1)
 
     def test_cdf(self):
-        cdf = self.distribution.cdf(np.array([-1, 1, 2]))
+        cdf = self.distribution.cdf(np.array([-1, 1, 2]).reshape(-1, 1))
         self.assertEqual(cdf[0], 0)
         self.assertEqual(cdf[1], 0.5)
         self.assertEqual(cdf[2], 1)

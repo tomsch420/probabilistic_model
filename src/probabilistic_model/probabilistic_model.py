@@ -431,7 +431,7 @@ class ProbabilisticModel(abc.ABC):
             mode, _ = self.mode()
             mode_traces = mode.plot(color=MODE_TRACE_COLOR)
             for trace in mode_traces:
-                trace.update(name=MODE_TRACE_NAME)
+                trace.update(name=MODE_TRACE_NAME, mode="lines+markers")
         except IntractableError:
             mode_traces = []
         return mode_traces

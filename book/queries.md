@@ -155,7 +155,6 @@ fig.show()
 The plot shows the normal distribution that is the maximum likelihood estimate for the data if we assume the data 
 is i. i. d. and drawn from a normal distribution.
 
-
 ## Marginals
 
 The marginal query is the next interesting quantity we investigate.
@@ -238,24 +237,41 @@ color_distribution = distribution.marginal([color])
 print(tabulate.tabulate(color_distribution.to_tabulate(), tablefmt="fancy_grid"))
 ```
 
-A final remark on the marginal method,  is that every inference method that is part of the marginal query class is still efficiently calculable. A problem is that, it sometimes destroys a property that is needed for finding the mode of the distribution. We will investigate later what that means.
+A final remark on the marginal method, is that every inference method that is part of the marginal query class is 
+still efficiently calculable. 
+A problem is that, it sometimes destroys a property that is needed for finding the mode of the distribution. 
+We will investigate later what that means.
 
 
 ## Moments
 
-The final interesting object that belongs to the marginal query class are the moments of a distribution. The (central) moment of a distribution is defined as the following integral:
+The final interesting quantity that belongs to the marginal query class is the moment of a distribution. 
 
-$$\mathbb{M}_n(x) = E((x-E(x))^n) = \int (x-\mu)^n p(x) dx$$
-    
-In this equation there are multiple symbols that should be discussed. Firstly, $n$ is the order of a moment. Second, $\mu$ is the center of the moment. If the center is $0$, the moment is called a central moment. The most common moments are the expectation given as
+````{prf:definition} Moment Query class
+:label: def-moment
 
-$$E(x) = \int x p(x) dx$$,
+The (central) moment of a distribution is defined as the integral
 
-which is a moment query with $n=1$ and center $0$. The variance is the second central moment and given by
+$$\mathbb{M}_n(x) = E((x-E(x))^n) = \int (x-\mu)^n p(x) dx,$$
 
-$$Var(x) = E((x-E(x))^2) = \int (x-E(x))^2 p(x) dx$$,
+where $n$ is the order of the moment and $\mu$ is the center of the moment.
 
-which is a moment query with the mean as the center and $n=2$. While higher order moments exist ($n>2$), they have little practical use and are not further discussed here.
+````
+
+The most common moments are the expectation given as
+
+$$E(x) = \int x \, p(x) dx,$$
+
+which is a moment query with $n=1$ and center $0$. 
+
+The variance is the second central moment and given by
+
+$$Var(x) = \int (x-E(x))^2 p(x) dx, $$
+
+which is a moment query with the mean as the center and $n=2$. 
+
+While higher order moments exist $(n>2)$, they have little practical use and are not further discussed here.
+
 The interface to calculate moments is the `moment` method of the distribution object. 
 
 ```{code-cell} ipython3
@@ -267,19 +283,27 @@ print("Raw variance:", distribution.moment(VariableMap({sepal_length: 2}), Varia
 print("Third moment with center 3:", distribution.moment(VariableMap({sepal_length: 3}), VariableMap({sepal_length: 3})))
 ```
 
-As we can see, mean and variance are shortcut by their names since they are so common. Furthermore, we can calculate all moments that exist by plugging in the order and center that we want as VariableMap.
+As we can see, the expectation and variance are shortcut by their names since they are so common. 
+
+Furthermore, we can calculate all moments that exist by plugging in the order and center that we want as `VariableMap`.
 
 ## Mode query
 
-The final important quantity of a probability distribution is the mode. The mode refers to the region where the denisty is maximized. Formally,
+The next important quantity of a probability distribution is the mode. 
+The mode refers to the region where the density is maximized. 
+Formally,
+
+````{prf:definition} Mode Query class
+
+The mode of a distribution is defined as the set where the density is maximal, i.e.,
 
 $$\hat{x} = \underset{x \in \mathcal{X}}{arg \,max} p(x). $$
 
+````
 
 While common literature describes the mode under a condition, we can omit such a description since we already defined that the conditional distribution is part of the marginal query class. Hence, the mode under a condition is just the chain of the condition and mode methods.
 
 A common perception of the mode is, that it is the single point of highest density, such as in the example below.
-<!-- #endregion -->
 
 ```{code-cell} ipython3
 distribution = GaussianDistribution(Continuous("x"), 0, 1)
@@ -292,7 +316,7 @@ However, the mode is more accurately described as the set of points with the hig
 ```{code-cell} ipython3
 condition = closed(-float("inf"), -1) | closed(1, float("inf"))
 distribution, _ = distribution.conditional(SimpleEvent({distribution.variables[0]: condition}).as_composite_set())
-go.Figure(distribution.plot()).show()
+go.Figure(distribution.plot(), distribution.plotly_layout()).show()
 ```
 
 We can see that conditioning a Gaussian on such an event already creates a mode that has two points. Furthermore, modes can be sets of infinite many points, such as shown below.
@@ -303,20 +327,92 @@ uniform = UniformDistribution(Continuous("x"), open(-1, 1).simple_sets[0])
 go.Figure(uniform.plot(), uniform.plotly_layout()).show()
 ```
 
-The mode of the uniform distribution is the entire interval of the uniform distribution $(-1, 1)$. The mode is particular useful when we want to find the best (most likely) solution to a problem und not just any.
+The mode of the uniform distribution is the entire interval of the uniform distribution $(-1, 1) $. 
+The mode is particularly useful when we want to find the best (most likely) solution to a problem and not just any.
 
 
 ## Sampling
-Sampling very gucci
+
+Sampling refers to the generation of random samples from a distribution. 
+Defining sampling formally is a bit tricky, as it is not a query in the sense of the other queries.
+However, it is an important part of probabilistic modeling, as it allows us to generate examples from a distribution.
+If you are interested in a good definition of sampling, I recommend {cite:p}`Sampling2017StackExchange`.
+
+For most practical purposes, we can define sampling as the generation of random samples from a distribution.
+Let's look at an example from the Gaussian distribution.
+
+```{code-cell} ipython3
+distribution = GaussianDistribution(Continuous("x"), 0, 1)
+samples = distribution.sample(2)
+print(samples)
+```
+
+As we can see, we just draw two samples from the Gaussian distribution.
 
 ## Monte Carlo Estimate
 
+In {prf:ref}`def-marginal`, we defined the marginal query class as the integration over events of the product algebra.
+In practice, quantities such as the marginal probability are often intractable to compute.
+Furthermore, there are integrals that are not part of the marginal query class and yet interesting to calculate.
+One way to approximate such integrals is by using Monte Carlo methods.
+
+````{prf:definition} Monte Carlo Estimate
+:label: def-monte-carlo
+
+Consider k indipendent samples $x_1, ..., x_k$ from a multidimensional random variable with a certain pdf $p(x)$. 
+Then a Monte Carlo estimate would be a way of approximating multidimensional integrals of the form
+
+$$
+\int f(x) p(x) dx
+$$
+
+by using the empirical expectation of the function $f$ evaluated at the samples
+
+$$
+\int f(x) p(x) dx \approx \frac{1}{k} \sum_{i=1}^k f(x_i).
+$$
+
+The Monte Carlo estimate is sometimes reffered to as the expectation of the function $f$ under the distribution $p$.
+````
+
+The Monte Carlo estimate is a powerful tool to approximate integrals that have unconstrained form.
+
+In general, Monte Carlo Methods are integral approximations and not tied to probability distributions. 
+Until now, we described our integrals as random events. 
+Let $E$ be a random event as we know it, consider the function
+
+$$
+\mathbb{1}_E(x) = \begin{cases} 1 & \text{if } E \models x \\ 0 & \text{else} \end{cases}
+$$
+
+then,
+
+$$
+\int \mathbb{1}_E(x) p(x) dx
+$$
+
+calculates $P(E)$. 
+The Monte Carlo Estimate yields an approximation by
+
+$$
+P(E) \approx = \frac{1}{k} \sum_{i=1}^k \mathbb{1}_E(x_i).
+$$
+
+Since Monte Carlo estimates are not constrained by any for of $f$, we can use them to approximate any integral, such as
+$P(x < y)$ or similar complex integrals.
+For further examples on Monte Carlo estimates, 
+I recommend [this Monte Carlo Integration example](https://en.wikipedia.org/wiki/Monte_Carlo_method).
 
 ## Practical Example
 
-In practice, probabilities can be used in robotics. Consider the kitchen scenario from the [product algebra notebook](https://random-events.readthedocs.io/en/latest/notebooks/independent_constraints.html).
+In practice, probabilities can be used in robotics. 
+Consider the kitchen scenario from the [product algebra notebook](https://random-events.readthedocs.io/en/latest/conceptual_guide.html#application).
 
 ```{code-cell} ipython3
+
+x = Continuous("x")
+y = Continuous("y")
+
 kitchen = SimpleEvent({x: closed(0, 6.6), y: closed(0, 7)}).as_composite_set()
 refrigerator = SimpleEvent({x: closed(5, 6), y: closed(6.3, 7)}).as_composite_set()
 top_kitchen_island = SimpleEvent({x: closed(0, 5), y: closed(6.5, 7)}).as_composite_set()
@@ -330,14 +426,20 @@ fig = go.Figure(free_space.plot(), free_space.plotly_layout())
 fig.show()
 ```
 
-Let's now say, that we want a position to access the fridge. We want to be as close to the fridge as possible. Naturally, we need a gaussian model for that. We now construct a gaussian distribution over the free space to describe locations and their probabilities to access the fridge.
+Let's now say that we want a position to access the fridge. 
+We want to be as close to the fridge as possible. 
+Naturally, we need a gaussian model for that. 
+We now construct a gaussian distribution over the free space
+to describe locations and their probabilities to access the fridge.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProductUnit
 from probabilistic_model.probabilistic_circuit.distributions import GaussianDistribution
-p_x = GaussianDistribution(Continuous("x"), 5.5, 0.5)
-p_y = GaussianDistribution(Continuous("y"), 6.65, 0.5)
-p_xy = DecomposableProductUnit()
+
+
+p_x = GaussianDistribution(x, 5.5, 0.5)
+p_y = GaussianDistribution(y, 6.65, 0.5)
+p_xy = ProductUnit()
 p_xy.add_subcircuit(p_x)
 p_xy.add_subcircuit(p_y)
 p_xy = p_xy.probabilistic_circuit
@@ -345,7 +447,9 @@ fig = go.Figure(p_xy.plot(), p_xy.plotly_layout())
 fig.show()
 ```
 
-We now want to filter for all positions that are available in the kitchen. Hence, we need to condition our probability distribution on the free space of the kitchen. We can do this by invoking the `conditional` method of the distribution object.
+We now want to filter for all positions that are available in the kitchen. 
+Hence, we need to condition our probability distribution on the free space of the kitchen. 
+We can do this by invoking the `conditional` method of the distribution object.
 
 ```{code-cell} ipython3
 distribution, _ = p_xy.conditional(free_space)
@@ -353,8 +457,10 @@ fig = go.Figure(distribution.plot(number_of_samples=10000), distribution.plotly_
 fig.show()
 ```
 
-As you can see, we can express our belief of good accessing positions for the fridge using probability theory. This idea scales to many more complex scenarios, such as the localization of a robot in a room or the prediction of the next state of a system. However, this is out of scope for this tutorial.
-
+As you can see, we can express our belief of good accessing positions for the fridge using probability theory. 
+This idea scales to many more complex scenarios,
+such as the localization of a robot in a room or the prediction of the next state of a system.
+However, this is out of scope for this tutorial.
 
 ```{bibliography}
 ```

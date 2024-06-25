@@ -6,4 +6,5 @@ root: intro
 chapters:
 - file: probability_theory
 - file: queries
+- file: graphical_models
 - file: general_remarks
