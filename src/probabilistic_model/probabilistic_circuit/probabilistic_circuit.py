@@ -347,6 +347,13 @@ class SumUnit(ProbabilisticCircuitMixin):
             result += weight * subcircuit_likelihood
         return np.log(result)
 
+    def cdf(self, events: np.array) -> np.array:
+        result = np.zeros(len(events))
+        for weight, subcircuit in self.weighted_subcircuits:
+            subcircuit_cdf = subcircuit.cdf(events)
+            result += weight * subcircuit_cdf
+        return result
+
     @cache_inference_result
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         return sum([weight * subcircuit.probability_of_simple_event(event) for weight, subcircuit in
@@ -676,6 +683,16 @@ class ProductUnit(ProbabilisticCircuitMixin):
             subcircuit_variables = subcircuit.variables
             variable_indices_in_events = np.array([variables.index(variable) for variable in subcircuit_variables])
             result += subcircuit.log_likelihood(events[:, variable_indices_in_events])
+        return result
+
+    @cache_inference_result
+    def cdf(self, events: np.array) -> np.array:
+        variables = self.variables
+        result = np.zeros(len(events))
+        for subcircuit in self.subcircuits:
+            subcircuit_variables = subcircuit.variables
+            variable_indices_in_events = np.array([variables.index(variable) for variable in subcircuit_variables])
+            result += subcircuit.cdf(events[:, variable_indices_in_events])
         return result
 
     @cache_inference_result

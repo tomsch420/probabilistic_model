@@ -66,12 +66,14 @@ class ProbabilisticModel(abc.ABC):
 
         The event belongs to the class of full evidence queries.
 
-        .. Note:: You can read more about queries of this class in Definition 1 in :cite:p:`choi2020probabilistic`
+        ..
+        Note:: You can read more about this query class in Definition 1 in :cite:p:`choi2020probabilistic`
             or watch the `video tutorial <https://youtu.be/2RAG5-L9R70?si=TAfIX2LmOWM-Fd2B&t=785>`_.
             :cite:p:`youtube2020probabilistic`
 
-        :param events: The array of full evidence event. The shape of the array has to be (n, len(self.variables)).
-        :return: The likelihoods of the event as an array of shape (n, ).
+        :param events: The array of full evidence events.
+        The shape of the array has to be (n, len(self.variables)).
+        :return: The likelihood of the events as an array with shape (n,).
         """
         return np.exp(self.log_likelihood(events))
 
@@ -84,6 +86,20 @@ class ProbabilisticModel(abc.ABC):
 
         :param events: The full evidence event
         :return: The log-likelihood of the event.
+        """
+        raise NotImplementedError
+
+    def cdf(self, events: np.array) -> np.array:
+        """
+        Calculate the cumulative distribution function of an array of events.
+
+        The event belongs to the class of full evidence queries.
+
+        ..Note:: The cdf only exists if all variables are continuous or integers.
+
+        :param events: The array of full evidence events.
+                       The shape of the array has to be (n, len(self.variables)).
+        :return: The cumulative distribution function of the event as an array of shape (n,).
         """
         raise NotImplementedError
 
@@ -289,9 +305,12 @@ class ProbabilisticModel(abc.ABC):
         :param number_of_samples: The number of samples to draw.
         :return: The traces.
         """
+
+        # sample for the plot
         samples = np.sort(self.sample(number_of_samples), axis=0)
         likelihood = self.likelihood(samples)
 
+        # plot the mode if possible
         try:
             mode, maximum_likelihood = self.mode()
         except IntractableError:
@@ -299,11 +318,13 @@ class ProbabilisticModel(abc.ABC):
 
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 
+        # prepare pdf trace
         x_and_likelihood = np.concatenate((samples, likelihood.reshape(-1, 1)), axis=1)
         x_values = []
         y_values = []
         supporting_interval: Interval = self.support().simple_sets[0][self.variables[0]]
 
+        # add pdf trace for non-zero areas
         for simple_interval in supporting_interval.simple_sets:
             simple_interval: SimpleInterval
             filtered = x_and_likelihood[(x_and_likelihood[:, 0] >= simple_interval.lower) &
@@ -311,12 +332,21 @@ class ProbabilisticModel(abc.ABC):
             x_values += [simple_interval.lower] + filtered[:, 0].tolist() + [simple_interval.upper]
             y_values += [None] + filtered[:, 1].tolist() + [None]
 
+        # add cdf trace if implemented
+        cdf_x_values = np.array(samples)
+        try:
+            cdf_y_values = self.cdf(cdf_x_values)
+            cdf_trace = [go.Scatter(x=cdf_x_values[:, 0], y=cdf_y_values, mode="lines", legendgroup="CDF",
+                                    name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))]
+        except NotImplementedError:
+            cdf_trace = []
+
         pdf_trace = go.Scatter(x=x_values, y=y_values, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
                                line=dict(color=PDF_TRACE_COLOR))
 
         mode_traces = self.univariate_mode_traces(mode, height)
         return ([pdf_trace, self.univariate_expectation_trace(height)] + mode_traces +
-                self.univariate_complement_of_support_trace(min(samples)[0], max(samples)[0]))
+                self.univariate_complement_of_support_trace(min(samples)[0], max(samples)[0]) + cdf_trace)
 
     def univariate_expectation_trace(self, height: float) -> go.Scatter:
         """

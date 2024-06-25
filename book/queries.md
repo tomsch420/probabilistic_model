@@ -307,6 +307,7 @@ The mode of the uniform distribution is the entire interval of the uniform distr
 
 
 ## Sampling
+Sampling very gucci
 
 ## Monte Carlo Estimate
 

@@ -387,6 +387,7 @@ for color_value, shape_value in itertools.product(color.domain.simple_sets, shap
         print(f"P({color_event}) * P(shape={shape_event}) = {distribution.probability(color_event) * distribution.probability(shape_event)}")
         print(np.allclose(distribution.probability(joint_event), 
                           distribution.probability(color_event) * distribution.probability(shape_event)))
+        print("-" * 80)
 ```
 
 As we can see, the entire variables are independent.
@@ -410,7 +411,67 @@ $A$.
 Notation: $A \perp \!\!\! \perp B \, | \, C$.
 ```
 
-TODO EXAMPLE
+Let's explore this in another example.
+
+```{code-cell} ipython3
+:tag:
+
+class Size(SetElement):
+    EMPTY_SET = -1
+    SMALL = 0
+    LARGE = 1
+    
+size = Symbolic("size", Size)
+
+probabilities = np.array([[[2 / 30, 1 / 30, 1 / 10], [0, 0.3, 0.05]],
+                          [[1 / 10, 1 / 20, 3 / 20], [ 0.15, 0, 0.,]]])
+distribution = MultinomialDistribution((color, size, shape), probabilities)
+
+small_event = SimpleEvent({size: Size.SMALL}).as_composite_set()
+p_small = distribution.probability(small_event)
+
+large_event = ~small_event
+p_large = distribution.probability(large_event)
+
+color_event = SimpleEvent({color: Color.BLUE}).as_composite_set()
+color_and_small = color_event & small_event
+color_and_large = color_event & large_event
+p_color_and_small = distribution.probability(color_and_small)
+p_color_and_large = distribution.probability(color_and_large)
+
+shape_event = SimpleEvent({shape: Set(Shape.CIRCLE)}).as_composite_set()
+shape_and_small = shape_event & small_event
+shape_and_large = shape_event & large_event
+p_shape_and_small = distribution.probability(shape_and_small)
+p_shape_and_large = distribution.probability(shape_and_large)
+
+shape_and_color_and_small = shape_event & color_event & small_event
+p_shape_and_color_and_small = distribution.probability(shape_and_color_and_small)
+
+shape_and_color_and_large = shape_event & color_event & large_event
+p_shape_and_color_and_large = distribution.probability(shape_and_color_and_large)
+
+p_shape_given_small = p_shape_and_small / p_small
+p_color_given_small = p_color_and_small / p_small
+p_shape_and_color_given_small = p_shape_and_color_and_small / p_small
+
+p_shape_given_large = p_shape_and_large / p_large
+p_color_given_large = p_color_and_large / p_large
+p_shape_and_color_given_large = p_shape_and_color_and_large / p_large
+
+print(f"P(Shape|Small) = {p_shape_given_small}")
+print(f"P(Color|Small) = {p_color_given_small}")
+print(f"P(Shape, Color|Small) = {p_shape_and_color_given_small}")
+print(np.allclose(p_shape_given_small * p_color_given_small, p_shape_and_color_given_small))
+
+print(f"P(Shape|Large) = {p_shape_given_large}")
+print(f"P(Color|Large) = {p_color_given_large}")
+print(f"P(Shape, Color|Large) = {p_shape_and_color_given_large}")
+print(np.allclose(p_shape_given_large * p_color_given_large, p_shape_and_color_given_large))
+````
+
+In this example, we can observe that the variables are conditionally independent if the size of the object is small.
+They are conditionally dependent if the size of the object is large.
 
 ### Continuous Random Variables
 
@@ -471,7 +532,6 @@ fig.for_each_trace(lambda trace: trace.update(visible='legendonly') if trace.nam
 
 The figure above visualizes the objects we just discussed for a univariate normal distribution.
 
-TODO Summary
 
 ```{bibliography}
 ```
