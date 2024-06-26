@@ -5,4 +5,4 @@ numpy
 ghp-import
 sphinx-proof
 sphinx-autoapi
-scikit-learn
+scikit-learn==1.5.0
