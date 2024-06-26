@@ -4,3 +4,4 @@ numpy
 ghp-import
 sphinx-proof
 sphinx-autoapi
+scikit-learn
