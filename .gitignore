@@ -3,4 +3,4 @@ doc/build
 
 src/probabilistic_model.egg-info
 build
-book/_build
+doc/_build

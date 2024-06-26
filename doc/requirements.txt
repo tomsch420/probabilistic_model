@@ -1,8 +1,6 @@
--r ../requirements-dev.txt
-sphinx_rtd_theme
+jupyter-book
+matplotlib
+numpy
+ghp-import
+sphinx-proof
 sphinx-autoapi
-sphinxcontrib-bibtex
-nbsphinx
-sphinx-gallery
-myst-nb
-probabilistic_model

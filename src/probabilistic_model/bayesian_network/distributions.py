@@ -267,3 +267,6 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
         for index, subcircuit in enumerate(unit.subcircuits):
             self.conditional_probability_distributions[index] = subcircuit.__copy__().probabilistic_circuit
         return self
+
+    def __repr__(self):
+        return f"P({', '.join([v.name for v in self.variables])} | {self.parent.variable.name})"

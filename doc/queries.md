@@ -13,9 +13,11 @@ kernelspec:
   name: python3
 ---
 
+(chapter:queries)=
 # Queries
 The second chapter walks through the most important queries in probabilistic modeling.
 There are common quantities that are of interest regarding probabilities. 
+The process of calculating these quantities is called inference or querying.
 You, most likely, have seen them in one or another form, but I will introduce them formally accompanied by some 
 examples.
 
