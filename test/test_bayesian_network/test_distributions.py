@@ -13,8 +13,7 @@ from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwor
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
                                                                 ConditionalProbabilisticCircuit)
 from probabilistic_model.probabilistic_circuit.distributions import SymbolicDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DeterministicSumUnit, \
-    DecomposableProductUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import  SumUnit, ProductUnit
 from probabilistic_model.utils import MissingDict
 
 
@@ -95,7 +94,7 @@ class DistributionTestCase(unittest.TestCase):
         self.p_x.forward_pass(event)
 
         joint_distribution = self.p_x.joint_distribution_with_parent()
-        self.assertIsInstance(joint_distribution, DeterministicSumUnit)
+        self.assertIsInstance(joint_distribution, SumUnit)
 
     def test_joint_distribution_with_parents(self):
         event = SimpleEvent({variable: variable.domain for variable in [self.x, self.y]})
@@ -103,7 +102,7 @@ class DistributionTestCase(unittest.TestCase):
         self.p_x.bayesian_network.forward_pass(event)
 
         joint_distribution = self.p_yx.joint_distribution_with_parent()
-        self.assertIsInstance(joint_distribution, DeterministicSumUnit)
+        self.assertIsInstance(joint_distribution, SumUnit)
 
         likelihoods = joint_distribution.likelihood(np.array([[0, 1], [2, 1]]))
         self.assertAlmostEqual(likelihoods[0], 0.25)
@@ -122,11 +121,11 @@ class CircuitDistributionTestCase(unittest.TestCase):
         self.bayesian_network = BayesianNetwork()
         self.p_x = RootDistribution(self.x, MissingDict(float, zip([0, 1], [0.7, 0.3])))
 
-        d1 = DecomposableProductUnit()
+        d1 = ProductUnit()
         d1.add_subcircuit(UniformDistribution(self.y, closed(0, 1).simple_sets[0]))
         d1.add_subcircuit(UniformDistribution(self.z, closed(0, 1).simple_sets[0]))
 
-        d2 = DecomposableProductUnit()
+        d2 = ProductUnit()
         d2.add_subcircuit(UniformDistribution(self.y, closed(0, 2).simple_sets[0]))
         d2.add_subcircuit(UniformDistribution(self.z, closed(0, 3).simple_sets[0]))
 

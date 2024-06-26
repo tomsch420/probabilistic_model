@@ -4,13 +4,14 @@ import numpy as np
 import plotly.graph_objects as go
 from numpy import testing
 from random_events.interval import closed, closed_open
+from random_events.product_algebra import Event
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
 from probabilistic_model.probabilistic_circuit.distributions import DiracDeltaDistribution
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SmoothSumUnit
-from probabilistic_model.utils import SubclassJSONSerializer
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SumUnit
+from random_events.utils import SubclassJSONSerializer
 
 
 class InductionStepTestCase(unittest.TestCase):
@@ -182,7 +183,7 @@ class InductionStepTestCase(unittest.TestCase):
     def test_from_mixture_of_uniform_distributions(self):
         u1 = UniformDistribution(self.variable, closed(0, 5).simple_sets[0])
         u2 = UniformDistribution(self.variable, closed(2, 3).simple_sets[0])
-        sum_unit = SmoothSumUnit()
+        sum_unit = SumUnit()
         e1 = (sum_unit, u1, 0.5)
         e2 = (sum_unit, u2, 0.5)
         sum_unit.probabilistic_circuit.add_weighted_edges_from([e1, e2])
@@ -232,14 +233,14 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
     model: NygaDistribution
 
     def setUp(self) -> None:
-        self.model = NygaDistribution(self.x, min_likelihood_improvement=0.001, min_samples_per_quantile=25)
+        self.model = NygaDistribution(self.x, min_likelihood_improvement=0.001, min_samples_per_quantile=300)
         data = np.random.normal(0, 1, 1000).tolist()
         self.model.fit(data)
 
     def test_plot(self):
+        self.model.support()
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
-        # fig.show()
 
 
 if __name__ == '__main__':
