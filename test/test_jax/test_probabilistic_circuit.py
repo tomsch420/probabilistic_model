@@ -1,6 +1,5 @@
 import unittest
 
-import equinox
 import jax
 from random_events.variable import Continuous
 
@@ -8,7 +7,7 @@ from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import *
 import plotly.graph_objects as go
 import numpy as np
-import jax.numpy as jnp
+from jax import random, numpy as jnp
 
 
 class TestJaxUnits(unittest.TestCase):
@@ -39,14 +38,26 @@ class TestJaxUnits(unittest.TestCase):
         log_likelihood = probabilistic_circuit.log_likelihood(jnp.array(self.data[:, (1, )]))
         self.assertTrue(jnp.allclose(log_likelihood, self.nyga_distribution.log_likelihood(self.data[:, (1, )])))
 
-    def test_grad(self):
-        pc = ProbabilisticCircuit.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit).root
+    def test_tunable_parameters(self):
+        pc = ProbabilisticCircuit.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit)
+        params = pc.tunable_parameters()
+        ll = pc.log_likelihood_given_state(jnp.array(self.data[:, (1, )]), params)
+        self.assertTrue(all(jnp.exp(ll) > 0))
 
-        @jax.jit
-        @jax.grad
-        def loss_fn(model, x):
-            log_likelihood = jax.vmap(model)(x)
-            return jnp.mean(log_likelihood)
+    def test_gradient(self):
+        pc = ProbabilisticCircuit.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit)
+        params = pc.tunable_parameters()
 
-        grad = loss_fn(pc, jnp.array(self.data[:, (1, )]))
-        print(grad)
+        data = jnp.array(self.data[:500, (1, )])
+
+        model = pc.root
+        a_nll = model.average_negative_log_likelihood(params, data)
+        grad = jax.grad(model.average_negative_log_likelihood)(params, data)
+
+        new_params = jax.tree.map(
+            lambda param, g: param - g * 0.01, params, grad)
+        better_a_nll = model.average_negative_log_likelihood(new_params, data)
+        self.assertGreater(a_nll, better_a_nll)
+
+    def test_linear_regression(self):
+        ...
