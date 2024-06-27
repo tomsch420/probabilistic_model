@@ -7,4 +7,8 @@ chapters:
 - file: probability_theory
 - file: queries
 - file: graphical_models
+- file: truncated_gaussian
+- file: nyga_distribution
+- file: joint_probability_trees
+- file: template_modelling
 - file: general_remarks
