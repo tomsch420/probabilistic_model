@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from abc import abstractmethod
 from typing import Optional
 
@@ -8,11 +9,13 @@ import plotly.graph_objects as go
 from random_events.interval import *
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import *
+from random_events.interval import *
+from random_events.utils import SubclassJSONSerializer
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 
 from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
-from ..utils import SubclassJSONSerializer, MissingDict, interval_as_array
+from ..utils import MissingDict, interval_as_array
 
 
 class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
@@ -24,7 +27,7 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
     @property
     def variables(self) -> Tuple[Variable, ...]:
-        return (self.variable,)
+        return (self.variable, )
 
     def support(self) -> Event:
         return SimpleEvent({self.variable: self.univariate_support}).as_composite_set()
@@ -95,8 +98,8 @@ class ContinuousDistribution(UnivariateDistribution):
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         interval: Interval = event[self.variable]
         points = interval_as_array(interval)
-        upper_bound_cdf = self.cdf(points[:, (1,)])
-        lower_bound_cdf = self.cdf(points[:, (0,)])
+        upper_bound_cdf = self.cdf(points[:, (1, )])
+        lower_bound_cdf = self.cdf(points[:, (0, )])
         return (upper_bound_cdf - lower_bound_cdf).sum()
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
@@ -122,7 +125,7 @@ class ContinuousDistribution(UnivariateDistribution):
         :param interval: The singleton event
         :return: The conditional distribution and the log-probability of the event.
         """
-        log_pdf_value = self.log_likelihood(np.array([[interval.lower]]))
+        log_pdf_value = self.log_likelihood(np.array([[interval.lower]]))[0]
         return DiracDeltaDistribution(self.variable, interval.lower, np.exp(log_pdf_value)), log_pdf_value
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
@@ -133,7 +136,7 @@ class ContinuousDistribution(UnivariateDistribution):
         :param interval: The simple interval
         :return: The conditional distribution and the log-probability of the interval.
         """
-        if interval.lower == interval.upper:
+        if interval.is_singleton():
             return self.log_conditional_from_singleton(interval)
         return self.log_conditional_from_non_singleton_simple_interval(interval)
 
@@ -174,7 +177,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
 
     @property
     def univariate_support(self) -> Interval:
-        return self.interval.as_composite_set()
+        return copy.deepcopy(self.interval).as_composite_set()
 
     def left_included_condition(self, x: np.array) -> np.array:
         """
@@ -403,7 +406,7 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
         return result
 
     def cdf(self, x: np.array) -> np.array:
-        result = np.zeros((len(x),))
+        result = np.zeros((len(x), ))
         maximum_value = max(x)
         for value, p in self.probabilities.items():
             if value > maximum_value:
@@ -471,7 +474,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
         return result
 
     def cdf(self, x: np.array) -> np.array:
-        result = np.zeros((len(x),))
+        result = np.zeros((len(x), ))
         result[x[:, 0] >= self.location] = 1.
         return result
 
@@ -548,3 +551,4 @@ class DiracDeltaDistribution(ContinuousDistribution):
                                                                      SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT],
                                 mode="lines+markers", name="Mode")
         return [pdf_trace, cdf_trace, expectation_trace, mode_trace]
+
