@@ -1,5 +1,6 @@
 import unittest
 
+import flax.linen
 import jax
 from random_events.variable import Continuous
 
@@ -7,7 +8,9 @@ from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import *
 import plotly.graph_objects as go
 import numpy as np
-from jax import random, numpy as jnp
+from jax import random, numpy as jnp, tree_flatten, tree_unflatten
+from jax.flatten_util import ravel_pytree
+from jax.tree_util import tree_flatten_with_path
 
 
 class TestJaxUnits(unittest.TestCase):
@@ -59,5 +62,26 @@ class TestJaxUnits(unittest.TestCase):
         better_a_nll = model.average_negative_log_likelihood(new_params, data)
         self.assertGreater(a_nll, better_a_nll)
 
-    def test_linear_regression(self):
-        ...
+    def test_coupling_circuit(self):
+
+        features = jnp.array(self.data[:, (0, )])
+        targets = jnp.array(self.data[:, (1, )])
+
+        pc = ProbabilisticCircuit.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit)
+
+        flattened_pc_params, tree = tree_flatten_with_path(pc)
+
+        coupling_model = flax.linen.Dense(len(flattened_pc_params[0]))
+        coupling_params = coupling_model.init(random.PRNGKey(0), features)
+
+        def loss(coupling_params):
+            pc_params = coupling_model.apply(coupling_params, features)
+            conditional_pc = jax.tree.unflatten(tree, pc_params)
+            # print(pc_params)
+            return -conditional_pc.log_likelihood(targets).mean()
+
+        grad = jax.grad(loss)(coupling_params)
+        print(grad)
+
+
+

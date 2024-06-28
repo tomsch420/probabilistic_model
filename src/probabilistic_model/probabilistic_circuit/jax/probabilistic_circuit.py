@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from functools import cached_property
-from typing import List
+from typing import List, Iterable
 
 import jax
 import networkx as nx
 from random_events.interval import SimpleInterval
-from random_events.variable import Continuous
-from typing_extensions import Self, Type, Dict
+from random_events.variable import Continuous, Variable
+from typing_extensions import Self, Type, Dict, Any
 from typing import NamedTuple
 
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import (SumUnit as PCSumUnit,
@@ -16,10 +16,13 @@ from probabilistic_model.probabilistic_circuit.probabilistic_circuit import (Sum
                                                                              ProductUnit as PCProductUnit,
                                                                              ProbabilisticCircuitMixin)
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution as PCUniformDistribution
-import equinox
 import jax.numpy as jnp
-from jax import Array
+from jax import Array, nn
+import flax
+from jax.tree_util import register_pytree_node_class
 from random_events.utils import recursive_subclasses
+
+from probabilistic_model.probabilistic_model import MomentType
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[ModuleMixin]:
@@ -29,14 +32,7 @@ def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[ModuleMixin
     raise TypeError(f"Could not find class for {clazz}")
 
 
-class TunableParameters(NamedTuple):
-    """
-    Class that describes the tunable parameters of the module
-    """
-    ...
-
-
-StateDictType = Dict[int, TunableParameters]
+StateDictType = Dict[int, Any]
 
 
 class ModuleMixin:
@@ -47,11 +43,6 @@ class ModuleMixin:
     """
 
     probabilistic_circuit: ProbabilisticCircuit
-
-    tunable_parameters: TunableParameters
-    """
-    The instance of parameters
-    """
 
     @staticmethod
     @abstractmethod
@@ -83,27 +74,37 @@ class ModuleMixin:
         """
         raise NotImplementedError
 
-    @abstractmethod
-    def log_likelihood_given_state(self, state_dict: StateDictType,  x: Array):
-        """
-        Calculate p(x|theta=state)
-        :param x: The data
-        :param state_dict: The state (parameters)
-        :return: The log likelihood of each datapoint
-        """
-        raise NotImplementedError
-
-    def average_negative_log_likelihood(self, state_dict: StateDictType, x: Array):
-        log_likelihood = self.log_likelihood_given_state(state_dict, x)
+    def average_negative_log_likelihood(self, x: Array):
+        log_likelihood = self.log_likelihood(x)
         return jnp.mean(log_likelihood)
 
     def __hash__(self):
         return id(self)
 
+    @abstractmethod
+    def get_parameters(self) -> Dict:
+        ...
 
+    @abstractmethod
+    def set_parameters(self, parameters):
+        ...
+
+
+@register_pytree_node_class
 class UniformDistribution(ModuleMixin, PCUniformDistribution):
 
-    tunable_parameters = TunableParameters()
+    def get_parameters(self) -> Dict:
+        return {}
+
+    def set_parameters(self, parameters):
+        ...
+
+    def tree_flatten(self):
+        return tuple(), self
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        return aux_data
 
     def __init__(self, variable: Continuous, interval: SimpleInterval, probabilistic_circuit: ProbabilisticCircuit):
         super().__init__(variable, interval)
@@ -131,27 +132,43 @@ class UniformDistribution(ModuleMixin, PCUniformDistribution):
         result = result.at[include_condition[:, 0]].set(likelihoods)
         return result
 
-    def log_likelihood_given_state(self, state_dict: StateDictType, x: Array):
-        return self.log_likelihood(x)
+    def expand_batch_dim(self, size = 1000):
+        pass
 
-
+@register_pytree_node_class
 class SumUnit(PCSumUnit, ModuleMixin):
 
-    class TunableParameters(NamedTuple):
-        log_weights: Array
+    def get_parameters(self) -> Dict:
+        return {hash(self): self.weights}
 
-        @property
-        def weights(self) -> Array:
-            weights = jnp.exp(self.log_weights)
-            return weights / weights.sum()
+    def set_parameters(self, parameters):
+        self.log_weights = parameters[hash(self)]
 
-    probabilistic_circuit: ProbabilisticCircuit
-    tunable_parameters: TunableParameters
+    def expand_batch_dim(self, size=1000):
+        self.log_weights = self.log_weights.repeat(size, axis=0)
+
+    log_weights: Array
 
     def __init__(self, initial_weights: Array, probabilistic_circuit: ProbabilisticCircuit):
         super().__init__()
-        self.tunable_parameters = self.TunableParameters(jnp.log(initial_weights))
+        self.log_weights = jnp.log(initial_weights)
         self.probabilistic_circuit = probabilistic_circuit
+
+    def tree_flatten(self):
+        children = self.log_weights
+        aux_data = self
+        return children, aux_data
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        self = aux_data
+        self.log_weights = children
+        return self
+
+    @property
+    def weights(self) -> Array:
+        print(self.log_weights)
+        return nn.softmax(self.log_weights, axis=-1)
 
     @cached_property
     def subcircuits(self) -> List[ModuleMixin]:
@@ -161,17 +178,9 @@ class SumUnit(PCSumUnit, ModuleMixin):
     def origin_class() -> Type[PCSumUnit]:
         return PCSumUnit
 
-    @property
-    def weights(self) -> Array:
-        weights = jnp.exp(self.tunable_parameters.log_weights)
-        return weights / weights.sum()
-
-    def log_likelihood(self, events: Array) -> Array:
-        return self.log_likelihood_given_state({hash(self): self.tunable_parameters}, events)
-
-    def log_likelihood_given_state(self, state_dict: StateDictType,  x: Array):
+    def log_likelihood(self, x: Array) -> Array:
         result = jnp.zeros(x.shape[:-1])
-        for weight, subcircuit in zip(state_dict[hash(self)].weights, self.subcircuits):
+        for weight, subcircuit in zip(self.weights, self.subcircuits):
             subcircuit_likelihood = jnp.exp(subcircuit.log_likelihood(x))
             result += weight * subcircuit_likelihood
         return jnp.log(result)
@@ -181,7 +190,8 @@ class SumUnit(PCSumUnit, ModuleMixin):
 
     @classmethod
     def from_unit(cls, unit: PCSumUnit, probabilistic_circuit: ProbabilisticCircuit) -> Self:
-        result = cls(unit.weights, probabilistic_circuit)
+        weights = jnp.array(unit.weights)
+        result = cls(weights, probabilistic_circuit)
         return result
 
     def __hash__(self):
@@ -195,7 +205,20 @@ class ProductUnit(ModuleMixin, PCProductUnit):
         return PCProductUnit
 
 
+@register_pytree_node_class
 class ProbabilisticCircuit(PMProbabilisticCircuit):
+
+    def tree_flatten(self):
+        children, aux_data = zip(*(node.tree_flatten() for node in self.nodes))
+        aux_data = aux_data, self
+        return children, aux_data
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        aux_data, self = aux_data
+        for node, data in zip(aux_data, children):
+            node.tree_unflatten(node, data)
+        return self
 
     @cached_property
     def root(self) -> ModuleMixin:
@@ -219,8 +242,17 @@ class ProbabilisticCircuit(PMProbabilisticCircuit):
     def log_likelihood(self, events: Array) -> Array:
         return self.root.log_likelihood(events)
 
-    def log_likelihood_given_state(self, state_dict: Dict[int, TunableParameters],  x: Array):
-        return self.root.log_likelihood_given_state(state_dict, x)
+    def get_parameters(self) -> Dict:
+        result = {}
+        for node in self.nodes:
+            result.update(node.get_parameters())
+        return result
 
-    def tunable_parameters(self) -> Dict[int, TunableParameters]:
-        return {hash(node): node.tunable_parameters for node in self.nodes}
+    def set_parameters(self, parameters: StateDictType):
+        for node in self.nodes:
+            node.set_parameters(parameters)
+
+    def expand_batch_dim(self, size=1000):
+        for node in self.nodes:
+            node.expand_batch_dim(size)
+
