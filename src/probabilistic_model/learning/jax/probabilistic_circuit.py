@@ -7,7 +7,6 @@ from typing import List
 import jax.numpy as jnp
 import networkx as nx
 from jax import Array, nn
-from jax.tree_util import register_pytree_node_class
 from random_events.interval import SimpleInterval
 from random_events.utils import recursive_subclasses
 from random_events.variable import Continuous
@@ -132,7 +131,6 @@ class UniformDistribution(ModuleMixin, PCUniformDistribution):
 
 class SumUnit(PCSumUnit, ModuleMixin):
     log_weights: Array
-
 
     def get_parameters(self):
         return self.weights
