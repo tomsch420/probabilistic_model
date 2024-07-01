@@ -5,12 +5,10 @@ import jax
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import *
+from probabilistic_model.learning.jax.probabilistic_circuit import ProbabilisticCircuit
 import plotly.graph_objects as go
 import numpy as np
-from jax import random, numpy as jnp, tree_flatten, tree_unflatten
-from jax.flatten_util import ravel_pytree
-from jax.tree_util import tree_flatten_with_path
+from jax import random, numpy as jnp
 
 
 class TestJaxUnits(unittest.TestCase):
