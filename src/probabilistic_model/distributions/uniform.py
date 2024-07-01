@@ -1,7 +1,8 @@
 import numpy as np
 
 from .distributions import *
-from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT
+from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT, EXPECTATION_TRACE_NAME, MODE_TRACE_NAME, MODE_TRACE_COLOR, \
+    PDF_TRACE_NAME, CDF_TRACE_NAME, CDF_TRACE_COLOR, PDF_TRACE_COLOR
 
 
 class UniformDistribution(ContinuousDistributionWithFiniteSupport):
@@ -94,13 +95,13 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     def pdf_trace(self) -> go.Scatter:
         pdf_values = [0, 0, None, self.pdf_value(), self.pdf_value(), None, 0, 0]
         pdf_trace = go.Scatter(x=self.x_axis_points_for_plotly(),
-                               y=pdf_values, mode='lines', name="Probability Density Function")
+                               y=pdf_values, mode='lines', name=PDF_TRACE_NAME, line=dict(color=PDF_TRACE_COLOR))
         return pdf_trace
 
     def cdf_trace(self) -> go.Scatter:
         x = self.x_axis_points_for_plotly()
-        cdf_values = [value if value is None else self.cdf(np.array([[value]])) for value in x]
-        cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name="Cumulative Distribution Function")
+        cdf_values = [value if value is None else self.cdf(np.array([[value]]))[0] for value in x]
+        cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))
         return cdf_trace
 
     def plot(self, **kwargs) -> List:
@@ -109,15 +110,9 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
         height = self.pdf_value() * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 
-        mode_trace = (go.Scatter(x=[self.lower, self.lower, self.upper, self.upper],
-                                 y=[0, height, height, 0], mode='lines+markers',
-                                 name="Mode", fill="toself"))
-
-        expectation = self.expectation([self.variable])[self.variable]
-        expectation_trace = (
-            go.Scatter(x=[expectation, expectation], y=[0, height], mode='lines+markers',
-                       name="Expectation"))
-        return [pdf_trace, cdf_trace, mode_trace, expectation_trace]
+        mode_trace = self.univariate_mode_traces(self.mode()[0], height)
+        expectation_trace = self.univariate_expectation_trace(height)
+        return [pdf_trace, cdf_trace, expectation_trace] + mode_trace
 
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))

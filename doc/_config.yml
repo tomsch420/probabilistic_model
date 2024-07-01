@@ -19,6 +19,7 @@ execute:
 latex:
   latex_documents:
     targetname: doc.tex
+    use_jupyterbook_latex: false
 
 # Add a bibtex file so that we can create citations
 bibtex_bibfiles:

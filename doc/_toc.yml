@@ -7,8 +7,11 @@ chapters:
 - file: probability_theory
 - file: queries
 - file: graphical_models
+- file: circuits
 - file: truncated_gaussian
 - file: nyga_distribution
 - file: joint_probability_trees
 - file: template_modelling
+- file: pendulum
 - file: general_remarks
+- file: autoapi/index

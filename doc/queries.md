@@ -305,7 +305,7 @@ $$\hat{x} = \underset{x \in \mathcal{X}}{arg \,max} p(x). $$
 
 While common literature describes the mode under a condition, we can omit such a description since we already defined that the conditional distribution is part of the marginal query class. Hence, the mode under a condition is just the chain of the condition and mode methods.
 
-A common perception of the mode is, that it is the single point of highest density, such as in the example below.
+A common perception of the mode is that it is the single point of highest density, such as in the example below.
 
 ```{code-cell} ipython3
 distribution = GaussianDistribution(Continuous("x"), 0, 1)
