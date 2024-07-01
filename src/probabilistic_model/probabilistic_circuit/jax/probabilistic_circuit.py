@@ -2,27 +2,22 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from functools import cached_property
-from typing import List, Iterable
+from typing import List
 
-import jax
+import jax.numpy as jnp
 import networkx as nx
+from jax import Array, nn
+from jax.tree_util import register_pytree_node_class
 from random_events.interval import SimpleInterval
-from random_events.variable import Continuous, Variable
+from random_events.utils import recursive_subclasses
+from random_events.variable import Continuous
 from typing_extensions import Self, Type, Dict, Any
-from typing import NamedTuple
 
+from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution as PCUniformDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import (SumUnit as PCSumUnit,
                                                                              ProbabilisticCircuit as PMProbabilisticCircuit,
                                                                              ProductUnit as PCProductUnit,
                                                                              ProbabilisticCircuitMixin)
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution as PCUniformDistribution
-import jax.numpy as jnp
-from jax import Array, nn
-import flax
-from jax.tree_util import register_pytree_node_class
-from random_events.utils import recursive_subclasses
-
-from probabilistic_model.probabilistic_model import MomentType
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[ModuleMixin]:
@@ -81,23 +76,28 @@ class ModuleMixin:
     def __hash__(self):
         return id(self)
 
+    @property
     @abstractmethod
-    def get_parameters(self) -> Dict:
-        ...
+    def number_of_parameters(self) -> int:
+        raise NotImplementedError
 
     @abstractmethod
     def set_parameters(self, parameters):
-        ...
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_parameters(self):
+        return tuple()
 
 
-@register_pytree_node_class
 class UniformDistribution(ModuleMixin, PCUniformDistribution):
 
-    def get_parameters(self) -> Dict:
-        return {}
-
     def set_parameters(self, parameters):
         ...
+
+    @property
+    def number_of_parameters(self) -> int:
+        return 0
 
     def tree_flatten(self):
         return tuple(), self
@@ -125,29 +125,27 @@ class UniformDistribution(ModuleMixin, PCUniformDistribution):
         return jnp.full((x.shape[:-1]), self.log_pdf_value())
 
     def log_likelihood(self, x: Array) -> Array:
-        result = jnp.full(x.shape[:-1], -jnp.inf)
-        include_condition = self.included_condition(x)
-        filtered_x = x[include_condition].reshape(-1, 1)
-        likelihoods = self.log_likelihood_without_bounds_check(filtered_x)
-        result = result.at[include_condition[:, 0]].set(likelihoods)
-        return result
+        include_condition = self.included_condition(x)[:, 0]
+        log_likelihoods = jnp.where(include_condition, self.log_likelihood_without_bounds_check(x), -jnp.inf)
+        return log_likelihoods
 
-    def expand_batch_dim(self, size = 1000):
-        pass
 
-@register_pytree_node_class
 class SumUnit(PCSumUnit, ModuleMixin):
+    log_weights: Array
 
-    def get_parameters(self) -> Dict:
-        return {hash(self): self.weights}
+
+    def get_parameters(self):
+        return self.weights
 
     def set_parameters(self, parameters):
-        self.log_weights = parameters[hash(self)]
+        self.log_weights = parameters
+
+    @property
+    def number_of_parameters(self) -> int:
+        return len(self.weights)
 
     def expand_batch_dim(self, size=1000):
         self.log_weights = self.log_weights.repeat(size, axis=0)
-
-    log_weights: Array
 
     def __init__(self, initial_weights: Array, probabilistic_circuit: ProbabilisticCircuit):
         super().__init__()
@@ -167,7 +165,6 @@ class SumUnit(PCSumUnit, ModuleMixin):
 
     @property
     def weights(self) -> Array:
-        print(self.log_weights)
         return nn.softmax(self.log_weights, axis=-1)
 
     @cached_property
@@ -180,7 +177,7 @@ class SumUnit(PCSumUnit, ModuleMixin):
 
     def log_likelihood(self, x: Array) -> Array:
         result = jnp.zeros(x.shape[:-1])
-        for weight, subcircuit in zip(self.weights, self.subcircuits):
+        for weight, subcircuit in zip(self.weights.T, self.subcircuits):
             subcircuit_likelihood = jnp.exp(subcircuit.log_likelihood(x))
             result += weight * subcircuit_likelihood
         return jnp.log(result)
@@ -205,7 +202,6 @@ class ProductUnit(ModuleMixin, PCProductUnit):
         return PCProductUnit
 
 
-@register_pytree_node_class
 class ProbabilisticCircuit(PMProbabilisticCircuit):
 
     def tree_flatten(self):
@@ -223,6 +219,15 @@ class ProbabilisticCircuit(PMProbabilisticCircuit):
     @cached_property
     def root(self) -> ModuleMixin:
         return super().root
+
+    @cached_property
+    def node_parameter_slice_map(self):
+        result = dict()
+        index = 0
+        for node in self.nodes:
+            result[hash(node)] = slice(index, index + node.number_of_parameters)
+            index += node.number_of_parameters
+        return result
 
     @classmethod
     def from_probabilistic_circuit(cls, probabilistic_circuit: PMProbabilisticCircuit) -> Self:
@@ -243,16 +248,17 @@ class ProbabilisticCircuit(PMProbabilisticCircuit):
         return self.root.log_likelihood(events)
 
     def get_parameters(self) -> Dict:
-        result = {}
-        for node in self.nodes:
-            result.update(node.get_parameters())
+        result = {hash(node): node.get_parameters() for node in self.nodes}
         return result
 
-    def set_parameters(self, parameters: StateDictType):
+    def set_parameters(self, parameters: jnp.ndarray):
         for node in self.nodes:
-            node.set_parameters(parameters)
+            node.set_parameters(parameters[:, self.node_parameter_slice_map[hash(node)]])
 
     def expand_batch_dim(self, size=1000):
         for node in self.nodes:
             node.expand_batch_dim(size)
 
+    @property
+    def number_of_parameters(self):
+        return sum(node.number_of_parameters for node in self.nodes)
