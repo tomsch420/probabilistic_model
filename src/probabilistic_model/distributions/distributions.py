@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 import os
+import copy
 from abc import abstractmethod
 from typing import Optional
 
 import numpy as np
+import plotly.graph_objects as go
+from random_events.interval import *
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import *
 from random_events.interval import *
+from random_events.utils import SubclassJSONSerializer
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
-import plotly.graph_objects as go
+
 from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
-
-
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
-from ..utils import SubclassJSONSerializer, MissingDict, interval_as_array
+from ..utils import MissingDict, interval_as_array
 
 class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """
@@ -123,7 +125,7 @@ class ContinuousDistribution(UnivariateDistribution):
         :param interval: The singleton event
         :return: The conditional distribution and the log-probability of the event.
         """
-        log_pdf_value = self.log_likelihood(np.array([[interval.lower]]))
+        log_pdf_value = self.log_likelihood(np.array([[interval.lower]]))[0]
         return DiracDeltaDistribution(self.variable, interval.lower, np.exp(log_pdf_value)), log_pdf_value
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
@@ -134,7 +136,7 @@ class ContinuousDistribution(UnivariateDistribution):
         :param interval: The simple interval
         :return: The conditional distribution and the log-probability of the interval.
         """
-        if interval.lower == interval.upper:
+        if interval.is_singleton():
             return self.log_conditional_from_singleton(interval)
         return self.log_conditional_from_non_singleton_simple_interval(interval)
 
@@ -175,7 +177,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
 
     @property
     def univariate_support(self) -> Interval:
-        return self.interval.as_composite_set()
+        return copy.deepcopy(self.interval).as_composite_set()
 
     def left_included_condition(self, x: np.array) -> np.array:
         """
@@ -183,8 +185,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         :param x: The data
         :return: A boolean array
         """
-        return ((self.interval.lower <= x if self.interval.left == Bound.CLOSED else self.interval.lower < x).
-                reshape(-1, 1))
+        return (self.interval.lower <= x if self.interval.left == Bound.CLOSED else self.interval.lower < x)
 
     def right_included_condition(self, x: np.array) -> np.array:
         """
@@ -192,8 +193,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
          :param x: The data
          :return: A boolean array
          """
-        return ((x < self.interval.upper if self.interval.right == Bound.OPEN else x <= self.interval.upper).
-                reshape(-1, 1))
+        return (x < self.interval.upper if self.interval.right == Bound.OPEN else x <= self.interval.upper)
 
     def included_condition(self, x: np.array) -> np.array:
         """
@@ -204,7 +204,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         return self.left_included_condition(x) & self.right_included_condition(x)
 
     def log_likelihood(self, x: np.array) -> np.array:
-        result = np.full(len(x), -np.inf)
+        result = np.full(x.shape[:-1], -np.inf)
         include_condition = self.included_condition(x)
         filtered_x = x[include_condition].reshape(-1, 1)
         result[include_condition[:, 0]] = self.log_likelihood_without_bounds_check(filtered_x)
@@ -352,20 +352,7 @@ class DiscreteDistribution(UnivariateDistribution):
                 q_probability = other.weights[i]
                 if p_probability * own_weight > q_probability * other_weight:
                     resulting_elements.append(self.variable.domain.simple_sets[i])
-    # def area_validation_metric(self, other: Self) -> float:
-    #     """
-    #     Calculate the area validation metric of this distribution and another.
-    #
-    #     ..math:: \sum_{x \in self \cup other} |self(x) - other(x)| dx
-    #
-    #     """
-    #     distance = 0.
-    #     if isinstance(other, DiscreteDistribution):
-    #         for p_probability, q_probability in zip(self.weights, other.weights):
-    #             distance += abs(p_probability - q_probability)
-    #     else:
-    #         raise NotImplementedError(f"AVM between DiscreteDistribution and {type(other)} is not known.")
-    #     return distance/2
+
 
 class SymbolicDistribution(DiscreteDistribution):
     """

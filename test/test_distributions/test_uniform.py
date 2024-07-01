@@ -5,7 +5,7 @@ from random_events.product_algebra import *
 
 from probabilistic_model.distributions.distributions import DiracDeltaDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.utils import SubclassJSONSerializer
+from random_events.utils import SubclassJSONSerializer
 
 
 class UniformDistributionTestCase(unittest.TestCase):
@@ -25,7 +25,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.probability(self.distribution.support()), 1)
 
     def test_cdf(self):
-        cdf = self.distribution.cdf(np.array([-1, 1, 2]))
+        cdf = self.distribution.cdf(np.array([-1, 1, 2]).reshape(-1, 1))
         self.assertEqual(cdf[0], 0)
         self.assertEqual(cdf[1], 0.5)
         self.assertEqual(cdf[2], 1)

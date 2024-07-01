@@ -1,5 +1,9 @@
 doc/build
 .idea
+
+src/probabilistic_model.egg-info
+build
+doc/_build
 .drawio
 __pycache__/
 **/__pycache__

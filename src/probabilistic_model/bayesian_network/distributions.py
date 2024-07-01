@@ -6,9 +6,9 @@ from typing_extensions import Tuple, Dict, Iterable, List, Union, Self
 from .bayesian_network import BayesianNetworkMixin
 from ..distributions.multinomial import MultinomialDistribution
 from ..probabilistic_circuit.distributions import (SymbolicDistribution as PCSymbolicDistribution)
-from ..probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit
-from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, DeterministicSumUnit,
-                                                           ProbabilisticCircuitMixin, SmoothSumUnit)
+from ..probabilistic_circuit.probabilistic_circuit import ProductUnit
+from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit,
+                                                           ProbabilisticCircuitMixin, SumUnit)
 from ..utils import MissingDict
 
 
@@ -25,8 +25,8 @@ class RootDistribution(BayesianNetworkMixin, PCSymbolicDistribution):
         self.forward_message, self.forward_probability = self.log_conditional_of_simple_event(event)
         self.forward_probability = np.exp(self.forward_probability)
 
-    def joint_distribution_with_parent(self) -> DeterministicSumUnit:
-        result = DeterministicSumUnit()
+    def joint_distribution_with_parent(self) -> SumUnit:
+        result = SumUnit()
 
         for event in self.variable.domain.simple_sets:
             event = SimpleEvent({self.variable: event})
@@ -113,10 +113,10 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
                               self.variable.domain_type()(index), str(probability)])
         return table
 
-    def joint_distribution_with_parent(self) -> DeterministicSumUnit:
+    def joint_distribution_with_parent(self) -> SumUnit:
 
         # initialize result
-        result = DeterministicSumUnit()
+        result = SumUnit()
 
         # a map from the state of this nodes variable to the distribution
         distribution_nodes: Dict[int, PCSymbolicDistribution] = dict()
@@ -139,7 +139,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
             for child_event_index, child_probability in distribution.probabilities.items():
                 # initialize the product unit
-                product_unit = DecomposableProductUnit()
+                product_unit = ProductUnit()
 
                 # add the encoded parent distribution and a copy of this distribution to the product unit
                 product_unit.add_subcircuit(parent_distribution)
@@ -149,7 +149,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
         return result
 
-    def forward_message_as_sum_unit(self) -> DeterministicSumUnit:
+    def forward_message_as_sum_unit(self) -> SumUnit:
         return self.forward_message.as_deterministic_sum()
 
     def interaction_term(self, node_latent_variable: Symbolic, parent_latent_variable: Symbolic) -> \
@@ -195,7 +195,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
     """
 
     conditional_probability_distributions: Dict[int, ProbabilisticCircuit]
-    forward_message: SmoothSumUnit
+    forward_message: SumUnit
     _variables: Tuple[Variable, ...]
 
     def __init__(self, variables: Iterable[Variable]):
@@ -217,9 +217,9 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
         self.forward_message = forward_message.marginal(self.variables)
         self.forward_probability = np.exp(self.forward_probability)
 
-    def joint_distribution_with_parent(self) -> DeterministicSumUnit:
+    def joint_distribution_with_parent(self) -> SumUnit:
 
-        result = DeterministicSumUnit()
+        result = SumUnit()
 
         for parent_event, distribution in self.conditional_probability_distributions.items():
             parent_event = SimpleEvent({self.parent.variable: self.parent.variable.domain_type()(parent_event)})
@@ -229,7 +229,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
             if parent_distribution is None:
                 continue
 
-            product_unit = DecomposableProductUnit()
+            product_unit = ProductUnit()
             product_unit.add_subcircuit(parent_distribution)
             product_unit.add_subcircuit(distribution.root)
 
@@ -237,7 +237,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
 
         return result
 
-    def forward_message_as_sum_unit(self) -> SmoothSumUnit:
+    def forward_message_as_sum_unit(self) -> SumUnit:
         return self.forward_message
 
     def interaction_term(self, node_latent_variable: Symbolic, parent_latent_variable: Symbolic) -> \
@@ -245,12 +245,12 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
 
         assert node_latent_variable.domain == parent_latent_variable.domain
 
-        result = DeterministicSumUnit()
+        result = SumUnit()
 
         for state, weight in self.parent.forward_message.probabilities.items():
             probabilities = MissingDict(float)
             probabilities[int(state)] = 1
-            product_unit = DecomposableProductUnit()
+            product_unit = ProductUnit()
             product_unit.add_subcircuit(PCSymbolicDistribution(parent_latent_variable, probabilities))
             product_unit.add_subcircuit(PCSymbolicDistribution(node_latent_variable, probabilities))
             result.add_subcircuit(product_unit, weight)
@@ -267,3 +267,6 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
         for index, subcircuit in enumerate(unit.subcircuits):
             self.conditional_probability_distributions[index] = subcircuit.__copy__().probabilistic_circuit
         return self
+
+    def __repr__(self):
+        return f"P({', '.join([v.name for v in self.variables])} | {self.parent.variable.name})"

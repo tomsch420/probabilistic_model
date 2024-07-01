@@ -20,8 +20,8 @@ from ..nyga_distribution import NygaDistribution
 from ...probabilistic_circuit.distributions.distributions import (DiracDeltaDistribution,
                                                                   SymbolicDistribution,
                                                                   IntegerDistribution, UnivariateDistribution)
-from ...probabilistic_circuit.probabilistic_circuit import (DeterministicSumUnit,
-                                                            DecomposableProductUnit as PMDecomposableProductUnit)
+from ...probabilistic_circuit.probabilistic_circuit import (SumUnit,
+                                                            ProductUnit as PMDecomposableProductUnit)
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -88,7 +88,7 @@ class DecomposableProductUnit(PMDecomposableProductUnit):
         return own_result, other_result
 
 
-class JPT(DeterministicSumUnit):
+class JPT(SumUnit):
 
     targets: Tuple[Variable, ...]
     """
@@ -483,7 +483,7 @@ class JPT(DeterministicSumUnit):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
-        sum_unit = DeterministicSumUnit._from_json(data)
+        sum_unit = SumUnit._from_json(data)
         variables = [Variable.from_json(variable) for variable in data["variables_from_init"]]
         result = cls(variables, min_samples_leaf=data["_min_samples_leaf"],
                      min_impurity_improvement=data["min_impurity_improvement"],

@@ -26,13 +26,13 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     def cdf(self, x: np.array) -> np.array:
         result = (x - self.lower) / (self.upper - self.lower)
         result = np.minimum(1, np.maximum(0, result))
-        return result
+        return result[:, 0]
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         return self.interval.as_composite_set(), self.log_pdf_value()
 
     def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
-        probability = self.cdf(interval.upper) - self.cdf(interval.lower)
+        probability = self.probability_of_simple_event(SimpleEvent({self.variable: interval}))
         return self.__class__(self.variable, interval), np.log(probability)
 
     def sample(self, amount: int) -> np.array:
@@ -112,7 +112,7 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
     def cdf_trace(self) -> go.Scatter:
         x = self.x_axis_points_for_plotly()
-        cdf_values = [value if value is None else self.cdf(value) for value in x]
+        cdf_values = [value if value is None else self.cdf(np.array([[value]])) for value in x]
         cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name="Cumulative Distribution Function")
         return cdf_trace
 

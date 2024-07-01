@@ -29,8 +29,8 @@ from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
     SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import DecomposableProductUnit, \
-    DeterministicSumUnit, ProbabilisticCircuit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProductUnit, \
+    SumUnit, ProbabilisticCircuit
 from probabilistic_model.utils import MissingDict
 
 
@@ -290,7 +290,7 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
     def test_univariate_symbolic_marginal_as_sum_unit(self):
         variables = [v for v in self.model.variables if v.name == "malignant"]
         marginal = self.model.marginal(variables, as_deterministic_sum=True)
-        self.assertIsInstance(marginal, DeterministicSumUnit)
+        self.assertIsInstance(marginal, SumUnit)
 
     def test_serialization_of_circuit(self):
         json_dict = self.model.probabilistic_circuit.to_json()
@@ -442,7 +442,7 @@ class BayesianJPTTestCase(unittest.TestCase):
         # mount the distributions of the sepal variables
         p_sepal = ConditionalProbabilisticCircuit(self.model_sl_sw.variables)
         p_sepal.from_unit(self.model_sl_sw)
-        [self.assertIsInstance(circuit.root, DecomposableProductUnit) for circuit in
+        [self.assertIsInstance(circuit.root, ProductUnit) for circuit in
          p_sepal.conditional_probability_distributions.values()]
         bayesian_network.add_node(p_sepal)
         bayesian_network.add_edge(p_sepal_species, p_sepal)
@@ -456,7 +456,7 @@ class BayesianJPTTestCase(unittest.TestCase):
         # mount the distributions of the petal variables
         p_petal = ConditionalProbabilisticCircuit(self.model_pl_pw.variables)
         p_petal.from_unit(self.model_pl_pw)
-        [self.assertIsInstance(circuit.root, DecomposableProductUnit) for circuit in
+        [self.assertIsInstance(circuit.root, ProductUnit) for circuit in
          p_petal.conditional_probability_distributions.values()]
         bayesian_network.add_node(p_petal)
         bayesian_network.add_edge(p_petal_species, p_petal)

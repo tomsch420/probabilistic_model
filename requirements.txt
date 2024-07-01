@@ -3,4 +3,4 @@ networkx
 plotly
 scipy
 typing_extensions
-numpy
+numpy<=1.26.4

@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import unittest
 from abc import abstractmethod
+from functools import cached_property
 
 import queue
 import random
@@ -17,8 +18,9 @@ from sortedcontainers import SortedSet
 
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, TYPE_CHECKING
 
+from ..error import IntractableError
 from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
-from ..utils import SubclassJSONSerializer
+from random_events.utils import SubclassJSONSerializer
 
 import matplotlib.pyplot as plt
 import os
@@ -114,6 +116,14 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         return list(self.probabilistic_circuit.successors(self))
 
+    def support(self) -> Event:
+        return self.support_property
+
+    @abstractmethod
+    @cached_property
+    def support_property(self) -> Event:
+        raise NotImplementedError
+
     @property
     @abstractmethod
     def variables(self) -> SortedSet:
@@ -207,7 +217,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             return self.log_conditional_of_simple_event(event.simple_sets[0])
 
         # construct the proxy node
-        result = DeterministicSumUnit()
+        result = SumUnit()
         total_probability = 0
 
         for simple_event in event.simple_sets:
@@ -324,10 +334,12 @@ def event_of_higher_density(self, other: Self,  own_node_weights, other_node_wei
     return self.probabilistic_circuit.root.event_of_higher_density(other.probabilistic_circuit.root, own_node_weights, other_node_weights)
 
 
-class SmoothSumUnit(ProbabilisticCircuitMixin):
+class SumUnit(ProbabilisticCircuitMixin):
     label = 'shape=stencil(tZVtb4MgEMc/DW8XHmLSt43bvgdTOkkpEKBr9+2LoGvxgXULGqPh/tzPu5MDQGrbUc0Ahh0grwBjBKF/+vFlMqZWs8ZF44FfWRvN1hl1ZBfeugHAZccMd71K3gDc+zn9TepGSekJXEmbKA+6h1EuvS+8Rtjw7e9kpD3/xBwzQ4TRCvD789iXahsw2ijeFDtGXzzecuA0YrTVjysGRv/Hktpb1hY3qT9oc/w06izbudeqdlCGLQg/MhciNl4mzTihUUIZb4jvkAfABIYrX6bHzvbbwb3Dcd5P037iTBjlk/pi97pXk4VS5dgjQnC5jtg9hUijQOmqqrKVWY5i9xdE+PkrdRoLX6rCi1toPjMmBNf2N8b0gJgeIEVTD26zrgjWeIAFww0=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
     image = os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", "Smoothsum.png")
-    representation = '+'
+    @property
+    def representation(self) -> str:
+        return "⊕" if self.is_deterministic() else "+"
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
@@ -345,7 +357,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
     def latent_variable(self) -> Symbolic:
         name = f"{hash(self)}.latent"
         enum_elements = {"EMPTY_SET": -1}
-        enum_elements |= {str(hash(subcircuit)): index for index, subcircuit in enumerate(self.subcircuits)}
+        enum_elements.update({str(hash(subcircuit)): index for index, subcircuit in enumerate(self.subcircuits)})
         domain = SetElement(name, enum_elements)
         return Symbolic(name, domain)
 
@@ -364,14 +376,11 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
 
-    def support(self) -> Event:
+    @cached_property
+    def support_property(self) -> Event:
         support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
-            try:
-                support |= subcircuit.support()
-            except AttributeError:
-                return Event()
-
+            support |= subcircuit.support()
         return support
 
     @property
@@ -388,6 +397,13 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
             subcircuit_likelihood = subcircuit.likelihood(events)
             result += weight * subcircuit_likelihood
         return np.log(result)
+
+    def cdf(self, events: np.array) -> np.array:
+        result = np.zeros(len(events))
+        for weight, subcircuit in self.weighted_subcircuits:
+            subcircuit_cdf = subcircuit.cdf(events)
+            result += weight * subcircuit_cdf
+        return result
 
     @cache_inference_result
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
@@ -498,7 +514,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
             result.probabilistic_circuit.add_edge(result, copied_subcircuit, weight=weight)
         return result
 
-    def mount_with_interaction_terms(self, other: 'SmoothSumUnit', interaction_model: ProbabilisticModel):
+    def mount_with_interaction_terms(self, other: 'SumUnit', interaction_model: ProbabilisticModel):
         """
         Create a distribution that factorizes as follows:
 
@@ -531,7 +547,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
                 continue
 
             # create proxy nodes for mounting
-            proxy_product_node = DecomposableProductUnit()
+            proxy_product_node = ProductUnit()
             proxy_sum_node = other.empty_copy()
             self.probabilistic_circuit.add_nodes_from([proxy_product_node, proxy_sum_node])
 
@@ -561,7 +577,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
                 # create edge from proxy to subcircuit
                 proxy_sum_node.add_subcircuit(other_subcircuit, weight=weight)
 
-    def mount_from_bayesian_network(self, other: 'SmoothSumUnit'):
+    def mount_from_bayesian_network(self, other: 'SumUnit'):
         """
         Mount a distribution from tge `to_probabilistic_circuit` method in bayesian networks.
         The distribution is mounted as follows:
@@ -577,7 +593,7 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         for (own_weight, own_subcircuit), other_subcircuit in zip(self.weighted_subcircuits, other.subcircuits):
 
             # create proxy nodes for mounting
-            proxy_product_node = DecomposableProductUnit()
+            proxy_product_node = ProductUnit()
             self.probabilistic_circuit.add_node(proxy_product_node)
 
             # remove edge to old child and replace it by product proxy
@@ -645,32 +661,10 @@ class SmoothSumUnit(ProbabilisticCircuitMixin):
         return True
 
     def log_mode(self) -> Tuple[Event, float]:
-        raise NotImplementedError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
-    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights) -> Event:
-        result = Event()
-        for i in range(len(self.subcircuits)):
-            for j in range(i, len(other.subcircuits)):
-                own_subcircuit = self.subcircuits[i]
-                other_subcircuit = other.subcircuits[j]
-                density = own_subcircuit.event_of_higher_density(other_subcircuit, own_node_weights, other_node_weights)
-                if own_subcircuit.variables in result:
-                    result = result.union(density)
-                else:
-                    for var, value in density.items():
-                        result[var] = value
-        return result
+        if not self.is_deterministic():
+            raise IntractableError("The mode of a non-deterministic sum unit cannot be calculated efficiently.")
 
-class DeterministicSumUnit(SmoothSumUnit):
-    """
-    Deterministic Sum Units for Probabilistic Circuits
-    """
-
-    label = 'shape=stencil(vZVtb4MgEMc/DW8XhLj6dnHb92B6naQUDLC1+/ZD0LX4QLtFZ4zm7uDn3d8DEC1Nw1pABDeIPiNCMozd09mnkc1MC5UNzj0/Qx3cxmp1gBOvbQ/gsgHNbRelLwg/uTHdTctKSekIXEkTRa7iDsa4dHPxOcD6b39FVuv4R7Cg+wyDF5HX+7EP+TbgbKN8Y+yQ/er5rgeOM862+nGrgbO/Y2npPEvNTcs3Vh3etfqQ9XTWYmyvNMwEfsJciLDwEmWGAZUSSjtHePs6EKHYX2mZrle22w4uK5yk57WsGzgJDOGj+oSL7vmoUfIUe0AILpcRxV2IOIss7qo8qcx8FsVvEP7nL+g0CL+WwrNbaLoyEIK35hZjfECMD5BNSl9syhtr/t8l20WMXSRZ8RgpNpirCuanTbYR7w0nvnd8Aw==);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
-    representation = '⊕'
-    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DeterministicSumUnit.png')
-
-    def log_mode(self) -> Tuple[Event, float]:
         modes = []
         log_likelihoods = []
 
@@ -701,11 +695,8 @@ class DeterministicSumUnit(SmoothSumUnit):
             result[likelihood > 0] = index
         return result
 
-    def is_deterministic(self) -> bool:
-        return True
 
-
-class DecomposableProductUnit(ProbabilisticCircuitMixin):
+class ProductUnit(ProbabilisticCircuitMixin):
     """
     Decomposable Product Units for Probabilistic Circuits
     """
@@ -721,7 +712,8 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             result = result.union(subcircuit.variables)
         return result
 
-    def support(self) -> Event:
+    @cached_property
+    def support_property(self) -> Event:
         support = self.subcircuits[0].support()
         for subcircuit in self.subcircuits[1:]:
             support &= subcircuit.support()
@@ -744,6 +736,16 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
             subcircuit_variables = subcircuit.variables
             variable_indices_in_events = np.array([variables.index(variable) for variable in subcircuit_variables])
             result += subcircuit.log_likelihood(events[:, variable_indices_in_events])
+        return result
+
+    @cache_inference_result
+    def cdf(self, events: np.array) -> np.array:
+        variables = self.variables
+        result = np.zeros(len(events))
+        for subcircuit in self.subcircuits:
+            subcircuit_variables = subcircuit.variables
+            variable_indices_in_events = np.array([variables.index(variable) for variable in subcircuit_variables])
+            result += subcircuit.cdf(events[:, variable_indices_in_events])
         return result
 
     @cache_inference_result
@@ -785,7 +787,7 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
         # initialize probability
         log_probability = 0.
 
-        # create new node with new circuit attached to it
+        # create a new node with new circuit attached to it
         resulting_node = self.empty_copy()
 
         for subcircuit in self.subcircuits:
@@ -909,18 +911,6 @@ class DecomposableProductUnit(ProbabilisticCircuitMixin):
 
         return result
 
-    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights)-> Event:
-        result = Event()
-        for i in range(len(self.subcircuits)):
-            for j in range(i, len(other.subcircuits)):
-                own_subcircuit = self.subcircuits[i]
-                other_subcircuit = other.subcircuits[j]
-                if own_subcircuit.variables == other_subcircuit.variables:
-                    density = own_subcircuit.event_of_higher_density(other_subcircuit, own_node_weights, other_node_weights)
-                    result = result.intersection(density)
-
-        return result
-
 
 class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerializer):
     """
@@ -952,7 +942,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def add_node(self, node: ProbabilisticCircuitMixin, **attr):
 
-        # write self as the nodes circuit
+        # write self as the nodes' circuit
         node.probabilistic_circuit = self
 
         # call super
@@ -1016,10 +1006,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return self.root.simplify().probabilistic_circuit
 
     def support(self) -> Event:
-        root = self.root
-        result = self.root.support()
-        root.reset_result_of_current_query()
-        return result
+        return self.root.support()
 
     def is_decomposable(self) -> bool:
         """
@@ -1030,7 +1017,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         :return: if the whole circuit is decomposed
         """
         return all([subcircuit.is_decomposable() for subcircuit in self.leaves if
-                    isinstance(subcircuit, DecomposableProductUnit)])
+                    isinstance(subcircuit, ProductUnit)])
 
     def __eq__(self, other: 'ProbabilisticCircuit'):
         return self.root == other.root
@@ -1163,7 +1150,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         :return: Rather this circuit is deterministic or not.
         """
-        return all(node.is_deterministic() for node in self.nodes if isinstance(node, SmoothSumUnit))
+        return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
 
     def plot(self, **kwargs):
         return self.root.plot(**kwargs)
