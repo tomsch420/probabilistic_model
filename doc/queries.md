@@ -450,7 +450,7 @@ p_xy = ProductUnit()
 p_xy.add_subcircuit(p_x)
 p_xy.add_subcircuit(p_y)
 p_xy = p_xy.probabilistic_circuit
-fig = go.Figure(p_xy.plot(), p_xy.plotly_layout())
+fig = go.Figure(p_xy.plot(number_of_samples=500), p_xy.plotly_layout())
 fig.show()
 ```
 
@@ -460,7 +460,7 @@ We can do this by invoking the `conditional` method of the distribution object.
 
 ```{code-cell} ipython3
 distribution, _ = p_xy.conditional(free_space)
-fig = go.Figure(distribution.plot(number_of_samples=10000), distribution.plotly_layout())
+fig = go.Figure(distribution.plot(number_of_samples=500), distribution.plotly_layout())
 fig.show()
 ```
 
