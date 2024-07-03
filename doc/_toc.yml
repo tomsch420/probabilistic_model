@@ -3,12 +3,23 @@
 
 format: jb-book
 root: intro
-chapters:
-- file: probability_theory
-- file: queries
-- file: graphical_models
-- file: truncated_gaussian
-- file: nyga_distribution
-- file: joint_probability_trees
-- file: template_modelling
-- file: general_remarks
+parts:
+  - caption: Theoretical Concepts
+    chapters:
+    - file: probability_theory
+    - file: queries
+  - caption: Probabilistic Models
+    chapters:
+    - file: graphical_models
+    - file: circuits
+    - file: truncated_gaussian
+    - file: nyga_distribution
+    - file: joint_probability_trees
+    - file: template_modelling
+  - caption: Miscellaneous
+    chapters:
+    - file: pendulum
+    - file: general_remarks
+  - caption: API
+    chapters:
+    - file: autoapi/index

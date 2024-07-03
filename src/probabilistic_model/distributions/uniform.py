@@ -1,11 +1,9 @@
 import numpy as np
-import os
-import random
-from typing import Tuple, Optional
-
-from random_events.product_algebra import SimpleInterval
 
 from .distributions import *
+from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT, EXPECTATION_TRACE_NAME, MODE_TRACE_NAME, MODE_TRACE_COLOR, \
+    PDF_TRACE_NAME, CDF_TRACE_NAME, CDF_TRACE_COLOR, PDF_TRACE_COLOR
+
 from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT
 from typing_extensions import List, Dict, Any, Self
 from plotly import graph_objects as go
@@ -107,13 +105,13 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     def pdf_trace(self) -> go.Scatter:
         pdf_values = [0, 0, None, self.pdf_value(), self.pdf_value(), None, 0, 0]
         pdf_trace = go.Scatter(x=self.x_axis_points_for_plotly(),
-                               y=pdf_values, mode='lines', name="Probability Density Function")
+                               y=pdf_values, mode='lines', name=PDF_TRACE_NAME, line=dict(color=PDF_TRACE_COLOR))
         return pdf_trace
 
     def cdf_trace(self) -> go.Scatter:
         x = self.x_axis_points_for_plotly()
-        cdf_values = [value if value is None else self.cdf(np.array([[value]])) for value in x]
-        cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name="Cumulative Distribution Function")
+        cdf_values = [value if value is None else self.cdf(np.array([[value]]))[0] for value in x]
+        cdf_trace = go.Scatter(x=x, y=cdf_values, mode='lines', name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))
         return cdf_trace
 
     def plot(self, **kwargs) -> List:
@@ -122,15 +120,9 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
         height = self.pdf_value() * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 
-        mode_trace = (go.Scatter(x=[self.lower, self.lower, self.upper, self.upper],
-                                 y=[0, height, height, 0], mode='lines+markers',
-                                 name="Mode", fill="toself"))
-
-        expectation = self.expectation([self.variable])[self.variable]
-        expectation_trace = (
-            go.Scatter(x=[expectation, expectation], y=[0, height], mode='lines+markers',
-                       name="Expectation"))
-        return [pdf_trace, cdf_trace, mode_trace, expectation_trace]
+        mode_trace = self.univariate_mode_traces(self.mode()[0], height)
+        expectation_trace = self.univariate_expectation_trace(height)
+        return [pdf_trace, cdf_trace, expectation_trace] + mode_trace
 
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))
@@ -141,28 +133,28 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
         points = SortedSet([self.interval.lower, self.interval.upper, other.interval.lower, other.interval.upper])
         result = [closed(lower, upper) for lower, upper in zip(points[:-1], points[1:])]
         return result
-    def area_validation_metric(self, other: ContinuousDistribution) -> float:
-        """
-        Calculate the area validation metric of this distribution and another.
-
-        ..math:: \int_{-\infty}^\infty |self(x) - other(x)| dx
-        """
-        distance = 0.
-        if isinstance(other, UniformDistribution):
-
-            # calculate AVM of intersecting part
-            intersection = self.interval.intersection(other.interval)
-
-            if not intersection.empty:
-                difference_of_pdfs = abs(self.pdf_value() - other.pdf_value())
-                distance += difference_of_pdfs * (intersection.upper - intersection.lower)
-
-            # calculate AVM of non-intersecting parts
-            difference = self.interval.union(other.interval).difference(intersection)
-            for interval in difference:
-                pdf_value = self.pdf_value() if interval in self.interval else other.pdf_value()
-                distance += pdf_value * (interval.upper - interval.lower)
-
-        else:
-            raise NotImplementedError(f"AVM between UniformDistribution and {type(other)} is not known.")
-        return distance/2
+    # def area_validation_metric(self, other: ContinuousDistribution) -> float:
+    #     """
+    #     Calculate the area validation metric of this distribution and another.
+    #
+    #     ..math:: \int_{-\infty}^\infty |self(x) - other(x)| dx
+    #     """
+    #     distance = 0.
+    #     if isinstance(other, UniformDistribution):
+    #
+    #         # calculate AVM of intersecting part
+    #         intersection = self.interval.intersection(other.interval)
+    #
+    #         if not intersection.empty:
+    #             difference_of_pdfs = abs(self.pdf_value() - other.pdf_value())
+    #             distance += difference_of_pdfs * (intersection.upper - intersection.lower)
+    #
+    #         # calculate AVM of non-intersecting parts
+    #         difference = self.interval.union(other.interval).difference(intersection)
+    #         for interval in difference:
+    #             pdf_value = self.pdf_value() if interval in self.interval else other.pdf_value()
+    #             distance += pdf_value * (interval.upper - interval.lower)
+    #
+    #     else:
+    #         raise NotImplementedError(f"AVM between UniformDistribution and {type(other)} is not known.")
+    #     return distance/2

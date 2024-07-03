@@ -13,12 +13,13 @@ logo                        : "Logo.svg"  # A path to the doc logo
 # Force re-execution of notebooks on each build.
 # See https://jupyterbook.org/content/execute.html
 execute:
-  execute_notebooks: force
+  execute_notebooks: auto
 
 # Define the name of the latex output file for PDF builds
 latex:
   latex_documents:
     targetname: doc.tex
+    use_jupyterbook_latex: false
 
 # Add a bibtex file so that we can create citations
 bibtex_bibfiles:

@@ -157,6 +157,7 @@ fig.show()
 The plot shows the normal distribution that is the maximum likelihood estimate for the data if we assume the data 
 is i. i. d. and drawn from a normal distribution.
 
+(chapter:marginals)=
 ## Marginals
 
 The marginal query is the next interesting quantity we investigate.
@@ -196,7 +197,7 @@ Furthermore, marginal queries can also contain (partial) point descriptions, jus
 [This tutorial](https://random-events.readthedocs.io/en/latest/conceptual_guide.html) dives deeper in the product 
 algebra that is constructed by the marginal query class. 
 
-
+(chapter:conditionals)=
 ## Conditionals
 
 While marginal queries already allow for the calculations of conditional probabilities using the definition of the 
@@ -221,6 +222,7 @@ ou can read more about it [here](https://probabilistic-model.readthedocs.io/en/l
 distribution.probability(event)
 ```
 
+(chapter:marginal_distributions)=
 ## Marginal Distributions
 
 The next interesting object that belongs to the marginal query class is the marginal distribution. The marginal distribution is the distribution over a subset of random variables. To achieve this, all other random variables are integrated out. The marginal distribution is the distribution over the subset of random variables. The marginal distribution can be obtained by invoking the `marginal` method with the corresponding subset of random variables.
@@ -244,7 +246,7 @@ still efficiently calculable.
 A problem is that, it sometimes destroys a property that is needed for finding the mode of the distribution. 
 We will investigate later what that means.
 
-
+(chapter:moments)=
 ## Moments
 
 The final interesting quantity that belongs to the marginal query class is the moment of a distribution. 
@@ -289,6 +291,8 @@ As we can see, the expectation and variance are shortcut by their names since th
 
 Furthermore, we can calculate all moments that exist by plugging in the order and center that we want as `VariableMap`.
 
+
+(chapter:mode)=
 ## Mode query
 
 The next important quantity of a probability distribution is the mode. 
@@ -305,7 +309,7 @@ $$\hat{x} = \underset{x \in \mathcal{X}}{arg \,max} p(x). $$
 
 While common literature describes the mode under a condition, we can omit such a description since we already defined that the conditional distribution is part of the marginal query class. Hence, the mode under a condition is just the chain of the condition and mode methods.
 
-A common perception of the mode is, that it is the single point of highest density, such as in the example below.
+A common perception of the mode is that it is the single point of highest density, such as in the example below.
 
 ```{code-cell} ipython3
 distribution = GaussianDistribution(Continuous("x"), 0, 1)
@@ -326,7 +330,7 @@ We can see that conditioning a Gaussian on such an event already creates a mode 
 ```{code-cell} ipython3
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 uniform = UniformDistribution(Continuous("x"), open(-1, 1).simple_sets[0])
-go.Figure(uniform.plot(), uniform.plotly_layout()).show()
+go.Figure(uniform.plot(), uniform.plotly_layout()).show() 
 ```
 
 The mode of the uniform distribution is the entire interval of the uniform distribution $(-1, 1) $. 
@@ -351,6 +355,7 @@ print(samples)
 
 As we can see, we just draw two samples from the Gaussian distribution.
 
+(chapter:monte-carlo)=
 ## Monte Carlo Estimate
 
 In {prf:ref}`def-marginal`, we defined the marginal query class as the integration over events of the product algebra.
@@ -445,7 +450,7 @@ p_xy = ProductUnit()
 p_xy.add_subcircuit(p_x)
 p_xy.add_subcircuit(p_y)
 p_xy = p_xy.probabilistic_circuit
-fig = go.Figure(p_xy.plot(), p_xy.plotly_layout())
+fig = go.Figure(p_xy.plot(number_of_samples=500), p_xy.plotly_layout())
 fig.show()
 ```
 
@@ -455,7 +460,7 @@ We can do this by invoking the `conditional` method of the distribution object.
 
 ```{code-cell} ipython3
 distribution, _ = p_xy.conditional(free_space)
-fig = go.Figure(distribution.plot(number_of_samples=10000), distribution.plotly_layout())
+fig = go.Figure(distribution.plot(number_of_samples=500), distribution.plotly_layout())
 fig.show()
 ```
 

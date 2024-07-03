@@ -1,20 +1,15 @@
 import unittest
 
-import numpy as np
 from matplotlib import pyplot as plt
-import plotly.graph_objects as go
-from random_events.product_algebra import *
 from random_events.interval import *
-from random_events.variable import Integer, Symbolic, Continuous
-
-from probabilistic_model.utils import MissingDict
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
+from random_events.variable import Integer, Continuous
 
 from probabilistic_model.probabilistic_circuit.distributions.distributions import (UniformDistribution,
                                                                                    SymbolicDistribution,
                                                                                    IntegerDistribution,
-                                                                                   GaussianDistribution,
-                                                                                   TruncatedGaussianDistribution)
+                                                                                   GaussianDistribution)
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
+from probabilistic_model.utils import MissingDict
 
 
 class Animal(SetElement):
@@ -25,7 +20,6 @@ class Animal(SetElement):
 
 
 class UniformDistributionTestCase(unittest.TestCase):
-
     variable = Continuous("x")
     model: UniformDistribution
 
@@ -64,7 +58,6 @@ class UniformDistributionTestCase(unittest.TestCase):
 
 
 class DiscreteDistributionTestCase(unittest.TestCase):
-
     symbol = Symbolic("animal", Animal)
     integer = Integer("x")
 
@@ -91,7 +84,6 @@ class DiscreteDistributionTestCase(unittest.TestCase):
 
 
 class GaussianDistributionTestCase(unittest.TestCase):
-
     x: Continuous = Continuous("x")
     distribution: GaussianDistribution
 
@@ -106,7 +98,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
 
     def test_conditional_from_complex_interval(self):
         conditional, _ = self.distribution.conditional(SimpleEvent({self.x: closed(0, 1) |
-                                                                      closed(2, 3)}).as_composite_set())
+                                                                            closed(2, 3)}).as_composite_set())
         self.assertIsNotNone(conditional.probabilistic_circuit)
         self.assertEqual(len(list(conditional.probabilistic_circuit.nodes)), 3)
 
@@ -135,5 +127,3 @@ class IntegerDistributionTestCase(unittest.TestCase):
         d = IntegerDistribution.from_sum_unit(self.model)
         i = IntegerDistribution(self.x, MissingDict(float, {0: 0.4, 1: 0.6}))
         self.assertEqual(i, d)
-
-
