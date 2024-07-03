@@ -27,7 +27,10 @@ import os
 import PIL
 
 if TYPE_CHECKING:
-    from .distributions import UnivariateDistribution
+    from .distributions import UnivariateDistribution, SymbolicDistribution
+
+
+import random_events
 
 
 def cache_inference_result(func):
@@ -300,15 +303,6 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             "label": self.representation
         }
 
-    def area_validation_metric(self, other: Self) -> float:
-        """
-          Calculate the area validation metric of the circuit.
-          This is forwarded from avm of ProbabilisticCircuit Class
-        """
-        return self.probabilistic_circuit.root.area_validation_metric(other.probabilistic_circuit.root)
-
-    def event_of_higher_density(self, other, own_node_weights, other_node_weights):
-        return self.event_of_higher_density(other, own_node_weights, other_node_weights)
 
 
 def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
@@ -330,13 +324,12 @@ def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
                     seen_nodes.add(hash(succ))
                     to_visit_nodes.put(succ)
     return node_weights
-def event_of_higher_density(self, other: Self,  own_node_weights, other_node_weights) -> Event:
-    return self.probabilistic_circuit.root.event_of_higher_density(other.probabilistic_circuit.root, own_node_weights, other_node_weights)
 
 
 class SumUnit(ProbabilisticCircuitMixin):
     label = 'shape=stencil(tZVtb4MgEMc/DW8XHmLSt43bvgdTOkkpEKBr9+2LoGvxgXULGqPh/tzPu5MDQGrbUc0Ahh0grwBjBKF/+vFlMqZWs8ZF44FfWRvN1hl1ZBfeugHAZccMd71K3gDc+zn9TepGSekJXEmbKA+6h1EuvS+8Rtjw7e9kpD3/xBwzQ4TRCvD789iXahsw2ijeFDtGXzzecuA0YrTVjysGRv/Hktpb1hY3qT9oc/w06izbudeqdlCGLQg/MhciNl4mzTihUUIZb4jvkAfABIYrX6bHzvbbwb3Dcd5P037iTBjlk/pi97pXk4VS5dgjQnC5jtg9hUijQOmqqrKVWY5i9xdE+PkrdRoLX6rCi1toPjMmBNf2N8b0gJgeIEVTD26zrgjWeIAFww0=);whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;'
     image = os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", "Smoothsum.png")
+
     @property
     def representation(self) -> str:
         return "⊕" if self.is_deterministic() else "+"
@@ -1102,43 +1095,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return unweighted_edges
 
-    def plot_structure(self):
-
-        images = dict()
-        for node in self.nodes:
-            images[hash(node)] = PIL.Image.open(node.image)
-
-        fig, ax = plt.subplots(dpi=200, figsize=(10, 10))
-        graph_pos = nx.nx_agraph.graphviz_layout(self, prog="twopi", args="")
-        pos = nx.spring_layout(self, scale=0.5, pos=graph_pos, threshold=2.0531, k=2, weight=1, iterations=100)
-        nx.draw_networkx_edges(
-            self,
-            pos=pos,
-            ax=ax,
-            arrows=True,
-            min_source_margin=10,
-            min_target_margin=10,
-        )
-
-        tr_figure = ax.transData.transform
-        tr_axes = fig.transFigure.inverted().transform
-        icon_size = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.02
-        icon_center = icon_size / 2.0
-
-        for node in self.nodes:
-
-            xf, yf = tr_figure(pos[node])
-            xa, ya = tr_axes((xf, yf))
-
-            a = plt.axes([xa - icon_center, ya - icon_center, icon_size, icon_size])
-            a.imshow(images[hash(node)])
-            a.axis("off")
-
-            text_margin = 5
-            text_x = xa - icon_center + text_margin
-            text_y = ya + icon_center - text_margin
-            plt.text(text_x, text_y, node.representation, color='black', fontsize=3, ha='left', va='top')
-        plt.show()
 
     def plot(self):
         return self.root.plot()
@@ -1159,31 +1115,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return self.root.plotly_layout()
 
 
-    def area_validation_metric(self, other: Self) -> float:
-        """
-        Calculate the area validation metric of self and other.
-        This is the header of the recusiv area validation metric functions.
-        it tests for all needed Chracktistics of the PCs and correctly transforms the Value.
-        :param other: The other circuit.
-        """
-
-        self.simplify()
-        other.simplify()
-        assert self.variables == other.variables, "The AVM can only be evaluated on models with the same variables"
-        #given on jpt
-        #assert self.decomposes_as(other), "The AVM can only be evaluated on models with the same variables"
-
-        own_node_weights = self.nodes_weights()
-        other_node_weights = other.nodes_weights()
-
-        p_event = self.root.event_of_higher_density(other.root, own_node_weights, other_node_weights)
-        q_event = other.root.event_of_higher_density(self.root, other_node_weights, own_node_weights)
-
-        print(p_event)
-        print(q_event)
-
-        return (self.probability(p_event) - other.probability(p_event)
-                + self.probability(q_event) - other.probability(q_event))
     def nodes_weights(self) -> dict:
         """
         """
@@ -1207,109 +1138,74 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                         to_visit_nodes.put(succ)
         return node_weights
 
-    def all_leaf_avm(self, other: Self):
-        """
-        """
-        own_leaf_avm = {hash(k): [] for k in self.leaves}
-        other_leaf_avm = {hash(k): [] for k in other.leaves}
-        for own_leaf in self.leaves:
-            for other_leaf in other.leaves:
-                #for comman PC case: need a check_up to root if same Structur
-                # or better said avm value got a condtion which type ther come form
-                # if it becomes illigal later kick out
-                #this is enough for JPTs
-                #QUESTION predessors only 1 or none jpt wise?
-                # own_pres_var = [(p.variables) for p in self.predecessors(own_leaf)]
-                # other_pres_var = [(p.variables) for p in self.predecessors(other_leaf)]
-                if (own_leaf.variables == other_leaf.variables):
-                    self_avm_value = own_leaf.area_validation_metric(other_leaf)
-                    other_avm_value = other_leaf.area_validation_metric(own_leaf)
 
-                    own_leaf_avm[hash(own_leaf)].append(self_avm_value)
-
-                    other_leaf_avm[hash(other_leaf)].append(other_avm_value)
-
-        return own_leaf_avm, other_leaf_avm
 
 from probabilistic_model.probabilistic_circuit.exporter import draw_io_expoter
-
+from probabilistic_model.probabilistic_circuit.exporter.draw_io_expoter import DrawIoExporter
 class ShallowProbabilisticCircuit(ProbabilisticCircuit):
     @classmethod
     def from_probabilistic_circuit(cls, probabilistic_circuit: ProbabilisticCircuit):
+        # diagram = DrawIoExporter(probabilistic_circuit).export()
+        # diagram.dump_file("test.drawio")
         result = cls()
         shallow_pc = probabilistic_circuit
-        #shallow_pc.simplify()
-        # d = draw_io_expoter.DrawIoExporter(shallow_pc)
-        # e = d.export()
-        # e.dump_file("test.drawio")
         cls.shallowing(result, node=shallow_pc.root, presucc=None)
+        result.add_nodes_from(shallow_pc.nodes)
+        result.add_edges_from(shallow_pc.edges)
+        result.add_weighted_edges_from(shallow_pc.weighted_edges)
 
-        # d = draw_io_expoter.DrawIoExporter(shallow_pc)
-        # e = d.export()
-        # e.dump_file("test.drawio")
         return result
 
     def shallowing(self, node: ProbabilisticCircuitMixin, presucc: ProbabilisticCircuitMixin | None):
         probabilistic_circuit = node.probabilistic_circuit
         succ_list: List = list(probabilistic_circuit.successors(node))
-        presucc_list: List = list(probabilistic_circuit.predecessors(node))
-        if not isinstance(node, SmoothSumUnit) and not isinstance(node, DeterministicSumUnit) and not isinstance(node, DecomposableProductUnit):
-            sum_unit = DeterministicSumUnit()
-            product_unit = DecomposableProductUnit()
+        if not isinstance(node, SumUnit) and not isinstance(node, ProductUnit):
+            sum_unit = SumUnit()
+            product_unit = ProductUnit()
             probabilistic_circuit.add_node(sum_unit)
             probabilistic_circuit.add_node(product_unit)
             probabilistic_circuit.add_edge(product_unit, node)
             probabilistic_circuit.add_edge(sum_unit, product_unit, weight=1)
-            for presucc in presucc_list:
+            if presucc is not None:
                 data = probabilistic_circuit.get_edge_data(presucc, node, {"weight": 1})
                 probabilistic_circuit.add_edge(presucc, sum_unit, **data)
                 probabilistic_circuit.remove_edge(presucc, node)
-            # d = draw_io_expoter.DrawIoExporter(node.probabilistic_circuit)
-            # e = d.export()
-            # e.dump_file("test.drawio")
             return
-        elif isinstance(node, DeterministicSumUnit) or isinstance(node, SmoothSumUnit):
+        elif isinstance(node, SumUnit) or isinstance(node, SumUnit):
             for succ in succ_list:
-                self.shallowing(succ)
+                self.shallowing(succ, presucc=node)
             new_succ_list = list(probabilistic_circuit.successors(node))
             for sum_succ in new_succ_list:
                 first_weight = probabilistic_circuit.get_edge_data(node, sum_succ, {"weight": 1}).get("weight", 1)
-
                 for succ_succ in list(probabilistic_circuit.successors(sum_succ)):
                     second_weight = probabilistic_circuit.get_edge_data(sum_succ, succ_succ, {"weight": 1}).get("weight", 1)
                     probabilistic_circuit.add_edge(node, succ_succ, weight=first_weight * second_weight)
                 probabilistic_circuit.remove_edge(node, sum_succ)
                 if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
                     self.remove_node_and_successor_structure(sum_succ)
-            # d = draw_io_expoter.DrawIoExporter(node.probabilistic_circuit)
-            # e = d.export()
-            # e.dump_file("test.drawio")
             return
 
-        elif isinstance(node, DecomposableProductUnit):
+        elif isinstance(node, ProductUnit):
             for succ in succ_list:
-                self.shallowing(succ)
+                self.shallowing(succ, presucc=node)
             new_succ_list = list(probabilistic_circuit.successors(node))
             combination_li = list()
-            sum_unit = DeterministicSumUnit()
+            sum_unit = SumUnit()
             probabilistic_circuit.add_node(sum_unit)
-            for pre_succ in presucc_list:
-                data = probabilistic_circuit.get_edge_data(pre_succ, node, {"weight": 1})
-                probabilistic_circuit.add_edge(pre_succ, sum_unit, **data)
-                probabilistic_circuit.remove_edge(pre_succ, node)
-            probabilistic_circuit.remove_node(node)
-
+            if presucc is not None:
+                data = probabilistic_circuit.get_edge_data(presucc, node, {"weight": 1})
+                probabilistic_circuit.add_edge(presucc, sum_unit, **data)
+                probabilistic_circuit.remove_edge(presucc, node)
+                if len(list(probabilistic_circuit.predecessors(node))) == 0:
+                    probabilistic_circuit.remove_node(node)
             for sum_succ in new_succ_list:
                 pro_li = []
                 for pro_succ in list(probabilistic_circuit.successors(sum_succ)):
                     data = probabilistic_circuit.get_edge_data(sum_succ, pro_succ, {"weight": 1})
                     pro_li.append((pro_succ, data.get("weight", 1)))
-                # probabilistic_circuit.remove_edge(node, sum_succ)
-                if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
-                    probabilistic_circuit.remove_node(sum_succ)
-
+                combination_li.append(pro_li)
             for combination in itertools.product(*combination_li):
-                product_unit = DecomposableProductUnit()
+                product_unit = ProductUnit()
                 probabilistic_circuit.add_node(product_unit)
                 total_weight = 1
                 for pro_tuple in combination:
@@ -1318,22 +1214,97 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                     under_succ_li = probabilistic_circuit.successors(under_node)
                     for under_succ in under_succ_li:
                         data = probabilistic_circuit.get_edge_data(under_node, under_succ, {"weight": 1})
-                        #FUCK FUCK FRAGE WICHTIG ERSTMAL WEIGHT +1 umd dopplung etc. noch mit zunehem aaaaah
-                        if probabilistic_circuit.has_edge(product_unit, under_succ):
-                            data["weight"] = data.get(weight, 1) + 1
                         probabilistic_circuit.add_edge(product_unit, under_succ, **data)
                 probabilistic_circuit.add_edge(sum_unit, product_unit, weight=total_weight)
-            for combi_node in [c[0] for c in combination_li]:
-                if len(list(probabilistic_circuit.predecessors(combi_node))) == 0:
-                    self.remove_node_and_successor_structure(combi_node)
-
-            # d = draw_io_expoter.DrawIoExporter(node.probabilistic_circuit)
-            # e = d.export()
-            # e.dump_file("test.drawio")
+            for sum_succ in new_succ_list:
+                if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
+                    self.remove_node_and_successor_structure(sum_succ)
             return
 
         else:
             raise TypeError(f"{type(node)} is not supported")
+
+    def events_of_higher_density_product(self, other: Self, own_pro_unit, other_pro_unit, own_node_weights, other_node_weights):
+        own_result = Event()
+        other_result = Event()
+        combination_map = {}
+
+        for own_univariate_unit in own_pro_unit.subcircuits:
+            other_univariate_unit = [s for s in other_pro_unit.subcircuits if s.variables == own_univariate_unit.variables][0]
+            variable = own_univariate_unit.variables[0]
+            if isinstance(variable, random_events.variable.Continuous):
+                all_mixture_points = own_univariate_unit.all_union_of_mixture_points_with(other_univariate_unit)
+                combination_map[variable] = all_mixture_points
+            elif isinstance(variable, random_events.variable.Symbolic):
+                own_univariate_unit: SymbolicDistribution
+                other_univariate_unit: SymbolicDistribution
+                support = own_univariate_unit.support() | other_univariate_unit.support()
+                combination_map[variable] = support
+            else:
+                raise NotImplementedError("Unknown Node Type")
+
+        own_weight = sum(own_node_weights.get(hash(own_pro_unit)))
+        other_weight = sum(other_node_weights.get(hash(other_pro_unit)))
+        for combination in itertools.product(
+                *combination_map.values()):
+            full_evidence_state = list(
+                ((element.simple_sets[-1].upper - element.simple_sets[0].lower) / 2) + element.simple_sets[
+                    0].lower if isinstance(element, random_events.interval.Interval) else element
+                for element in combination)
+
+            likelihood_in_self = self.likelihood(np.array([full_evidence_state])) * own_weight
+            likelihood_in_other = other.likelihood(np.array([full_evidence_state])) * other_weight
+
+            if likelihood_in_self > likelihood_in_other:
+                if not own_result:
+                    own_result = Event({variable: value for variable, value in zip(self.variables, combination)})
+                else:
+
+                    own_result = own_result.union_with(SimpleEvent({variable: value for variable, value in
+                                                                    zip(self.variables,
+                                                                        combination)}).as_composite_set())
+            elif likelihood_in_other > likelihood_in_self:
+                if not other_result:
+                    other_result = Event({variable: value for variable, value in zip(other.variables, combination)})
+                else:
+                    other_result = other_result.union_with(SimpleEvent({variable: value for variable, value in
+                                                                        zip(other.variables,
+                                                                            combination)}).as_composite_set())
+
+        return own_result, other_result
+
+    def events_of_higher_density_sum(self, other: Self,):
+        own_node_weights = self.root.probabilistic_circuit.nodes_weights()
+        other_node_weights = other.root.probabilistic_circuit.nodes_weights()
+        own_result = Event()
+        other_result = Event()
+        for own_pro_unit in self.root.subcircuits:
+            own_pro_unit: ProductUnit
+            for other_pro_unit in other.root.subcircuits:
+                other_pro_unit: ProductUnit
+                own_result_part, other_result_part = self.events_of_higher_density_product(other ,own_pro_unit, other_pro_unit,
+                                                                                           own_node_weights,
+                                                                                        other_node_weights)
+                if own_result.is_empty():
+                    own_result = own_result_part
+                elif not other_result_part.is_empty():
+                    print(own_result, type(own_result))
+                    print(own_result_part, type(own_result_part))
+                    own_result = own_result.union_with(own_result_part)
+                if other_result.is_empty():
+                    other_result = other_result_part
+                elif not other_result_part.is_empty():
+                    other_result = other_result.union_with(other_result_part)
+
+        return own_result, other_result
+
+    def area_validation_metric(self, other: Self) -> float:
+
+        p_event, q_event = self.events_of_higher_density_sum(other)
+        result = (self.probability(p_event) - other.probability(p_event)
+                  + other.probability(q_event) - self.probability(q_event))
+
+        return result/2
 
     def remove_node_and_successor_structure(self, node: ProbabilisticCircuitMixin):
         probabilistic_circuit = node.probabilistic_circuit

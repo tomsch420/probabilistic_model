@@ -6,28 +6,30 @@ import numpy as np
 class MonteCarloEstimator:
 
     model: ProbabilisticModel
+    sample_size: int
 
-    def __init__(self, model: ProbabilisticModel):
+    def __init__(self, model: ProbabilisticModel, sample_size: int=100):
         self.model = model
+        self.sample_size = sample_size
 
-    def area_validation_metric(self, other: ProbabilisticModel):
-        ...
+    def area_validation_metric(self, other_model: ProbabilisticModel):
+        p_p_amount, q_q_amount = self.monte_carlo_densty_events(other_model)
+        return (p_p_amount + q_q_amount) / self.sample_size
+    def monte_carlo_densty_events(self, other_model: ProbabilisticModel):
+        half_sample_amount = int(self.sample_size / 2) if self.sample_size > 0 else 1
+        own_amount = 0
+        other_amount = 0
+        own_samples = self.model.sample(half_sample_amount)
+        other_samples = other_model.sample(half_sample_amount)
+        for sample in own_samples:
+            own_liklihood = self.model.likelihood(np.array([sample]))
+            other_liklihood = other_model.likelihood(np.array([sample]))
+            if own_liklihood > other_liklihood:
+                own_amount += 1
+        for sample in other_samples:
+            own_liklihood = self.model.likelihood(np.array([sample]))
+            other_liklihood = other_model.likelihood(np.array([sample]))
+            if own_liklihood < other_liklihood:
+                other_amount += 1
 
-
-def monte_carlo_estimation_area_validation_metric(sample_amount: int, first_model: ProbabilisticModel, senc_model: ProbabilisticModel):
-
-
-    half_sample_amount = int(sample_amount / 2) if sample_amount > 0 else 1
-    p_p_amount = monte_carlo_densty_event(half_sample_amount, first_model, senc_model)
-    q_q_amount= monte_carlo_densty_event(half_sample_amount, senc_model, first_model)
-    return (p_p_amount + q_q_amount)/sample_amount
-def monte_carlo_densty_event(sample_amount: int, fist_model: ProbabilisticModel, senc_model: ProbabilisticModel):
-    first_amount = 0
-    sample_amount = fist_model.sample(sample_amount)
-    for sample in sample_amount:
-        own_likli = fist_model.likelihood(np.array([sample]))
-        other_likli = senc_model.likelihood(np.array([sample]))
-        if own_likli > other_likli:
-            first_amount += 1
-
-    return first_amount
+        return own_amount, other_amount
