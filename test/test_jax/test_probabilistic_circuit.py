@@ -6,6 +6,7 @@ import numpy as np
 import plotly.graph_objects as go
 from jax import random, numpy as jnp
 from random_events.variable import Continuous
+import tqdm
 
 from probabilistic_model.learning.jax.probabilistic_circuit import ProbabilisticCircuit
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
@@ -70,7 +71,7 @@ class TestJaxUnits(unittest.TestCase):
         loss_values = []
 
         # Fit regression
-        for _ in range(2):
+        for _ in tqdm.trange(2):
             coupling_params = update(coupling_params, features, targets)
             loss_values.append(loss(coupling_params, features, targets))
         #

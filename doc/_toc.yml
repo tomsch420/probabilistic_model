@@ -19,7 +19,8 @@ parts:
   - caption: Miscellaneous
     chapters:
     - file: pendulum
-    - file: general_remarks
-  - caption: API
+  - caption: Technical Information
     chapters:
+    - file: architecture
+    - file: general_remarks
     - file: autoapi/index

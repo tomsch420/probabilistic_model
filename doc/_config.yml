@@ -42,8 +42,11 @@ sphinx:
     - sphinx_proof
     - 'sphinx.ext.autodoc'
     - 'sphinx.ext.autosummary'
+    - 'sphinx.ext.inheritance_diagram'
     - 'autoapi.extension'
   config:
+    inheritance_graph_attrs: {rankdir: "TB"}
+    add_module_names: False
     suppress_warnings: ["mystnb.unknown_mime_type"]
     autosummary_generate: True
     html_js_files:
