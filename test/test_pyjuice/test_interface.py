@@ -10,6 +10,7 @@ from probabilistic_model.probabilistic_circuit.distributions.distributions impor
 import plotly.graph_objects as go
 from probabilistic_model.learning.converter import TensorProbabilisticCircuit
 
+
 class InterfaceTestCase(unittest.TestCase):
 
     x: Continuous = Continuous("x")
@@ -37,9 +38,11 @@ class InterfaceTestCase(unittest.TestCase):
         result = TensorProbabilisticCircuit.from_pc(self.model.probabilistic_circuit)
         data = self.model.sample(1000)
         torch_data = torch.tensor(data)
-        result.tensor_circuit.to("cuda:0")
+        device = torch.device("cuda:0")
+        result.tensor_circuit.to(device)
         ll = result.tensor_circuit(torch_data)
         print(ll)
+
 
 if __name__ == '__main__':
     unittest.main()
