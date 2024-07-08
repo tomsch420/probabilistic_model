@@ -1,6 +1,7 @@
 import unittest
 
 import numpy as np
+import torch
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
@@ -34,10 +35,11 @@ class InterfaceTestCase(unittest.TestCase):
     def test_something(self):
         # self.show()
         result = TensorProbabilisticCircuit.from_pc(self.model.probabilistic_circuit)
-        return
         data = self.model.sample(1000)
-        log_likelihoods = self.model.log_likelihood(data)
-
+        torch_data = torch.tensor(data)
+        result.tensor_circuit.to("cuda:0")
+        ll = result.tensor_circuit(torch_data)
+        print(ll)
 
 if __name__ == '__main__':
     unittest.main()

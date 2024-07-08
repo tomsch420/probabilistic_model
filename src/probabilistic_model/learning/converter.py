@@ -11,6 +11,7 @@ from pyjuice.model.tensorcircuit import SumLayer, TensorCircuit, ProdLayer
 
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Variable
+from torch import nn
 from typing_extensions import Dict, Self
 
 from ..distributions.gaussian import GaussianDistribution
@@ -36,60 +37,36 @@ class ClassConverter(UserDict):
 class_map = ClassConverter({SumUnit: SumLayer, ProductUnit: ProdLayer, GaussianDistribution: dists.gaussian.Gaussian})
 
 
+def convert_node(node: ProbabilisticCircuitMixin, variable_index_map: Dict[Variable, int]):
+    """
+    Convert a node to a tensor circuit element.
+    """
+
+    if isinstance(node, SumUnit):
+        subcircuits = [convert_node(subcircuit, variable_index_map) for subcircuit in node.subcircuits]
+        result = pyjuice.summate(*subcircuits, num_nodes=1)
+        result.set_params(torch.tensor([weight for weight, _ in node.weighted_subcircuits]))
+
+    elif isinstance(node, GaussianDistribution):
+        result = pyjuice.inputs(variable_index_map[node.variable], num_nodes=1,
+                                dist=dists.gaussian.Gaussian(node.location, node.scale**2))
+    else:
+        raise TypeError(f"Could not convert node {node}")
+
+    return result
+
+
 class TensorProbabilisticCircuit(ProbabilisticModel):
     variable_to_index_map: Dict[Variable, int]
-    tensor_circuit: TensorCircuit
+    tensor_circuit: nn.Module
 
     @classmethod
     def from_pc(cls, pc: ProbabilisticCircuit) -> Self:
         result = cls()
         result.variable_to_index_map = {var: i for i, var in enumerate(pc.variables)}
-
-        all_node_depths: Dict[ProbabilisticCircuitMixin, int] = nx.shortest_path_length(pc, source=pc.root)
-        total_depth = max(all_node_depths.values())
-        # for every depth in reversed order, we create a layer
-        layers = []
-        for depth in reversed(range(total_depth + 1)):
-            # get all nodes at this depth
-            nodes = [node for node, d in all_node_depths.items() if d == depth]
-            result.construct_layers_from_nodes(nodes)
-        return cls()
-
-    def construct_layers_from_nodes(self, nodes: List[ProbabilisticCircuitMixin]):
-
-        # filter univariate distributions
-        nodes = [node for node in nodes if isinstance(node, UnivariateDistribution)]
-        input_layers = self.construct_input_layer_as_sum(nodes)
-        exit()
-        # construct maps that hold information about the nodes
-        node_types = {index: class_map[type(node)] for index, node in enumerate(nodes)}
-        inverse_node_types = {}
-        for clazz in set(node_types.values()):
-            inverse_node_types[clazz] = [index for index, value in node_types.items() if value == clazz]
-            if issubclass(clazz, UnivariateDistribution):
-                self.construct_input_layers(nodes)
-
-    def construct_input_layer_as_sum(self, nodes: List[UnivariateDistribution]):
-        variables = list(set(node.variable for node in nodes))
-
-        variable_distribution_map = {var: [node for node in nodes if node.variable == var] for var in variables}
-
-        layers = []
-        for variable, distributions in variable_distribution_map.items():
-            distribution_types = {class_map[type(distribution)] for distribution in distributions}
-            layer = self.construct_input_layer_variable(variable, distributions)
-
-    def construct_input_layer_variable(self, variable: Variable, distributions: List[UnivariateDistribution]):
-        distribution_type = class_map[type(distributions[0])]
-
-        if distribution_type is dists.gaussian.Gaussian:
-            distribution = dists.gaussian.Gaussian()
-            params = torch.tensor([[d.location, d.scale**2] for d in distributions])
-            params = distribution.init_parameters(len(distributions), params=params.flatten())
-            return pyjuice.inputs(var=self.variable_to_index_map[variable],
-                                  num_nodes=len(distributions), dist=distribution, params=params)
-        else:
-            raise NotImplementedError(f"Cannot handle distribution type {distribution_type}")
+        tensor_circuit = convert_node(pc.root, result.variable_to_index_map)
+        cls.tensor_circuit = pyjuice.compile(pyjuice.merge(tensor_circuit))
+        return result
 
     @property
     def variables(self) -> Tuple[Variable, ...]:
