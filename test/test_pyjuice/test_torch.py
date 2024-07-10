@@ -1,15 +1,16 @@
 import math
 import unittest
 
+import numpy as np
 import torch
 from numpy.testing import assert_almost_equal
 from random_events.interval import SimpleInterval
 from random_events.variable import Continuous
 from torch.testing import assert_close
 
-from probabilistic_model.learning.torch.pc import UniformLayer, SumLayer
+from probabilistic_model.learning.torch.pc import UniformLayer, SumLayer, ProductLayer
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit
+from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit, ProductUnit
 
 
 class UniformTestCase(unittest.TestCase):
@@ -65,6 +66,44 @@ class SumTestCase(unittest.TestCase):
         self.assertEqual(ll.shape, (3, 2))
         assert_almost_equal(p_by_hand_1.tolist(), ll[:, 0].tolist())
         assert_almost_equal(p_by_hand_2.tolist(), ll[:, 1].tolist())
+
+
+class ProductTestCase(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+    p1_x_by_hand = UniformDistribution(x, SimpleInterval(0, 1))
+    p1_y_by_hand = UniformDistribution(y, SimpleInterval(0.5, 1))
+    p2_y_by_hand = UniformDistribution(y, SimpleInterval(5, 6))
+
+    product_1 = ProductUnit()
+    product_1.add_subcircuit(p1_x_by_hand)
+    product_1.add_subcircuit(p1_y_by_hand)
+
+    product_2 = ProductUnit()
+    product_2.probabilistic_circuit = product_1.probabilistic_circuit
+    product_2.add_subcircuit(p1_x_by_hand)
+    product_2.add_subcircuit(p2_y_by_hand)
+
+    p1_x = UniformLayer(x, torch.Tensor([0]), torch.tensor([1]))
+    p1_y = UniformLayer(y, torch.Tensor([0.5, 5]), torch.tensor([1, 6]))
+
+    product = ProductLayer(child_layers=[p1_x, p1_y], edges=[torch.tensor([0, 0]),
+                                                             torch.tensor([0, 1])])
+
+    def test_log_likelihood(self):
+        data = [[0.5, 0.75], [0.9, 0.7], [0.5, 5.5]]
+
+        ll_p1_by_hand = self.product_1.log_likelihood(np.array(data))
+        ll_p2_by_hand = self.product_2.log_likelihood(np.array(data))
+
+        print("ll_p1_by_hand", ll_p1_by_hand)
+        print("ll_p2_by_hand", ll_p2_by_hand)
+
+        ll = self.product.log_likelihood(torch.tensor(data))
+
+        self.assertEqual(ll.shape, (3, 2))
+        print("ll", ll)
+        assert_almost_equal(ll_p1_by_hand.tolist(), ll[:, 0].tolist())
 
 
 if __name__ == '__main__':

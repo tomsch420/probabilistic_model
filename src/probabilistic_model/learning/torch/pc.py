@@ -1,16 +1,33 @@
 from abc import abstractmethod, ABC
+from functools import cached_property
 
 import torch
 import torch.nn as nn
 from random_events.variable import Continuous, Variable
-from torch.nn import ModuleList
-from typing_extensions import List
+from typing_extensions import List, Tuple
 
 
 class Layer(nn.Module):
     """
-    Abstract class for Layers of a layered circuit
+    Abstract class for Layers of a layered circuit.
+
+    Layers have the same scope (set of variables) for every node in them.
     """
+
+    @property
+    @abstractmethod
+    def variables(self) -> Tuple[Variable, ...]:
+        """
+        The variables of the layer.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def validate(self):
+        """
+        Validate the parameters and their layouts.
+        """
+        raise NotImplementedError
 
     @property
     def number_of_nodes(self) -> int:
@@ -42,6 +59,14 @@ class InnerLayer(Layer, ABC):
     The child layers of this layer.
     """
 
+    def __init__(self, child_layers: List[Layer]):
+        super().__init__()
+        self.child_layers = child_layers
+
+    @cached_property
+    def variables(self) -> Tuple[Variable, ...]:
+        return tuple(sorted(set().union(*[child_layer.variables for child_layer in self.child_layers])))
+
 
 class InputLayer(Layer, ABC):
     """
@@ -54,6 +79,11 @@ class InputLayer(Layer, ABC):
     """
     The variable of the distributions.
     """
+
+    @property
+    def variables(self) -> Tuple[Variable, ...]:
+        return self.variable,
+
 
 class UniformLayer(InputLayer):
     """
@@ -87,9 +117,11 @@ class UniformLayer(InputLayer):
         """
         super().__init__()
         self.variable = variable
-        assert lower.shape == upper.shape, "The shapes of the lower and upper bounds must match."
         self.lower = lower
         self.upper = upper
+
+    def validate(self):
+        assert self.lower.shape == self.upper.shape, "The shapes of the lower and upper bounds must match."
 
     @property
     def number_of_nodes(self) -> int:
@@ -131,21 +163,17 @@ class SumLayer(InnerLayer):
     The weights are normalized per row.
     """
 
-    def __init__(self, child_layers: List[nn.Module], log_weights: List[torch.Tensor]):
+    def __init__(self, child_layers: List[Layer], log_weights: List[torch.Tensor]):
         """
         Initialize the sum layer.
 
         :param child_layers: The child layers of the sum layer.
         :param log_weights: The logarithmic weights of each edge.
         """
-        super().__init__()
-        self.child_layers = ModuleList(child_layers)
+        super().__init__(child_layers)
         self.log_weights = log_weights
 
     def validate(self):
-        """
-        Check that the weight shapes are valid.
-        """
         for log_weights in self.log_weights:
             assert log_weights.shape[0] == self.number_of_nodes, "The number of nodes must match the number of weights."
 
@@ -196,4 +224,64 @@ class SumLayer(InnerLayer):
             result += ll
 
         return torch.log(result) - self.log_normalization_constants.repeat(len(x), 1)
+
+
+class ProductLayer(InnerLayer):
+    """
+    A layer that represents the product of multiple other units.
+
+    Every node in the layer has the same partitioning of variables.
+    The n-th child layer has the variables described in the n-th partition.
+    """
+
+    edges: List[torch.Tensor]
+    """
+    The edges consist of a list of tensors containing integers.
+    The outer list describes the edges for each child layer.
+    The tensors in the list describe the edges for each node in the child layer.
+    The integers are interpreted in such a way that n-th value represents a edge (n, edges[n]).
+    
+    Due to decomposability and smoothness every product node in this layer has to map to exactly one node in each
+    child layer. Nodes in the child layer can be mapped to by multiple nodes in this layer.
+    """
+
+    def __init__(self, child_layers: List[Layer], edges: List[torch.Tensor]):
+        """
+        Initialize the product layer.
+
+        :param child_layers: The child layers of the product layer.
+        :param edges: The edges of the product layer.
+        """
+        super().__init__(child_layers)
+        self.edges = edges
+
+    def validate(self):
+        for edges, child_layer in zip(self.edges, self.child_layers):
+            assert len(edges) == self.number_of_nodes, "The number of nodes must match the number of edges."
+
+    @property
+    def number_of_nodes(self) -> int:
+        return self.edges[0].shape[0]
+
+    @cached_property
+    def columns_of_child_layers(self) -> Tuple[Tuple[int, ...], ...]:
+        result = []
+        for layer in self.child_layers:
+            layer_indices = [self.variables.index(variable) for variable in layer.variables]
+            result.append(tuple(layer_indices))
+        return tuple(result)
+
+    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
+        result = torch.zeros(len(x), self.number_of_nodes)
+        for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
+
+            # calculate the log likelihood over the columns of the child layer
+            ll = layer.log_likelihood(x[:, columns])
+
+            # rearrange the log likelihood to match the edges
+            ll = ll[:, edges]  # shape: (#x, #nodes)
+            # assert ll.shape == (len(x), self.number_of_nodes)
+
+            result += ll
+        return result
 
