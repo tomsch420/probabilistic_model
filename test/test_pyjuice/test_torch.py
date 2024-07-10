@@ -2,16 +2,17 @@ import math
 import unittest
 
 import torch
+from numpy.testing import assert_almost_equal
 from random_events.interval import SimpleInterval
 from random_events.variable import Continuous
+from torch.testing import assert_close
+
 from probabilistic_model.learning.torch.pc import UniformLayer, SumLayer
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit
 
-from numpy.testing import assert_almost_equal
 
 class UniformTestCase(unittest.TestCase):
-
     x = Continuous("x")
     p_x = UniformLayer(x, torch.Tensor([0, 1]), torch.tensor([1, 3]))
 
@@ -35,22 +36,22 @@ class SumTestCase(unittest.TestCase):
     p2_x_by_hand = UniformDistribution(x, SimpleInterval(1, 3))
     p3_x_by_hand = UniformDistribution(x, SimpleInterval(1, 1.5))
     s1_by_hand = SumUnit()
-    s1_by_hand.add_subcircuit(p1_x_by_hand, 1/2)
-    s1_by_hand.add_subcircuit(p2_x_by_hand, 1/4)
-    s1_by_hand.add_subcircuit(p3_x_by_hand, 1/4)
+    s1_by_hand.add_subcircuit(p1_x_by_hand, 1 / 2)
+    s1_by_hand.add_subcircuit(p2_x_by_hand, 1 / 4)
+    s1_by_hand.add_subcircuit(p3_x_by_hand, 1 / 4)
 
     s2_by_hand = SumUnit()
     s2_by_hand.probabilistic_circuit = s1_by_hand.probabilistic_circuit
-    s2_by_hand.add_subcircuit(p1_x_by_hand, 1/3)
-    s2_by_hand.add_subcircuit(p2_x_by_hand, 1/3)
-    s2_by_hand.add_subcircuit(p3_x_by_hand, 1/3)
+    s2_by_hand.add_subcircuit(p1_x_by_hand, 1 / 3)
+    s2_by_hand.add_subcircuit(p2_x_by_hand, 1 / 3)
+    s2_by_hand.add_subcircuit(p3_x_by_hand, 1 / 3)
 
     def test_stack(self):
         self.assertEqual(self.s1.concatenated_weights.shape, (2, 3))
 
     def test_normalizing_constant(self):
-        self.assertEqual(self.s1.log_normalization_constants.tolist(), [torch.log(torch.tensor(3.)),
-                                                                        torch.log(torch.exp(torch.tensor(1)) * 3)])
+        assert_close(self.s1.log_normalization_constants, torch.tensor([torch.log(torch.tensor(4.)),
+                                                                        torch.log(torch.exp(torch.tensor(1)) * 3)]))
 
     def test_log_likelihood(self):
         input = torch.tensor([0.5, 1.5, 2.5]).reshape(-1, 1)

@@ -182,10 +182,18 @@ class SumLayer(InnerLayer):
 
             # get the log likelihoods of the child nodes
             ll = child_layer.log_likelihood(x)
+            # assert ll.shape == (len(x), child_layer.number_of_nodes)
 
-            for index, sum_weights in enumerate(log_weights):
-                sum_node_ll = torch.exp(sum_weights + ll).sum(dim=1)
-                result[:, index] += sum_node_ll
+            # expand the log likelihood of the child nodes to the number of nodes in this layer, i.e.
+            # (#x, #child_nodes, #nodes)
+            ll = ll.unsqueeze(-1).repeat(1, 1, self.number_of_nodes)
+            # assert ll.shape == (len(x), child_layer.number_of_nodes, self.number_of_nodes)
+
+            # weight the log likelihood of the child nodes by the weight for each node of this layer
+            ll = torch.exp(ll + log_weights.T).sum(dim=1)
+
+            # sum the child layer result
+            result += ll
 
         return torch.log(result) - self.log_normalization_constants.repeat(len(x), 1)
 
