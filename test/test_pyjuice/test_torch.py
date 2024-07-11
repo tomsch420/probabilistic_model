@@ -8,7 +8,8 @@ from random_events.interval import SimpleInterval
 from random_events.variable import Continuous
 from torch.testing import assert_close
 
-from probabilistic_model.learning.torch.pc import UniformLayer, SumLayer, ProductLayer
+from probabilistic_model.learning.nyga_distribution import NygaDistribution
+from probabilistic_model.learning.torch.pc import UniformLayer, SumLayer, ProductLayer, Layer
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit, ProductUnit
 
@@ -92,18 +93,25 @@ class ProductTestCase(unittest.TestCase):
 
     def test_log_likelihood(self):
         data = [[0.5, 0.75], [0.9, 0.7], [0.5, 5.5]]
-
         ll_p1_by_hand = self.product_1.log_likelihood(np.array(data))
         ll_p2_by_hand = self.product_2.log_likelihood(np.array(data))
-
-        print("ll_p1_by_hand", ll_p1_by_hand)
-        print("ll_p2_by_hand", ll_p2_by_hand)
-
         ll = self.product.log_likelihood(torch.tensor(data))
-
         self.assertEqual(ll.shape, (3, 2))
-        print("ll", ll)
         assert_almost_equal(ll_p1_by_hand.tolist(), ll[:, 0].tolist())
+        assert_almost_equal(ll_p2_by_hand.tolist(), ll[:, 1].tolist())
+
+
+class FromNygaDistributionTestCase(unittest.TestCase):
+
+    x = Continuous("x")
+    nyga_distribution = NygaDistribution(x, min_likelihood_improvement=0.001, min_samples_per_quantile=300)
+    data = np.random.normal(0, 1, 1000)
+    nyga_distribution.fit(data)
+
+    def test_from_pc(self):
+        # print(self.nyga_distribution.probabilistic_circuit)
+        model = Layer.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit)
+
 
 
 if __name__ == '__main__':
