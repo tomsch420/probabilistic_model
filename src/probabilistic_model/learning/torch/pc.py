@@ -110,7 +110,9 @@ class Layer(nn.Module):
         child_layers = []
 
         for layer_index, nodes in reversed(layer_to_nodes_map.items()):
-            layers = Layer.create_layers_from_nodes(nodes, child_layers, hash_remap)
+            child_layers, hash_remap = zip(*Layer.create_layers_from_nodes(nodes, child_layers, hash_remap))
+        return child_layers[0]
+
 
     @staticmethod
     def create_layers_from_nodes(nodes: List[ProbabilisticCircuitMixin], child_layers,
@@ -343,10 +345,22 @@ class SumLayer(InnerLayer):
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
                                                          child_layers: List[Layer],
-                                                         hash_remap: Dict[int, int]) -> Tuple[Layer, Dict[int, int]]:
+                                                         hash_remaps: List[Dict[int, int]])  \
+            -> Tuple[Layer, Dict[int, int]]:
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        log_weights = torch.stack([torch.tensor([weight for weight, _ in node.weighted_subcircuits]) for node in nodes])
-        print(log_weights)
+
+        number_of_nodes = len(nodes)
+
+        log_weights = []
+
+        for child_layer, hash_remap in zip(child_layers, hash_remaps):
+            weights = torch.zeros((number_of_nodes, child_layer.number_of_nodes))
+            for index, node in enumerate(nodes):
+                for weight, subcircuit in node.weighted_subcircuits:
+                    weights[index, hash_remap[hash(subcircuit)]] = weight
+            log_weights.append(torch.log(weights))
+
+        return cls(child_layers, log_weights), hash_remap
 
 
 class ProductLayer(InnerLayer):

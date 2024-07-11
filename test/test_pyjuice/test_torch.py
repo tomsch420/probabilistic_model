@@ -1,4 +1,5 @@
 import math
+import time
 import unittest
 
 import numpy as np
@@ -104,14 +105,33 @@ class ProductTestCase(unittest.TestCase):
 class FromNygaDistributionTestCase(unittest.TestCase):
 
     x = Continuous("x")
-    nyga_distribution = NygaDistribution(x, min_likelihood_improvement=0.001, min_samples_per_quantile=300)
+    nyga_distribution = NygaDistribution(x, min_likelihood_improvement=0.001, min_samples_per_quantile=10)
     data = np.random.normal(0, 1, 1000)
     nyga_distribution.fit(data)
 
     def test_from_pc(self):
         # print(self.nyga_distribution.probabilistic_circuit)
         model = Layer.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit)
+        self.assertIsInstance(model, SumLayer)
+        self.assertEqual(model.number_of_nodes, 1)
+        self.assertEqual(len(model.log_weights), 1)
+        self.assertEqual(len(model.child_layers), 1)
 
+        uniform_layer = model.child_layers[0]
+        print(uniform_layer.number_of_nodes)
+        self.assertEqual(uniform_layer.number_of_nodes, len(self.nyga_distribution.subcircuits))
+
+        ll_m_begin_time = time.time_ns()
+        ll_m = model.log_likelihood(torch.tensor(self.data).unsqueeze(1))
+        ll_m_time_total = time.time_ns() - ll_m_begin_time
+        print(f"Time for log likelihood calculation: {ll_m_time_total}")
+
+        ll_n_begin_time = time.time_ns()
+        ll_n = self.nyga_distribution.log_likelihood(self.data.reshape(-1, 1))
+        ll_n_time_total = time.time_ns() - ll_n_begin_time
+        print(f"Time for log likelihood calculation: {ll_n_time_total}")
+        print("Speedup: ", ll_n_time_total / ll_m_time_total)
+        assert_almost_equal(ll_m.squeeze().tolist(), ll_n.tolist(), decimal=4)
 
 
 if __name__ == '__main__':
