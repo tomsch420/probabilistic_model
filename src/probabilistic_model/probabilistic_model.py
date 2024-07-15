@@ -221,24 +221,32 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def expectation(self, variables: Iterable[Variable]) -> MomentType:
+    def expectation(self, variables: Optional[Iterable[Variable]] = None) -> MomentType:
         """
         Calculate the expectation of the numeric variables in `variables`.
 
         :param variables: The variable to calculate the expectation of.
         :return: The expectation of the variable.
         """
+
+        if variables is None:
+            variables = [variable for variable in self.variables if isinstance(variable, (Continuous, Integer))]
+
         order = VariableMap({variable: 1 for variable in variables})
         center = VariableMap({variable: 0 for variable in variables})
         return self.moment(order, center)
 
-    def variance(self, variables: Iterable[Variable]) -> MomentType:
+    def variance(self, variables: Optional[Iterable[Variable]] = None) -> MomentType:
         """
         Calculate the variance of the numeric variables in `variables`.
 
         :param variables: The variable to calculate the variance of.
         :return: The variance of the variable.
         """
+
+        if variables is None:
+            variables = [variable for variable in self.variables if isinstance(variable, (Continuous, Integer))]
+
         order = VariableMap({variable: 2 for variable in variables})
         center = self.expectation(variables)
         return self.moment(order, center)
