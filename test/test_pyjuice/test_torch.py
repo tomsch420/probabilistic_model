@@ -3,16 +3,20 @@ import time
 import unittest
 
 import numpy as np
+import pandas as pd
 import torch
 from numpy.testing import assert_almost_equal
 from random_events.interval import SimpleInterval
-from random_events.variable import Continuous
+from random_events.variable import Continuous, Integer, Symbolic
 from torch.testing import assert_close
 
+from probabilistic_model.learning.jpt.jpt import JPT
+from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.learning.torch.pc import UniformLayer, SumLayer, ProductLayer, Layer
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit, ProductUnit
+import plotly.graph_objects as go
 
 
 class UniformTestCase(unittest.TestCase):
@@ -116,22 +120,56 @@ class FromNygaDistributionTestCase(unittest.TestCase):
         self.assertEqual(model.number_of_nodes, 1)
         self.assertEqual(len(model.log_weights), 1)
         self.assertEqual(len(model.child_layers), 1)
+        self.assertEqual(model.log_weights[0].shape, (1, len(self.nyga_distribution.subcircuits)))
 
         uniform_layer = model.child_layers[0]
-        print(uniform_layer.number_of_nodes)
+        # print(uniform_layer.number_of_nodes)
         self.assertEqual(uniform_layer.number_of_nodes, len(self.nyga_distribution.subcircuits))
 
+        tensor_data = torch.tensor(self.data).unsqueeze(1)
         ll_m_begin_time = time.time_ns()
-        ll_m = model.log_likelihood(torch.tensor(self.data).unsqueeze(1))
+        ll_m = model.log_likelihood(tensor_data)
         ll_m_time_total = time.time_ns() - ll_m_begin_time
-        print(f"Time for log likelihood calculation: {ll_m_time_total}")
+        # print(f"Time for log likelihood calculation: {ll_m_time_total}")
 
+        numpy_data = self.data.reshape(-1, 1)
         ll_n_begin_time = time.time_ns()
-        ll_n = self.nyga_distribution.log_likelihood(self.data.reshape(-1, 1))
+        ll_n = self.nyga_distribution.log_likelihood(numpy_data)
         ll_n_time_total = time.time_ns() - ll_n_begin_time
-        print(f"Time for log likelihood calculation: {ll_n_time_total}")
-        print("Speedup: ", ll_n_time_total / ll_m_time_total)
+        # print(f"Time for log likelihood calculation: {ll_n_time_total}")
+        # print("Speedup: ", ll_n_time_total / ll_m_time_total)
         assert_almost_equal(ll_m.squeeze().tolist(), ll_n.tolist(), decimal=4)
+
+
+class FromJPTTestCase(unittest.TestCase):
+    data: pd.DataFrame
+    x: Continuous
+    y: Continuous
+    integer: Integer
+    symbol: Symbolic
+    model: JPT
+
+    def setUp(self):
+        np.random.seed(69)
+        data = pd.DataFrame()
+        size = 1000
+        data["x"] = np.random.normal(2, 4, size)
+        data["y"] = np.random.normal(2, 4, size)
+        data["integer"] = np.concatenate((np.random.randint(low=0, high=4, size=int(size/2)),
+                                          np.random.randint(7, 10, int(size/2))))
+        data["symbol"] = np.random.randint(0, 4, size).astype(str)
+
+        self.x, self.y, self.integer, self.symbol = infer_variables_from_dataframe(data)
+
+        self.model = JPT([self.x, self.y,], min_samples_leaf=0.1)
+        self.data = data[[v.name for v in self.model.variables_from_init]]
+        self.model.fit(self.data)
+        # fig = go.Figure(self.model.plot())
+        # fig.show()
+
+    def test_from_pc(self):
+        lc = Layer.from_probabilistic_circuit(self.model.probabilistic_circuit)
+        print(lc)
 
 
 if __name__ == '__main__':
