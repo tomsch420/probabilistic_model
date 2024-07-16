@@ -152,7 +152,7 @@ class FromJPTTestCase(unittest.TestCase):
     def setUp(self):
         np.random.seed(69)
         data = pd.DataFrame()
-        size = 1000
+        size = 100
         data["x"] = np.random.normal(2, 4, size)
         data["y"] = np.random.normal(2, 4, size)
         data["integer"] = np.concatenate((np.random.randint(low=0, high=4, size=int(size/2)),
@@ -161,7 +161,7 @@ class FromJPTTestCase(unittest.TestCase):
 
         self.x, self.y, self.integer, self.symbol = infer_variables_from_dataframe(data)
 
-        self.model = JPT([self.x, self.y,], min_samples_leaf=0.1)
+        self.model = JPT([self.x, self.y,], min_samples_leaf=10)
         self.data = data[[v.name for v in self.model.variables_from_init]]
         self.model.fit(self.data)
         # fig = go.Figure(self.model.plot())
@@ -169,7 +169,20 @@ class FromJPTTestCase(unittest.TestCase):
 
     def test_from_pc(self):
         lc = Layer.from_probabilistic_circuit(self.model.probabilistic_circuit)
-        print(lc)
+        tensor_data = torch.tensor(self.data.values)
+        lc_ll_begin_time = time.time_ns()
+        lc_ll = lc.log_likelihood(tensor_data)
+        lc_ll_time_total = time.time_ns() - lc_ll_begin_time
+        print(f"Time for log likelihood calculation: {lc_ll_time_total}")
+
+        numpy_data = self.data.to_numpy()
+        model_ll_begin_time = time.time_ns()
+        model_ll = self.model.log_likelihood(numpy_data)
+        model_ll_time_total = time.time_ns() - model_ll_begin_time
+        print(f"Time for log likelihood calculation: {model_ll_time_total}")
+        print("Speedup: ", lc_ll_time_total / model_ll_time_total)
+
+        assert_almost_equal(lc_ll.squeeze().tolist(), model_ll.tolist(), decimal=4)
 
 
 if __name__ == '__main__':

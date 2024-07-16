@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import inspect
 from abc import abstractmethod, ABC
+from collections import UserDict
+from dataclasses import dataclass
 from functools import cached_property
 
 import networkx as nx
@@ -10,12 +12,14 @@ import torch.nn as nn
 from random_events.interval import SimpleInterval, Bound
 from random_events.utils import recursive_subclasses
 from random_events.variable import Continuous, Variable
+from sortedcontainers import SortedSet
 from torch import nextafter
 from typing_extensions import List, Tuple, Type, Dict, Union
 
-from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
+from ...distributions.uniform import UniformDistribution
+from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
+from ...probabilistic_circuit.distributions.distributions import UniformDistribution as UniformUnit
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -106,16 +110,15 @@ class Layer(nn.Module):
         layer_to_nodes_map = {depth: [node for node, n_depth in node_to_depth_map.items() if depth == n_depth] for depth
                               in set(node_to_depth_map.values())}
 
-        hash_remap = {}
         child_layers = []
 
         for layer_index, nodes in reversed(layer_to_nodes_map.items()):
-            child_layers, hash_remap = zip(*Layer.create_layers_from_nodes(nodes, child_layers, hash_remap))
-        return child_layers[0]
+            child_layers = Layer.create_layers_from_nodes(nodes, child_layers)
+        return child_layers[0].layer
 
     @staticmethod
-    def create_layers_from_nodes(nodes: List[ProbabilisticCircuitMixin], child_layers, hash_remap) -> List[
-        Tuple[Layer, Dict[int, int]]]:
+    def create_layers_from_nodes(nodes: List[ProbabilisticCircuitMixin], child_layers: List[AnnotatedLayer]) \
+            -> List[AnnotatedLayer]:
         """
         Create a layer from a list of nodes.
         """
@@ -130,19 +133,17 @@ class Layer(nn.Module):
             for scope in unique_scopes:
                 nodes_of_current_type_and_scope = [node for node in nodes_of_current_type if
                                                    tuple(node.variables) == scope]
-                filtered_child_layers = [(child_layer, hash_remap_) for child_layer, hash_remap_
-                                         in zip(child_layers, hash_remap) if tuple(child_layer.variables) == scope]
-                result.append(
-                    layer_type.create_layer_from_nodes_with_same_type_and_scope(nodes_of_current_type_and_scope,
-                        child_layers, hash_remap))
+                layer = layer_type.create_layer_from_nodes_with_same_type_and_scope(nodes_of_current_type_and_scope,
+                                                                                    child_layers)
+                result.append(layer)
 
         return result
 
     @classmethod
     @abstractmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
-                                                         child_layers: List[Layer], hash_remap: Dict[int, int]) -> \
-    Tuple[Layer, Dict[int, int]]:
+                                                         child_layers: List[AnnotatedLayer]) -> \
+            AnnotatedLayer:
         """
         Create a layer from a list of nodes with the same type and scope.
         """
@@ -250,13 +251,14 @@ class UniformLayer(InputLayer):
         return torch.where((x > self.lower) & (x < self.upper), self.log_pdf_value(), -torch.inf)
 
     @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UniformDistribution],
-                                                         child_layers: List[Layer], hash_remap: Dict[int, int]) -> \
-    Tuple[Layer, Dict[int, int]]:
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UniformUnit],
+                                                         child_layers: List[AnnotatedLayer]) -> \
+            AnnotatedLayer:
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
         bounds = torch.stack([simple_interval_to_open_tensor(node.interval) for node in nodes])
         result = cls(nodes[0].variable, bounds[:, 0], bounds[:, 1])
-        return result, hash_remap
+        return AnnotatedLayer(result, nodes, hash_remap)
+
 
 
 class SumLayer(InnerLayer):
@@ -344,22 +346,28 @@ class SumLayer(InnerLayer):
         return torch.log(result) - self.log_normalization_constants.repeat(len(x), 1)
 
     @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit], child_layers: List[Layer],
-                                                         hash_remaps: List[Dict[int, int]]) -> Tuple[
-        Layer, Dict[int, int]]:
-        hash_remap = {hash(node): index for index, node in enumerate(nodes)}
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
+                                                         child_layers: List[AnnotatedLayer]) -> \
+            AnnotatedLayer:
 
+        result_hash_remap = {hash(node): index for index, node in enumerate(nodes)}
+        variables = tuple(nodes[0].variables)
         number_of_nodes = len(nodes)
 
+        # filter the child layers to only contain layers with the same scope as this one
+        filtered_child_layers = [child_layer for child_layer in child_layers if tuple(child_layer.layer.variables) ==
+                                 variables]
         log_weights = []
-        for child_layer, hash_remap in zip(child_layers, hash_remaps):
-            weights = torch.zeros((number_of_nodes, child_layer.number_of_nodes))
+        for child_layer in filtered_child_layers:
+            weights = torch.zeros((number_of_nodes, child_layer.layer.number_of_nodes))
             for index, node in enumerate(nodes):
                 for weight, subcircuit in node.weighted_subcircuits:
-                    weights[index, hash_remap[hash(subcircuit)]] = weight
+                    if hash(subcircuit) in child_layer.hash_remap:
+                        weights[index, child_layer.hash_remap[hash(subcircuit)]] = weight
             log_weights.append(torch.log(weights))
 
-        return cls(child_layers, log_weights), hash_remap
+        sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
+        return AnnotatedLayer(sum_layer, nodes, result_hash_remap)
 
 
 class ProductLayer(InnerLayer):
@@ -427,7 +435,27 @@ class ProductLayer(InnerLayer):
         return result
 
     @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
-                                                         child_layers: List[Layer], hash_remap: Dict[int, int]) -> \
-            Tuple[Layer, Dict[int, int]]:
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProductUnit],
+                                                         child_layers: List[AnnotatedLayer]) -> \
+            AnnotatedLayer:
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
+        number_of_nodes = len(nodes)
+
+        edges = [torch.full((child_layer.layer.number_of_nodes,), torch.nan).int() for child_layer in child_layers]
+
+        for index, node in enumerate(nodes):
+            for child_layer in child_layers:
+                cl_variables = SortedSet(child_layer.layer.variables)
+                for subcircuit_index, subcircuit in enumerate(node.subcircuits):
+                    if cl_variables == subcircuit.variables:
+                        edges[subcircuit_index][index] = child_layer.hash_remap[hash(subcircuit)]
+        layer = cls([cl.layer for cl in child_layers], edges)
+        return AnnotatedLayer(layer, nodes, hash_remap)
+
+
+
+@dataclass
+class AnnotatedLayer:
+    layer: Layer
+    nodes: List[ProbabilisticCircuitMixin]
+    hash_remap: Dict[int, int]
