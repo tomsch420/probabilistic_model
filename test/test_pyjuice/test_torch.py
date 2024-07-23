@@ -110,12 +110,12 @@ class FromNygaDistributionTestCase(unittest.TestCase):
 
     x = Continuous("x")
     nyga_distribution = NygaDistribution(x, min_likelihood_improvement=0.001, min_samples_per_quantile=10)
-    data = np.random.normal(0, 1, 100000)
+    data = np.random.normal(0, 1, 10000)
     nyga_distribution.fit(data)
 
     def test_from_pc(self):
         print(self.nyga_distribution.probabilistic_circuit)
-        model = Layer.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit)
+        model = Layer.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit).eval()
         self.assertIsInstance(model, SumLayer)
         self.assertEqual(model.number_of_nodes, 1)
         self.assertEqual(len(model.log_weights), 1)
