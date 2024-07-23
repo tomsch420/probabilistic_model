@@ -134,6 +134,11 @@ class FromNygaDistributionTestCase(unittest.TestCase):
         ll_m_time_total = time.time_ns() - ll_m_begin_time
         print(f"Time for log likelihood calculation: {ll_m_time_total}")
 
+        ll_m_begin_time = time.time_ns()
+        ll_m = model_ll(tensor_data)
+        ll_m_time_total = time.time_ns() - ll_m_begin_time
+        print(f"Time for log likelihood calculation: {ll_m_time_total}")
+
         numpy_data = self.data.reshape(-1, 1)
         ll_n_begin_time = time.time_ns()
         ll_n = self.nyga_distribution.log_likelihood(numpy_data)
