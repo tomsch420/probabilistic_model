@@ -21,6 +21,8 @@ from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit,
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
 from ...probabilistic_circuit.distributions.distributions import UniformDistribution as UniformUnit
 
+import numpy as np
+
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
     for subclass in recursive_subclasses(Layer):
@@ -451,8 +453,6 @@ class ProductLayer(InnerLayer):
                         edges[subcircuit_index][index] = child_layer.hash_remap[hash(subcircuit)]
         layer = cls([cl.layer for cl in child_layers], edges)
         return AnnotatedLayer(layer, nodes, hash_remap)
-
-
 
 @dataclass
 class AnnotatedLayer:
