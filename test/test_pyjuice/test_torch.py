@@ -116,6 +116,8 @@ class FromNygaDistributionTestCase(unittest.TestCase):
     def test_from_pc(self):
         print(self.nyga_distribution.probabilistic_circuit)
         model = Layer.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit).eval()
+        model_ll = torch.compile(model.log_likelihood)
+        print(model)
         self.assertIsInstance(model, SumLayer)
         self.assertEqual(model.number_of_nodes, 1)
         self.assertEqual(len(model.log_weights), 1)
@@ -128,7 +130,7 @@ class FromNygaDistributionTestCase(unittest.TestCase):
 
         tensor_data = torch.tensor(self.data).unsqueeze(1)
         ll_m_begin_time = time.time_ns()
-        ll_m = model.log_likelihood(tensor_data)
+        ll_m = model_ll(tensor_data)
         ll_m_time_total = time.time_ns() - ll_m_begin_time
         print(f"Time for log likelihood calculation: {ll_m_time_total}")
 
