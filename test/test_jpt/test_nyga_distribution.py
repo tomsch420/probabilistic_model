@@ -231,16 +231,23 @@ class NygaDistributionTestCase(unittest.TestCase):
 class FittedNygaDistributionTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
     model: NygaDistribution
+    data: np.array
 
     def setUp(self) -> None:
         self.model = NygaDistribution(self.x, min_likelihood_improvement=0.001, min_samples_per_quantile=300)
-        data = np.random.normal(0, 1, 1000).tolist()
+        data = np.random.normal(0, 1, 1000)
         self.model.fit(data)
+        self.data = data
 
     def test_plot(self):
         self.model.support()
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
+
+    def test_likelihood(self):
+        likelihood = self.model.log_likelihood(self.data.reshape(-1, 1))
+        self.assertEqual(likelihood.shape, (1000, ))
+        self.assertGreater(likelihood.min(), -np.inf)
 
 
 if __name__ == '__main__':

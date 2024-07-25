@@ -16,28 +16,25 @@ from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.learning.torch.pc import UniformLayer, SumLayer, ProductLayer, Layer
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit, ProductUnit
-import plotly.graph_objects as go
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 class UniformTestCase(unittest.TestCase):
     x = Continuous("x")
-    p_x = UniformLayer(x, torch.Tensor([0, 1]), torch.tensor([1, 3]))
+    p_x = UniformLayer(x, torch.Tensor([[0, 1], [1, 3]]))
 
     def test_log_likelihood(self):
         ll = self.p_x.log_likelihood(torch.tensor([0.5, 1.5, 4]).reshape(-1, 1))
         self.assertEqual(ll.shape, (3, 2))
-        result = [[-0.0, -torch.inf],
-                  [-torch.inf, -torch.log(torch.tensor(2.))],
-                  [-torch.inf, -torch.inf]]
+        result = [[-0.0, -torch.inf], [-torch.inf, -torch.log(torch.tensor(2.))], [-torch.inf, -torch.inf]]
         self.assertEqual(ll.tolist(), result)
 
 
 class SumTestCase(unittest.TestCase):
     x = Continuous("x")
-    p1_x = UniformLayer(x, torch.Tensor([0]), torch.tensor([1]))
-    p2_x = UniformLayer(x, torch.Tensor([1, 1]), torch.tensor([3, 1.5]))
-    s1 = SumLayer([p1_x, p2_x], log_weights=[torch.tensor([[math.log(2)], [1]]),
-                                             torch.tensor([[0, 0], [1, 1]])])
+    p1_x = UniformLayer(x, torch.Tensor([[0, 1]]))
+    p2_x = UniformLayer(x, torch.Tensor([[1, 3], [1, 1.5]]))
+    s1 = SumLayer([p1_x, p2_x], log_weights=[torch.tensor([[math.log(2)], [1]]), torch.tensor([[0, 0], [1, 1]])])
 
     p1_x_by_hand = UniformDistribution(x, SimpleInterval(0, 1))
     p2_x_by_hand = UniformDistribution(x, SimpleInterval(1, 3))
@@ -57,8 +54,8 @@ class SumTestCase(unittest.TestCase):
         self.assertEqual(self.s1.concatenated_weights.shape, (2, 3))
 
     def test_normalizing_constant(self):
-        assert_close(self.s1.log_normalization_constants, torch.tensor([torch.log(torch.tensor(4.)),
-                                                                        torch.log(torch.exp(torch.tensor(1)) * 3)]))
+        assert_close(self.s1.log_normalization_constants,
+                     torch.tensor([torch.log(torch.tensor(4.)), torch.log(torch.exp(torch.tensor(1)) * 3)]))
 
     def test_log_likelihood(self):
         input = torch.tensor([0.5, 1.5, 2.5]).reshape(-1, 1)
@@ -90,11 +87,10 @@ class ProductTestCase(unittest.TestCase):
     product_2.add_subcircuit(p1_x_by_hand)
     product_2.add_subcircuit(p2_y_by_hand)
 
-    p1_x = UniformLayer(x, torch.Tensor([0]), torch.tensor([1]))
-    p1_y = UniformLayer(y, torch.Tensor([0.5, 5]), torch.tensor([1, 6]))
+    p1_x = UniformLayer(x, torch.Tensor([[0, 1]]))
+    p1_y = UniformLayer(y, torch.Tensor([[0.5, 1], [5, 6]]))
 
-    product = ProductLayer(child_layers=[p1_x, p1_y], edges=[torch.tensor([0, 0]),
-                                                             torch.tensor([0, 1])])
+    product = ProductLayer(child_layers=[p1_x, p1_y], edges=[torch.tensor([0, 0]), torch.tensor([0, 1])])
 
     def test_log_likelihood(self):
         data = [[0.5, 0.75], [0.9, 0.7], [0.5, 5.5]]
@@ -107,7 +103,6 @@ class ProductTestCase(unittest.TestCase):
 
 
 class FromNygaDistributionTestCase(unittest.TestCase):
-
     x = Continuous("x")
     nyga_distribution = NygaDistribution(x, min_likelihood_improvement=0.001, min_samples_per_quantile=10)
     data = np.random.normal(0, 1, 10000)
@@ -116,8 +111,6 @@ class FromNygaDistributionTestCase(unittest.TestCase):
     def test_from_pc(self):
         print(self.nyga_distribution.probabilistic_circuit)
         model = Layer.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit).eval()
-        model_ll = torch.compile(model.log_likelihood)
-        print(model)
         self.assertIsInstance(model, SumLayer)
         self.assertEqual(model.number_of_nodes, 1)
         self.assertEqual(len(model.log_weights), 1)
@@ -125,26 +118,14 @@ class FromNygaDistributionTestCase(unittest.TestCase):
         self.assertEqual(model.log_weights[0].shape, (1, len(self.nyga_distribution.subcircuits)))
 
         uniform_layer = model.child_layers[0]
-        # print(uniform_layer.number_of_nodes)
         self.assertEqual(uniform_layer.number_of_nodes, len(self.nyga_distribution.subcircuits))
 
         tensor_data = torch.tensor(self.data).unsqueeze(1)
-        ll_m_begin_time = time.time_ns()
-        ll_m = model_ll(tensor_data)
-        ll_m_time_total = time.time_ns() - ll_m_begin_time
-        print(f"Time for log likelihood calculation: {ll_m_time_total}")
 
-        ll_m_begin_time = time.time_ns()
-        ll_m = model_ll(tensor_data)
-        ll_m_time_total = time.time_ns() - ll_m_begin_time
-        print(f"Time for log likelihood calculation: {ll_m_time_total}")
-
+        ll_m = model.log_likelihood(tensor_data)
         numpy_data = self.data.reshape(-1, 1)
-        ll_n_begin_time = time.time_ns()
         ll_n = self.nyga_distribution.log_likelihood(numpy_data)
-        ll_n_time_total = time.time_ns() - ll_n_begin_time
-        print(f"Time for log likelihood calculation: {ll_n_time_total}")
-        print("Speedup: ", ll_m_time_total / ll_n_time_total)
+
         assert_almost_equal(ll_m.squeeze().tolist(), ll_n.tolist(), decimal=4)
 
 
@@ -162,21 +143,22 @@ class FromJPTTestCase(unittest.TestCase):
         size = 100
         data["x"] = np.random.normal(2, 4, size)
         data["y"] = np.random.normal(2, 4, size)
-        data["integer"] = np.concatenate((np.random.randint(low=0, high=4, size=int(size/2)),
-                                          np.random.randint(7, 10, int(size/2))))
+        data["integer"] = np.concatenate(
+            (np.random.randint(low=0, high=4, size=int(size / 2)), np.random.randint(7, 10, int(size / 2))))
         data["symbol"] = np.random.randint(0, 4, size).astype(str)
 
-        self.x, self.y, self.integer, self.symbol = infer_variables_from_dataframe(data)
+        self.x, self.y, self.integer, self.symbol = infer_variables_from_dataframe(data, min_samples_per_quantile=4)
 
-        self.model = JPT([self.x, self.y,], min_samples_leaf=10)
+        self.model = JPT([self.x, self.y, ], min_samples_leaf=10)
         self.data = data[[v.name for v in self.model.variables_from_init]]
-        self.model.fit(self.data)
-        # fig = go.Figure(self.model.plot())
-        # fig.show()
+        self.model.fit(self.data)  # fig = go.Figure(self.model.plot())  # fig.show()
 
     def test_from_pc(self):
-        lc = Layer.from_probabilistic_circuit(self.model.probabilistic_circuit)
+        lc = Layer.from_probabilistic_circuit(self.model.probabilistic_circuit).eval()
+
         tensor_data = torch.tensor(self.data.values)
+        lc.log_likelihood(tensor_data[:10])
+        lc.log_likelihood(tensor_data[:10])
         lc_ll_begin_time = time.time_ns()
         lc_ll = lc.log_likelihood(tensor_data)
         lc_ll_time_total = time.time_ns() - lc_ll_begin_time

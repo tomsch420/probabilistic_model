@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import math
 from abc import abstractmethod, ABC
 from collections import UserDict
 from dataclasses import dataclass
@@ -20,8 +21,11 @@ from ...distributions.uniform import UniformDistribution
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
 from ...probabilistic_circuit.distributions.distributions import UniformDistribution as UniformUnit
+import torch_sparse
 
 import numpy as np
+
+from ...utils import sparse_dense_add
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -198,30 +202,28 @@ class UniformLayer(InputLayer):
     The index of the variable that this layer represents.
     """
 
-    lower: torch.Tensor
+    interval: torch.Tensor
     """
-    The lower bounds of the uniform distributions as a tensor of shape (self.number_of_nodes, ).
-    The lower bounds are treated as open intervals.
-    """
-
-    upper: torch.Tensor
-    """
-    The upper bound of the uniform distributions as a tensor of shape (self.number_of_nodes, ).
-    The upper bounds are treated as open intervals.
+    The interval of the uniform distribution as a tensor of shape (num_nodes, 2).
+    The first column contains the lower bounds and the second column the upper bounds.
+    The intervals are treated as open intervals (>/< comparator).
     """
 
-    def __init__(self, variable: Continuous, lower: torch.Tensor, upper: torch.Tensor):
+    def __init__(self, variable: Continuous, interval: torch.Tensor):
         """
         Initialize the uniform layer.
-
-        :param variable: The variable that this layer represents.
-        :param lower: The lower bounds of the uniform distributions.
-        :param upper: The upper bounds of the uniform distributions.
         """
         super().__init__()
         self.variable = variable
-        self.lower = lower
-        self.upper = upper
+        self.interval = interval
+
+    @property
+    def lower(self):
+        return self.interval[:, 0]
+
+    @property
+    def upper(self):
+        return self.interval[:, 1]
 
     @classmethod
     def original_class(cls) -> Tuple[Type, ...]:
@@ -257,10 +259,9 @@ class UniformLayer(InputLayer):
                                                          child_layers: List[AnnotatedLayer]) -> \
             AnnotatedLayer:
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        bounds = torch.stack([simple_interval_to_open_tensor(node.interval) for node in nodes])
-        result = cls(nodes[0].variable, bounds[:, 0], bounds[:, 1])
+        intervals = torch.stack([simple_interval_to_open_tensor(node.interval) for node in nodes])
+        result = cls(nodes[0].variable, intervals)
         return AnnotatedLayer(result, nodes, hash_remap)
-
 
 
 class SumLayer(InnerLayer):
@@ -272,7 +273,7 @@ class SumLayer(InnerLayer):
 
     log_weights: List[torch.Tensor]
     """
-    The logarithmic weights of each edge.
+    The (sparse) logarithmic weights of each edge.
     The list consists of tensor that are interpreted as weights for each child layer.
     
     The first dimension of each tensor must match the number of nodes of this layer and hence has to be 
@@ -305,7 +306,7 @@ class SumLayer(InnerLayer):
         return SumUnit,
 
     @property
-    def log_weighted_child_layers(self):
+    def log_weighted_child_layers(self) -> List[Tuple[torch.Tensor, Union[ProductLayer, InputLayer]]]:
         yield from zip(self.log_weights, self.child_layers)
 
     @property
@@ -317,7 +318,10 @@ class SumLayer(InnerLayer):
         """
         :return: The normalization constants for every node in this sum layer.
         """
-        return torch.logsumexp(self.concatenated_weights, dim=1)
+        if self.concatenated_weights.is_sparse:
+            return torch.sparse.log_softmax(self.concatenated_weights, dim=1)
+        else:
+            return torch.logsumexp(self.concatenated_weights, dim=1)
 
     @property
     def number_of_nodes(self) -> int:
@@ -336,16 +340,39 @@ class SumLayer(InnerLayer):
 
             # expand the log likelihood of the child nodes to the number of nodes in this layer, i.e.
             # (#x, #child_nodes, #nodes)
-            ll = ll.unsqueeze(-1).repeat(1, 1, self.number_of_nodes)
-            # assert ll.shape == (len(x), child_layer.number_of_nodes, self.number_of_nodes)
+            ll = ll.unsqueeze(-1)
+            # assert ll.shape == (len(x), child_layer.number_of_nodes, 1)
 
             # weight the log likelihood of the child nodes by the weight for each node of this layer
-            ll = torch.exp(ll + log_weights.T).sum(dim=1)
+            if not log_weights.is_sparse:
+                # (#x, #child_nodes, #number_of_nodes)
+                ll = log_weights.T + ll
+                ll = torch.exp(ll).sum(dim=1)
+            else:
+                print(self.variables)
+                print(self.number_of_nodes)
+                print(child_layer.number_of_nodes)
+                # decompose the sparse edges into indices and values
+                indices = log_weights.indices()
+
+                # (1, #number_of_edges)
+                values = log_weights.values().unsqueeze(-1).T
+
+                # (#x, #child_nodes, #nodes)
+                ll = ll.repeat(1, 1, self.number_of_nodes)
+
+                # (#x, #child_nodes
+                ll = ll[:, indices[1], indices[0]]
+                print(ll.shape)
+                print(values.shape)
+                ll = values + ll
+                print(ll.shape)
+                # ll = torch.sparse_coo_tensor(indices, ll, is_coalesced=True)
 
             # sum the child layer result
             result += ll
 
-        return torch.log(result) - self.log_normalization_constants.repeat(len(x), 1)
+        return torch.log(result) - self.log_normalization_constants
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
@@ -360,14 +387,25 @@ class SumLayer(InnerLayer):
         filtered_child_layers = [child_layer for child_layer in child_layers if tuple(child_layer.layer.variables) ==
                                  variables]
         log_weights = []
+
         for child_layer in filtered_child_layers:
-            weights = torch.zeros((number_of_nodes, child_layer.layer.number_of_nodes))
+
+            indices = []
+            values = []
+
             for index, node in enumerate(nodes):
                 for weight, subcircuit in node.weighted_subcircuits:
                     if hash(subcircuit) in child_layer.hash_remap:
-                        weights[index, child_layer.hash_remap[hash(subcircuit)]] = weight
-            log_weights.append(torch.log(weights))
+                        indices.append((index, child_layer.hash_remap[hash(subcircuit)]))
+                        # values.append(math.log(weight))
+                        values.append(weight)
 
+            log_weights.append(torch.sparse_coo_tensor(torch.tensor(indices).T,
+                                                       torch.tensor(values),
+                                                       (number_of_nodes, child_layer.layer.number_of_nodes),
+                                                       is_coalesced=True).to_dense().log())
+
+        print(log_weights)
         sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
         return AnnotatedLayer(sum_layer, nodes, result_hash_remap)
 
@@ -381,6 +419,10 @@ class ProductLayer(InnerLayer):
     """
 
     child_layers: List[Union[SumLayer, InputLayer]]
+    """
+    The child of a product layer is a list that contains groups sum units with the same scope or groups of input
+    units with the same scope.
+    """
 
     edges: List[torch.Tensor]
     """
@@ -423,6 +465,7 @@ class ProductLayer(InnerLayer):
             result.append(tuple(layer_indices))
         return tuple(result)
 
+    # @torch.compile
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(x), self.number_of_nodes)
         for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
