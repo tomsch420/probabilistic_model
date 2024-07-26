@@ -1,31 +1,24 @@
 from __future__ import annotations
 
 import inspect
-import math
 from abc import abstractmethod, ABC
-from collections import UserDict
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Optional
 
 import networkx as nx
 import torch
 import torch.nn as nn
-from random_events.interval import SimpleInterval, Bound
+from random_events.product_algebra import Event, SimpleEvent
+from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.utils import recursive_subclasses
-from random_events.variable import Continuous, Variable
+from random_events.variable import Variable
 from sortedcontainers import SortedSet
-from torch import nextafter
-from typing_extensions import List, Tuple, Type, Dict, Union
+from typing_extensions import List, Tuple, Type, Dict, Union, Self
 
-from ...distributions.uniform import UniformDistribution
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
-from ...probabilistic_circuit.distributions.distributions import UniformDistribution as UniformUnit
-import torch_sparse
-
-import numpy as np
-
-from ...utils import sparse_dense_add
+from ...probabilistic_model import ProbabilisticModel
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -37,29 +30,32 @@ def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
     raise TypeError(f"Could not find class for {clazz}")
 
 
-def simple_interval_to_open_tensor(interval: SimpleInterval) -> torch.Tensor:
-    """
-    Convert a simple interval to a tensor where the first element is the lower bound as if it was open and the
-    second is the upper bound as if it was open.
-
-    :param interval: The interval to convert.
-    :return: The tensor.
-    """
-    lower = torch.tensor(interval.lower)
-    if interval.left == Bound.CLOSED:
-        lower = nextafter(lower, lower - 1)
-    upper = torch.tensor(interval.upper)
-    if interval.right == Bound.CLOSED:
-        upper = nextafter(upper, upper + 1)
-    return torch.tensor([lower, upper])
-
-
-class Layer(nn.Module):
+class Layer(nn.Module, ProbabilisticModel):
     """
     Abstract class for Layers of a layered circuit.
 
     Layers have the same scope (set of variables) for every node in them.
     """
+
+    @property
+    def support(self) -> Event:
+        if self.number_of_nodes == 1:
+            return self.support_per_node[0]
+        raise ValueError("The support is only defined for layers with one node. Use the support_per_node property "
+                         "if you want the support of each node.")
+
+    @property
+    @abstractmethod
+    def support_per_node(self) -> List[Event]:
+        raise NotImplementedError
+
+    @property
+    def deterministic(self) -> bool:
+        raise NotImplementedError
+
+    @property
+    def is_root(self) -> bool:
+        return self.number_of_nodes == 1
 
     @classmethod
     def original_class(cls) -> Tuple[Type, ...]:
@@ -99,6 +95,14 @@ class Layer(nn.Module):
             The shape of the log likelihood depends on the number of samples and nodes.
             The shape of the result is (#samples, #nodes).
             The first dimension indexes the samples, the second the nodes.
+        """
+        raise NotImplementedError
+
+    def probability_of_simple_event(self, event: SimpleEvent) -> torch.Tensor:
+        """
+        Calculate the probability of a simple event.
+        :param event: The event
+        :return: The probability of the event for each node in the layer as shape (#nodes, 1).
         """
         raise NotImplementedError
 
@@ -155,6 +159,23 @@ class Layer(nn.Module):
         """
         raise NotImplementedError
 
+    def log_conditional(self, event: Event) -> Tuple[Optional[Layer], float]:
+
+        # skip trivial case
+        if event.is_empty():
+            return None, -torch.inf
+
+        # if the event is easy, don't create a proxy node
+        elif len(event.simple_sets) == 1:
+            conditional, log_probability = self.log_conditional_of_simple_event(event.simple_sets[0])
+            return conditional, log_probability.item()
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
+        raise NotImplementedError
+
 
 class InnerLayer(Layer, ABC):
     """
@@ -177,7 +198,7 @@ class InnerLayer(Layer, ABC):
 
 class InputLayer(Layer, ABC):
     """
-    Abstract base class for input units.
+    Abstract base class for univariate input units.
     Input layers should contain only one type of distribution such that the vectorization of the log likelihood
     calculation works without bottleneck statements like if/else or loops.
     """
@@ -187,81 +208,26 @@ class InputLayer(Layer, ABC):
     The variable of the distributions.
     """
 
+    def __init__(self, variable: Variable):
+        super().__init__()
+        self.variable = variable
+
     @property
     def variables(self) -> Tuple[Variable, ...]:
         return self.variable,
 
-
-class UniformLayer(InputLayer):
-    """
-    A layer that represents a uniform distribution over a single variable.
-    """
-
-    variable: Continuous
-    """
-    The index of the variable that this layer represents.
-    """
-
-    interval: torch.Tensor
-    """
-    The interval of the uniform distribution as a tensor of shape (num_nodes, 2).
-    The first column contains the lower bounds and the second column the upper bounds.
-    The intervals are treated as open intervals (>/< comparator).
-    """
-
-    def __init__(self, variable: Continuous, interval: torch.Tensor):
-        """
-        Initialize the uniform layer.
-        """
-        super().__init__()
-        self.variable = variable
-        self.interval = interval
+    @property
+    def support_per_node(self) -> List[Event]:
+        return [SimpleEvent({self.variable: us}).as_composite_set()
+                for us in self.univariate_support_per_node]
 
     @property
-    def lower(self):
-        return self.interval[:, 0]
-
-    @property
-    def upper(self):
-        return self.interval[:, 1]
-
-    @classmethod
-    def original_class(cls) -> Tuple[Type, ...]:
-        return UniformDistribution,
-
-    def validate(self):
-        assert self.lower.shape == self.upper.shape, "The shapes of the lower and upper bounds must match."
-
-    @property
-    def number_of_nodes(self) -> int:
+    @abstractmethod
+    def univariate_support_per_node(self) -> List[AbstractCompositeSet]:
         """
-        The number of nodes in the layer.
+        The univariate support of the layer for each node.
         """
-        return len(self.lower)
-
-    def log_pdf_value(self) -> torch.Tensor:
-        """
-        Calculate the log-density of the uniform distribution.
-        """
-        return -torch.log(self.upper - self.lower)
-
-    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Calculate the log-likelihood of the uniform distribution.
-
-        :param x: The input tensor of shape (n, 1).
-        :return: The log-likelihood of the uniform distribution.
-        """
-        return torch.where((x > self.lower) & (x < self.upper), self.log_pdf_value(), -torch.inf)
-
-    @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UniformUnit],
-                                                         child_layers: List[AnnotatedLayer]) -> \
-            AnnotatedLayer:
-        hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        intervals = torch.stack([simple_interval_to_open_tensor(node.interval) for node in nodes])
-        result = cls(nodes[0].variable, intervals)
-        return AnnotatedLayer(result, nodes, hash_remap)
+        raise NotImplementedError
 
 
 class SumLayer(InnerLayer):
@@ -330,6 +296,13 @@ class SumLayer(InnerLayer):
         """
         return self.log_weights[0].shape[0]
 
+    @property
+    def support_per_node(self) -> List[Event]:
+        pass
+
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
+        pass
+
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(x), self.number_of_nodes)
 
@@ -349,25 +322,7 @@ class SumLayer(InnerLayer):
                 ll = log_weights.T + ll
                 ll = torch.exp(ll).sum(dim=1)
             else:
-                print(self.variables)
-                print(self.number_of_nodes)
-                print(child_layer.number_of_nodes)
-                # decompose the sparse edges into indices and values
-                indices = log_weights.indices()
-
-                # (1, #number_of_edges)
-                values = log_weights.values().unsqueeze(-1).T
-
-                # (#x, #child_nodes, #nodes)
-                ll = ll.repeat(1, 1, self.number_of_nodes)
-
-                # (#x, #child_nodes
-                ll = ll[:, indices[1], indices[0]]
-                print(ll.shape)
-                print(values.shape)
-                ll = values + ll
-                print(ll.shape)
-                # ll = torch.sparse_coo_tensor(indices, ll, is_coalesced=True)
+                raise NotImplementedError
 
             # sum the child layer result
             result += ll
@@ -405,9 +360,31 @@ class SumLayer(InnerLayer):
                                                        (number_of_nodes, child_layer.layer.number_of_nodes),
                                                        is_coalesced=True).to_dense().log())
 
-        print(log_weights)
         sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
         return AnnotatedLayer(sum_layer, nodes, result_hash_remap)
+
+    @property
+    def support(self) -> Event:
+        raise NotImplementedError
+
+    def probability_of_simple_event(self, event: SimpleEvent) -> torch.Tensor:
+        result = torch.zeros(self.number_of_nodes, 1)
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            child_layer_prob = child_layer.probability_of_simple_event(event)  # shape: (#child_nodes, 1)
+            weights = (torch.exp(log_weights - self.log_normalization_constants.unsqueeze(-1)).
+                       to(child_layer_prob.dtype))  # shape: (#nodes, #child_nodes)
+            probabilities = torch.matmul(weights, child_layer_prob)
+            result += probabilities
+        return result
+
+    def log_mode(self) -> Tuple[Event, float]:
+        pass
+
+    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
+        pass
+
+    def sample(self, amount: int) -> torch.Tensor:
+        pass
 
 
 class ProductLayer(InnerLayer):
@@ -496,6 +473,28 @@ class ProductLayer(InnerLayer):
                         edges[subcircuit_index][index] = child_layer.hash_remap[hash(subcircuit)]
         layer = cls([cl.layer for cl in child_layers], edges)
         return AnnotatedLayer(layer, nodes, hash_remap)
+
+    @property
+    def support(self) -> Event:
+        raise NotImplementedError
+
+    def probability_of_simple_event(self, event: SimpleEvent) -> torch.Tensor:
+        result = torch.ones(self.number_of_nodes, 1)
+        for edges, layer in zip(self.edges, self.child_layers):
+            child_layer_prob = layer.probability_of_simple_event(event)  # shape: (#child_nodes, 1)
+            probabilities = child_layer_prob[edges]  # shape: (#nodes, 1)
+            result *= probabilities
+        return result
+
+    def log_mode(self) -> Tuple[Event, float]:
+        pass
+
+    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
+        pass
+
+    def sample(self, amount: int) -> torch.Tensor:
+        pass
+
 
 @dataclass
 class AnnotatedLayer:

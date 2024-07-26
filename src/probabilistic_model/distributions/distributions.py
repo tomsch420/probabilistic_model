@@ -103,7 +103,7 @@ class ContinuousDistribution(UnivariateDistribution):
         return (upper_bound_cdf - lower_bound_cdf).sum()
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        event = event & self.support()
+        event = event & self.support
         if event.is_empty():
             return None, -np.inf
 

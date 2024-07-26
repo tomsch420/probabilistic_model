@@ -49,6 +49,7 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
     def support_property(self) -> Event:
         return self.support()
 
+
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin, ABC):
 
     def log_conditional_from_interval(self, interval: Interval) -> Tuple[SumUnit, float]:

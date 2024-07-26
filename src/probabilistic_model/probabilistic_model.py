@@ -43,13 +43,14 @@ class ProbabilisticModel(abc.ABC):
         return self.__class__.__name__
 
     @property
-    @abc.abstractmethod
+    @abstractmethod
     def variables(self) -> Tuple[Variable, ...]:
         """
         :return: The variables of the model.
         """
         raise NotImplementedError
 
+    @property
     @abstractmethod
     def support(self) -> Event:
         """

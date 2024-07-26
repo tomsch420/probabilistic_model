@@ -8,8 +8,9 @@ from functools import wraps
 import numpy as np
 import torch
 import torch.sparse
-from random_events.interval import SimpleInterval, Interval
+from random_events.interval import SimpleInterval, Interval, Bound
 from random_events.utils import recursive_subclasses
+from torch import nextafter
 from typing_extensions import Type
 
 
@@ -75,9 +76,18 @@ def timeit(func):
     return timeit_wrapper
 
 
-@torch.compile
-def sparse_dense_add(s, d):
-    i = s._indices()
-    v = s._values()
-    dv = d[i[0, :], i[1, :]]  # get values from relevant entries of dense matrix
-    return s.__class__(i, v + dv, s.size())
+def simple_interval_to_open_tensor(interval: SimpleInterval) -> torch.Tensor:
+    """
+    Convert a simple interval to a tensor where the first element is the lower bound as if it was open and the
+    second is the upper bound as if it was open.
+
+    :param interval: The interval to convert.
+    :return: The tensor.
+    """
+    lower = torch.tensor(interval.lower)
+    if interval.left == Bound.CLOSED:
+        lower = nextafter(lower, lower - 1)
+    upper = torch.tensor(interval.upper)
+    if interval.right == Bound.CLOSED:
+        upper = nextafter(upper, upper + 1)
+    return torch.tensor([lower, upper])
