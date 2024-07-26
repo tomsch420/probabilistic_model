@@ -20,6 +20,7 @@ parts:
     chapters:
     - file: pendulum
     - file: general_remarks
+    - file: glossary
   - caption: API
     chapters:
     - file: autoapi/index
