@@ -64,7 +64,6 @@ class SumTestCase(unittest.TestCase):
         assert_almost_equal([p_by_hand_1, p_by_hand_2], prob[:, 0].tolist())
 
 
-
 class ProductTestCase(unittest.TestCase):
     x = Continuous("x")
     y = Continuous("y")

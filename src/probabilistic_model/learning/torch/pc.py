@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import math
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from functools import cached_property
@@ -285,7 +286,11 @@ class SumLayer(InnerLayer):
         :return: The normalization constants for every node in this sum layer.
         """
         if self.concatenated_weights.is_sparse:
-            return torch.sparse.log_softmax(self.concatenated_weights, dim=1)
+            result = self.concatenated_weights.clone().coalesce()
+            result.values().exp_()
+            result = result.sum(1)
+            result.values().log_()
+            return result.to_dense()
         else:
             return torch.logsumexp(self.concatenated_weights, dim=1)
 
@@ -311,18 +316,23 @@ class SumLayer(InnerLayer):
             ll = child_layer.log_likelihood(x)
             # assert ll.shape == (len(x), child_layer.number_of_nodes)
 
-            # expand the log likelihood of the child nodes to the number of nodes in this layer, i.e.
-            # (#x, #child_nodes, #nodes)
-            ll = ll.unsqueeze(-1)
-            # assert ll.shape == (len(x), child_layer.number_of_nodes, 1)
-
             # weight the log likelihood of the child nodes by the weight for each node of this layer
-            if not log_weights.is_sparse:
+            if log_weights.is_sparse:
+                cloned_log_weights = log_weights.clone()  # clone the weights
+                cloned_log_weights.values().exp_()  # exponent weights
+                ll = ll.exp()  # calculate the exponential of the child log likelihoods
+
+                #  calculate the weighted sum in layer
+                ll = torch.matmul(ll, cloned_log_weights.T)
+            else:
+                # expand the log likelihood of the child nodes to the number of nodes in this layer, i.e.
+                # (#x, #child_nodes, #nodes)
+                ll = ll.unsqueeze(-1)
+                # assert ll.shape == (len(x), child_layer.number_of_nodes, 1)
+
                 # (#x, #child_nodes, #number_of_nodes)
                 ll = log_weights.T + ll
                 ll = torch.exp(ll).sum(dim=1)
-            else:
-                raise NotImplementedError
 
             # sum the child layer result
             result += ll
@@ -352,13 +362,13 @@ class SumLayer(InnerLayer):
                 for weight, subcircuit in node.weighted_subcircuits:
                     if hash(subcircuit) in child_layer.hash_remap:
                         indices.append((index, child_layer.hash_remap[hash(subcircuit)]))
-                        # values.append(math.log(weight))
-                        values.append(weight)
+                        values.append(math.log(weight))
+                        # values.append(weight)
 
             log_weights.append(torch.sparse_coo_tensor(torch.tensor(indices).T,
                                                        torch.tensor(values),
                                                        (number_of_nodes, child_layer.layer.number_of_nodes),
-                                                       is_coalesced=True).to_dense().log())
+                                                       is_coalesced=True).double())
 
         sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
         return AnnotatedLayer(sum_layer, nodes, result_hash_remap)
@@ -474,10 +484,6 @@ class ProductLayer(InnerLayer):
         layer = cls([cl.layer for cl in child_layers], edges)
         return AnnotatedLayer(layer, nodes, hash_remap)
 
-    @property
-    def support(self) -> Event:
-        raise NotImplementedError
-
     def probability_of_simple_event(self, event: SimpleEvent) -> torch.Tensor:
         result = torch.ones(self.number_of_nodes, 1)
         for edges, layer in zip(self.edges, self.child_layers):
@@ -494,6 +500,14 @@ class ProductLayer(InnerLayer):
 
     def sample(self, amount: int) -> torch.Tensor:
         pass
+
+    @property
+    def support_per_node(self) -> List[Event]:
+        pass
+
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
+        pass
+
 
 
 @dataclass
