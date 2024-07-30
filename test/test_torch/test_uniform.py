@@ -7,6 +7,7 @@ from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 from torch.testing import assert_close
 
+from probabilistic_model.learning.torch import SumLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
 
 
@@ -41,6 +42,31 @@ class UniformTestCase(unittest.TestCase):
         result = [SimpleEvent({self.x: open(0, 1)}).as_composite_set(),
                   SimpleEvent({self.x: open(1, 3)}).as_composite_set()]
         self.assertEqual(support, result)
+
+    def test_conditional_singleton(self):
+        event = SimpleEvent({self.x: closed(0.5, 0.5)})
+        layer, ll = self.p_x.log_conditional_of_simple_event(event)
+        self.assertEqual(layer.number_of_nodes, 1)
+        assert_close(torch.tensor([0.5]), layer.location)
+        assert_close(torch.tensor([1.]), layer.density_cap)
+
+    def test_conditional_single_truncation(self):
+        event = SimpleEvent({self.x: closed(0.5, 2.5)})
+        layer, ll = self.p_x.log_conditional_of_simple_event(event)
+        self.assertEqual(layer.number_of_nodes, 2)
+        assert_close(layer.interval, torch.tensor([[0.5, 1], [1, 2.5]]))
+        assert_close(torch.tensor([0.5, 0.75]).reshape(-1, 1).double(), ll)
+
+    def test_conditional_multiple_truncation(self):
+        event = closed(-1, 0.5) | closed(0.7, 0.8) | closed(2., 3.) | closed(3., 4.)
+        layer, ll = self.p_x.log_conditional_from_interval(event)
+        self.assertIsInstance(layer, SumLayer)
+        layer.validate()
+        self.assertEqual(layer.number_of_nodes, 2)
+        self.assertEqual(len(layer.child_layers), 1)
+
+
+        assert_close(torch.tensor([0.5, 0.75]).reshape(-1, 1).double(), ll)
 
 
 if __name__ == '__main__':

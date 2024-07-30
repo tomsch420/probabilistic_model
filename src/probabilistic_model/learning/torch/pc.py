@@ -81,6 +81,7 @@ class Layer(nn.Module, ProbabilisticModel):
         raise NotImplementedError
 
     @property
+    @abstractmethod
     def number_of_nodes(self) -> int:
         """
         The number of nodes in the layer.
@@ -174,7 +175,7 @@ class Layer(nn.Module, ProbabilisticModel):
         raise NotImplementedError
 
     @abstractmethod
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[AnnotatedLayer], torch.Tensor]:
         raise NotImplementedError
 
 
@@ -507,7 +508,6 @@ class ProductLayer(InnerLayer):
 
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
         pass
-
 
 
 @dataclass

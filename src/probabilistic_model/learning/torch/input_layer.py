@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Optional
 
 import random_events
@@ -9,7 +9,6 @@ from random_events.interval import Interval, SimpleInterval, singleton
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.variable import Continuous
-from sortedcontainers import SortedSet
 from typing_extensions import List, Tuple, Self
 
 from .pc import InputLayer, AnnotatedLayer, SumLayer
@@ -39,35 +38,40 @@ class ContinuousLayer(InputLayer, ABC):
         lower_bound_cdf = self.cdf(points[:, (0,)])
         return (upper_bound_cdf - lower_bound_cdf).sum(dim=0).unsqueeze(-1)
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-
+    def log_conditional_of_simple_event(self, event: SimpleEvent):
         if event.is_empty():
             return None, -torch.inf
+        interval: Interval = event[self.variable]
 
-        # extract the interval of the event
-        marginal_event = event.marginal(SortedSet(self.variables))
-        assert len(marginal_event.simple_sets) == 1, "The event must be a simple event."
-        interval = marginal_event.simple_sets[0][self.variable]
+        if interval.is_singleton():
+            return self.log_conditional_from_singleton(interval.simple_sets[0])
 
         if len(interval.simple_sets) == 1:
             return self.log_conditional_from_simple_interval(interval.simple_sets[0])
         else:
             return self.log_conditional_from_interval(interval)
 
-    def log_conditional_from_singletons(self, singletons: List[SimpleInterval]) -> Tuple[DiracDeltaLayer, torch.Tensor]:
+    def log_conditional_from_singleton(self, singleton: SimpleInterval) -> Tuple[DiracDeltaLayer, torch.Tensor]:
         """
-        Calculate the conditional distribution given a list singleton events with p(event) > zero forall events.
+        Calculate the conditional distribution given singleton event.
 
         In this case, the conditional distribution is a Dirac delta distribution and the log-likelihood is chosen
         for the log-probability.
 
-        :param singletons: The singleton events
-        :return: The dirac delta layer and the log-likelihoods with shape (#singletons, 1).
-        """
-        values = torch.tensor([s.lower for s in singletons])
-        log_likelihoods = self.log_likelihood(values.reshape(-1, 1))
-        return DiracDeltaLayer(self.variable, values, log_likelihoods), log_likelihoods
+        This method returns a Dirac delta layer that has at most the same number of nodes as the input layer.
 
+        :param singleton: The singleton event
+        :return: The dirac delta layer and the log-likelihoods with shape (something <= #singletons, 1).
+        """
+        value = singleton.lower
+        log_likelihoods = self.log_likelihood(torch.tensor(value).reshape(-1, 1)).squeeze()  # shape: (#nodes, )
+        possible_indices = (log_likelihoods != -torch.inf).nonzero()[0]  # shape: (#dirac-nodes, )
+        filtered_likelihood = log_likelihoods[possible_indices]
+        locations = torch.full_like(filtered_likelihood, value)
+        layer = DiracDeltaLayer(self.variable, locations, torch.exp(filtered_likelihood))
+        return layer, log_likelihoods
+
+    @abstractmethod
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, torch.Tensor]:
         """
         Calculate the conditional distribution given a simple interval with p(interval) > 0.
@@ -76,26 +80,35 @@ class ContinuousLayer(InputLayer, ABC):
         :param interval: The simple interval
         :return: The conditional distribution and the log-probability of the interval.
         """
-        # form the intersection per node
-        intersection = [interval.intersection_with(node_interval.simple_sets[0]) for node_interval in
-                        self.univariate_support_per_node]
-        singletons = [simple_interval for simple_interval in intersection if simple_interval.is_singleton()]
-        non_singletons = [simple_interval for simple_interval in intersection if not simple_interval.is_singleton()]
-
-
-    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[SumLayer, float]:
-        """
-        Calculate the conditional distribution given a non-singleton, simple interval with p(interval) > 0.
-        :param interval: The simple interval.
-        :return: The conditional distribution and the log-probability of the interval.
-        """
         raise NotImplementedError
 
-    def log_conditional_from_interval(self, interval) -> Tuple[Self, float]:
+    def log_conditional_from_interval(self, interval: Interval) -> Tuple[SumLayer, torch.Tensor]:
         """
         Calculate the conditional distribution given an interval with p(interval) > 0.
         :param interval: The simple interval
         :return: The conditional distribution and the log-probability of the interval.
+        """
+        results = [self.log_conditional_from_simple_interval(simple_interval) for simple_interval in
+                   interval.simple_sets]
+        input_layer = results[0][0]
+        input_layer.merge_with([layer for layer, _ in results[1:]])
+        log_weights = torch.full((self.number_of_nodes, input_layer.number_of_nodes), -torch.inf)
+
+        for i, (layer, log_likelihood) in enumerate(results):
+            log_likelihood = log_likelihood.squeeze()
+            indices = (log_likelihood != -torch.inf).nonzero().squeeze()
+            print(indices)
+            log_weights[indices, i] = log_likelihood[log_likelihood != -torch.inf].float()
+
+        resulting_layer = SumLayer([input_layer], [log_weights])
+        return resulting_layer, resulting_layer.log_normalization_constants
+
+    @abstractmethod
+    def merge_with(self, others: List[Self]):
+        """
+        Merge this layer with another layer inplace.
+
+        :param others: The other layers
         """
         raise NotImplementedError
 
@@ -154,7 +167,6 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
 
 
 class DiracDeltaLayer(ContinuousLayer):
-
     location: torch.Tensor
     """
     The locations of the Dirac delta distributions.
@@ -174,6 +186,10 @@ class DiracDeltaLayer(ContinuousLayer):
     def validate(self):
         assert self.location.shape == self.density_cap.shape, "The shapes of the location and density cap must match."
         assert all(self.density_cap > 0), "The density cap must be positive."
+
+    @property
+    def number_of_nodes(self) -> int:
+        return len(self.location)
 
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
         return torch.where(x == self.location, torch.log(self.density_cap), -torch.inf)
@@ -196,4 +212,3 @@ class DiracDeltaLayer(ContinuousLayer):
 
     def sample(self, amount: int) -> torch.Tensor:
         pass
-

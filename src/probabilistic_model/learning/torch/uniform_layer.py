@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import Tuple, Optional, Union, Type, List
+
+import random_events.interval
+from random_events.interval import SimpleInterval, Bound
 from typing_extensions import Self
 
 import torch
@@ -25,6 +28,9 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
     The index of the variable that this layer represents.
     """
 
+    def merge_with(self, others: List[Self]):
+        self.interval = torch.cat([self.interval] + [other.interval for other in others])
+
     def __init__(self, variable: Continuous, interval: torch.Tensor):
         """
         Initialize the uniform layer.
@@ -40,15 +46,6 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         result = (x - self.lower) / (self.upper - self.lower)
         result = torch.clamp(result, 0, 1)
         return result
-
-    def log_mode(self) -> Tuple[Event, float]:
-        pass
-
-    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
-        pass
-
-    def sample(self, amount: int) -> torch.Tensor:
-        pass
 
     @classmethod
     def original_class(cls) -> Tuple[Type, ...]:
@@ -79,8 +76,20 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         """
         return torch.where(self.included_condition(x), self.log_pdf_value(), -torch.inf)
 
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
+    def log_mode(self) -> Tuple[Event, float]:
         pass
+
+    def sample(self, amount: int) -> torch.Tensor:
+        pass
+
+    def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, torch.Tensor]:
+        probabilities = self.probability_of_simple_event(SimpleEvent({self.variable: interval}))
+        intersections = [interval.intersection_with(SimpleInterval(lower.item(), upper.item(),
+                                                                   Bound.OPEN, Bound.OPEN))
+                         for lower, upper in self.interval]
+        return self.__class__(self.variable, torch.stack([simple_interval_to_open_tensor(intersection)
+                                                          for intersection in intersections
+                                                          if not intersection.is_empty()])), probabilities
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UniformUnit],

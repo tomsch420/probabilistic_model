@@ -29,5 +29,6 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
                   SimpleEvent({self.x: singleton(1)}).as_composite_set()]
         self.assertEqual(support, result)
 
+
 if __name__ == '__main__':
     unittest.main()
