@@ -88,20 +88,37 @@ class ContinuousLayer(InputLayer, ABC):
         :param interval: The simple interval
         :return: The conditional distribution and the log-probability of the interval.
         """
+
+        # get conditionals of each simple interval
         results = [self.log_conditional_from_simple_interval(simple_interval) for simple_interval in
                    interval.simple_sets]
-        input_layer = results[0][0]
-        input_layer.merge_with([layer for layer, _ in results[1:]])
-        log_weights = torch.full((self.number_of_nodes, input_layer.number_of_nodes), -torch.inf)
 
-        for i, (layer, log_likelihood) in enumerate(results):
-            log_likelihood = log_likelihood.squeeze()
-            indices = (log_likelihood != -torch.inf).nonzero().squeeze()
-            print(indices)
-            log_weights[indices, i] = log_likelihood[log_likelihood != -torch.inf].float()
+        # create new input layer
+        possible_layers = [layer for layer, _ in results if layer is not None]
+        input_layer = possible_layers[0]
+        input_layer.merge_with(possible_layers[1:])
+
+        # stack the log probabilities
+        stacked_log_probabilities = torch.stack([log_prob for _, log_prob in results])  # shape: (#simple_intervals, #nodes, 1)
+
+        # calculate log probabilities of the entire interval
+        log_probabilities = stacked_log_probabilities.logsumexp(dim=0)  # shape: (#nodes, 1)
+
+        stacked_log_probabilities.squeeze_()
+
+        # get the rows and columns that are not entirely -inf
+        valid_rows = (stacked_log_probabilities > -torch.inf).any(dim=1)
+        valid_cols = (stacked_log_probabilities > -torch.inf).any(dim=0)
+
+        # remove rows and cols that are entirely -inf
+        valid_log_probabilities = stacked_log_probabilities[valid_rows][:, valid_cols]
+
+        # create sparse log weights
+        log_weights = valid_log_probabilities.T.exp().to_sparse_coo()
+        log_weights.values().log_()
 
         resulting_layer = SumLayer([input_layer], [log_weights])
-        return resulting_layer, resulting_layer.log_normalization_constants
+        return resulting_layer, log_probabilities
 
     @abstractmethod
     def merge_with(self, others: List[Self]):

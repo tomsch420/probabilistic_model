@@ -58,15 +58,28 @@ class UniformTestCase(unittest.TestCase):
         assert_close(torch.tensor([0.5, 0.75]).reshape(-1, 1).double(), ll)
 
     def test_conditional_multiple_truncation(self):
-        event = closed(-1, 0.5) | closed(0.7, 0.8) | closed(2., 3.) | closed(3., 4.)
+        event = closed(-1, 0.5) | closed(0.7, 0.8) | closed(2., 3.) | closed(3.5, 4.)
+
         layer, ll = self.p_x.log_conditional_from_interval(event)
+        assert_close(torch.tensor([0.6, 0.5]).log().reshape(-1, 1).double(), ll)
         self.assertIsInstance(layer, SumLayer)
+
         layer.validate()
         self.assertEqual(layer.number_of_nodes, 2)
         self.assertEqual(len(layer.child_layers), 1)
+        assert_close(layer.child_layers[0].interval, torch.tensor([[0., 0.5], [0.7, 0.8], [2., 3.]]))
 
+        log_weights_by_hand = torch.tensor([[0.5, 0.1, 0.], [0., 0., 0.5]]).to_sparse_coo().double()
+        log_weights_by_hand.values().log_()
+        assert_close(layer.log_weights[0], log_weights_by_hand)
 
-        assert_close(torch.tensor([0.5, 0.75]).reshape(-1, 1).double(), ll)
+    def test_conditional_row_remove(self):
+        event = closed(-1, 0.5) | closed(0.7, 0.8)
+        layer, ll = self.p_x.log_conditional_from_interval(event)
+        assert_close(torch.tensor([0.6, 0.]).log().reshape(-1, 1).double(), ll)
+        self.assertIsInstance(layer, SumLayer)
+        layer.validate()
+        self.assertEqual(layer.number_of_nodes, 1)
 
 
 if __name__ == '__main__':

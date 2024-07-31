@@ -83,13 +83,17 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         pass
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, torch.Tensor]:
-        probabilities = self.probability_of_simple_event(SimpleEvent({self.variable: interval}))
+        probabilities = self.probability_of_simple_event(SimpleEvent({self.variable: interval})).log()
         intersections = [interval.intersection_with(SimpleInterval(lower.item(), upper.item(),
                                                                    Bound.OPEN, Bound.OPEN))
                          for lower, upper in self.interval]
-        return self.__class__(self.variable, torch.stack([simple_interval_to_open_tensor(intersection)
-                                                          for intersection in intersections
-                                                          if not intersection.is_empty()])), probabilities
+
+        non_empty_intervals = [simple_interval_to_open_tensor(intersection) for intersection in intersections
+                               if not intersection.is_empty()]
+        if len(non_empty_intervals) == 0:
+            return None, probabilities
+        new_intervals = torch.stack(non_empty_intervals)
+        return self.__class__(self.variable, new_intervals), probabilities
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UniformUnit],
