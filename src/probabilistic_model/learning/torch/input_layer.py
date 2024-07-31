@@ -121,15 +121,6 @@ class ContinuousLayer(InputLayer, ABC):
         resulting_layer = SumLayer([input_layer], [log_weights])
         return resulting_layer, log_probabilities
 
-    @abstractmethod
-    def merge_with(self, others: List[Self]):
-        """
-        Merge this layer with another layer inplace.
-
-        :param others: The other layers
-        """
-        raise NotImplementedError
-
 
 class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
     """

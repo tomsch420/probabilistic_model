@@ -175,8 +175,24 @@ class Layer(nn.Module, ProbabilisticModel):
         raise NotImplementedError
 
     @abstractmethod
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[AnnotatedLayer], torch.Tensor]:
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
         raise NotImplementedError
+
+    @abstractmethod
+    def merge_with(self, others: List[Self]):
+        """
+        Merge this layer with another layer inplace.
+
+        :param others: The other layers
+        """
+        raise NotImplementedError
+
+    @property
+    def impossible_condition_result(self) -> Tuple[None, torch.Tensor]:
+        """
+        :return: The result that a layer yields if it is conditioned on an event E with P(E) = 0
+        """
+        return None, torch.full((self.number_of_nodes, 1), -torch.inf)
 
 
 class InnerLayer(Layer, ABC):
@@ -196,6 +212,49 @@ class InnerLayer(Layer, ABC):
     @cached_property
     def variables(self) -> Tuple[Variable, ...]:
         return tuple(sorted(set().union(*[child_layer.variables for child_layer in self.child_layers])))
+
+    def log_conditional_of_composite_event(self, event: Event):
+        # get conditionals of each simple event
+        results = [self.log_conditional_of_simple_event(simple_event) for simple_event in event.simple_sets]
+
+        # create new input layer
+        possible_layers = [layer for layer, _ in results if layer is not None]
+
+        if len(possible_layers) == 0:
+            return self.impossible_condition_result
+
+        merged_layer = possible_layers[0]
+        merged_layer.merge_with(possible_layers[1:])
+
+        # stack the log probabilities
+        stacked_log_probabilities = torch.stack([log_prob for _, log_prob in results])  # shape: (#simple_intervals, #nodes, 1)
+
+        # calculate log probabilities of the entire interval
+        log_probabilities = stacked_log_probabilities.logsumexp(dim=0)  # shape: (#nodes, 1)
+
+        stacked_log_probabilities.squeeze_()
+
+        # get the rows and columns that are not entirely -inf
+        valid_rows = (stacked_log_probabilities > -torch.inf).any(dim=1)
+        valid_cols = (stacked_log_probabilities > -torch.inf).any(dim=0)
+
+        # remove rows and cols that are entirely -inf
+        valid_log_probabilities = stacked_log_probabilities[valid_rows][:, valid_cols]
+
+        # create sparse log weights
+        log_weights = valid_log_probabilities.T.exp().to_sparse_coo()
+        log_weights.values().log_()
+
+        resulting_layer = SumLayer([merged_layer], [log_weights])
+        return resulting_layer, log_probabilities
+
+    def log_conditional(self, event: Event) -> Tuple[Optional[Layer], torch.Tensor]:
+        if event.is_empty():
+            return self.impossible_condition_result
+        if len(event.simple_sets) == 1:
+            return self.log_conditional_of_simple_event(event.simple_sets[0])
+        else:
+            return self.log_conditional_of_composite_event(event)
 
 
 class InputLayer(Layer, ABC):
@@ -396,6 +455,9 @@ class SumLayer(InnerLayer):
 
     def sample(self, amount: int) -> torch.Tensor:
         pass
+
+    def merge_with(self, others: List[Self]):
+        raise NotImplementedError
 
 
 class ProductLayer(InnerLayer):
