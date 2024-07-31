@@ -23,6 +23,7 @@ class ContinuousLayer(InputLayer, ABC):
 
     variable: Continuous
 
+    @abstractmethod
     def cdf(self, x: torch.Tensor) -> torch.Tensor:
         """
         Calculate the cumulative distribution function at x.
@@ -184,6 +185,7 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
 
 
 class DiracDeltaLayer(ContinuousLayer):
+
     location: torch.Tensor
     """
     The locations of the Dirac delta distributions.
@@ -221,11 +223,27 @@ class DiracDeltaLayer(ContinuousLayer):
     def univariate_support_per_node(self) -> List[AbstractCompositeSet]:
         return [singleton(location) for location in self.location]
 
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
-        pass
-
     def log_mode(self) -> Tuple[Event, float]:
         pass
 
     def sample(self, amount: int) -> torch.Tensor:
         pass
+
+    def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, torch.Tensor]:
+        probabilities = self.probability_of_simple_event(SimpleEvent({self.variable: interval})).log()
+
+        valid_probabilities = probabilities > -torch.inf
+
+        if not valid_probabilities.any():
+            return None, probabilities
+
+        result = self.__class__(self.variable, self.location[valid_probabilities[:, 0]],
+                                self.density_cap[valid_probabilities[:, 0]])
+        return result, probabilities
+
+    def merge_with(self, others: List[Self]):
+        self.location = torch.cat([self.location] + [other.location for other in others])
+        self.density_cap = torch.cat([self.density_cap] + [other.density_cap for other in others])
+
+    def cdf(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.where(x < self.location, 0, 1)
