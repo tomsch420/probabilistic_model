@@ -9,8 +9,8 @@ from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 from torch.testing import assert_close
 
-from probabilistic_model.learning.torch.uniform_layer import UniformLayer
 from probabilistic_model.learning.torch.pc import SumLayer, ProductLayer
+from probabilistic_model.learning.torch.uniform_layer import UniformLayer
 from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit, ProductUnit
 
@@ -64,6 +64,24 @@ class SumTestCase(unittest.TestCase):
         assert_almost_equal([p_by_hand_1, p_by_hand_2], prob[:, 0].tolist())
 
 
+class SparseSumUnitTestCase(unittest.TestCase):
+    x = Continuous("x")
+    p1_x = UniformLayer(x, torch.Tensor([[0, 1]]))
+    p2_x = UniformLayer(x, torch.Tensor([[1, 3], [1, 1.5]]))
+    s1 = SumLayer([p1_x, p2_x],
+                  log_weights=[torch.tensor([[math.log(2)], [1]]).to_sparse_coo(),
+                               torch.tensor([[0, 0], [1, 1]]).to_sparse_coo()])
+
+    def test_conditional(self):
+        event = SimpleEvent({self.x: closed(2., 3.)}).as_composite_set()
+        c, lp = self.s1.log_conditional(event)
+        c.validate()
+        print(c.log_weights)
+        self.assertEqual(c.number_of_nodes, 1)
+
+
+
+
 class ProductTestCase(unittest.TestCase):
     x = Continuous("x")
     y = Continuous("y")
@@ -95,8 +113,7 @@ class ProductTestCase(unittest.TestCase):
         assert_almost_equal(ll_p2_by_hand.tolist(), ll[:, 1].tolist())
 
     def test_probability(self):
-        event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(3, 5),
-                             self.y: closed(0.5, 2.5) | closed(3, 5)})
+        event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(3, 5), self.y: closed(0.5, 2.5) | closed(3, 5)})
         prob = self.product.probability_of_simple_event(event)
         self.assertEqual(prob.shape, (2, 1))
         p_by_hand_1 = self.product_1.probability_of_simple_event(event)

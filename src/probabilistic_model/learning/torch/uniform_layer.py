@@ -91,7 +91,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         non_empty_intervals = [simple_interval_to_open_tensor(intersection) for intersection in intersections
                                if not intersection.is_empty()]
         if len(non_empty_intervals) == 0:
-            return None, probabilities
+            return self.impossible_condition_result
         new_intervals = torch.stack(non_empty_intervals)
         return self.__class__(self.variable, new_intervals), probabilities
 

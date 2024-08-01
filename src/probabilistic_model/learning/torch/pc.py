@@ -20,6 +20,8 @@ from typing_extensions import List, Tuple, Type, Dict, Union, Self
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
 from ...probabilistic_model import ProbabilisticModel
+from ...utils import (remove_rows_and_cols_where_all, add_sparse_edges_dense_child_tensor_inplace,
+                      sparse_remove_rows_and_cols_where_all)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -161,18 +163,13 @@ class Layer(nn.Module, ProbabilisticModel):
         """
         raise NotImplementedError
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Layer], float]:
-
-        # skip trivial case
+    def log_conditional(self, event: Event) -> Tuple[Optional[Layer], torch.Tensor]:
         if event.is_empty():
-            return None, -torch.inf
-
-        # if the event is easy, don't create a proxy node
-        elif len(event.simple_sets) == 1:
-            conditional, log_probability = self.log_conditional_of_simple_event(event.simple_sets[0])
-            return conditional, log_probability.item()
-
-        raise NotImplementedError
+            return self.impossible_condition_result
+        if len(event.simple_sets) == 1:
+            return self.log_conditional_of_simple_event(event.simple_sets[0])
+        else:
+            return self.log_conditional_of_composite_event(event)
 
     @abstractmethod
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
@@ -247,14 +244,6 @@ class InnerLayer(Layer, ABC):
 
         resulting_layer = SumLayer([merged_layer], [log_weights])
         return resulting_layer, log_probabilities
-
-    def log_conditional(self, event: Event) -> Tuple[Optional[Layer], torch.Tensor]:
-        if event.is_empty():
-            return self.impossible_condition_result
-        if len(event.simple_sets) == 1:
-            return self.log_conditional_of_simple_event(event.simple_sets[0])
-        else:
-            return self.log_conditional_of_composite_event(event)
 
 
 class InputLayer(Layer, ABC):
@@ -365,9 +354,6 @@ class SumLayer(InnerLayer):
     def support_per_node(self) -> List[Event]:
         pass
 
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
-        pass
-
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(x), self.number_of_nodes)
 
@@ -398,6 +384,41 @@ class SumLayer(InnerLayer):
             result += ll
 
         return torch.log(result) - self.log_normalization_constants
+
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
+
+        conditional_child_layers = []
+        conditional_log_weights = []
+
+        probabilities = torch.zeros(self.number_of_nodes, 1)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the conditional of the child layer, log prob shape: (#child_nodes, 1)
+
+            conditional, child_log_prob = child_layer.log_conditional_of_simple_event(event)
+
+            if conditional is None:
+                continue
+
+            if log_weights.is_sparse:
+                log_weights = log_weights.clone().coalesce().double()  # shape: (#nodes, #child_nodes)
+                add_sparse_edges_dense_child_tensor_inplace(log_weights, child_log_prob)
+                probabilities += log_weights.sum(1).unsqueeze(-1)
+
+                sparse_remove_rows_and_cols_where_all(log_weights, -torch.inf)
+                print("-" * 80)
+            else:
+                raise NotImplementedError("Only sparse weights are supported for conditioning.")
+
+            conditional_child_layers.append(conditional)
+            conditional_log_weights.append(log_weights)
+
+
+        if len(conditional_child_layers) == 0:
+            return self.impossible_condition_result
+
+        resulting_layer = SumLayer(conditional_child_layers, conditional_log_weights)
+        return resulting_layer, probabilities.log()
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
@@ -450,9 +471,6 @@ class SumLayer(InnerLayer):
     def log_mode(self) -> Tuple[Event, float]:
         pass
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
-        pass
-
     def sample(self, amount: int) -> torch.Tensor:
         pass
 
@@ -484,6 +502,9 @@ class ProductLayer(InnerLayer):
     Due to decomposability and smoothness every product node in this layer has to map to exactly one node in each
     child layer. Nodes in the child layer can be mapped to by multiple nodes in this layer.
     """
+
+    def merge_with(self, others: List[Self]):
+        pass
 
     def __init__(self, child_layers: List[Layer], edges: List[torch.Tensor]):
         """

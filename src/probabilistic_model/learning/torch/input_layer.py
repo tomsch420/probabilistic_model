@@ -13,7 +13,7 @@ from typing_extensions import List, Tuple, Self
 
 from .pc import InputLayer, AnnotatedLayer, SumLayer
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuitMixin
-from ...utils import interval_as_array
+from ...utils import interval_as_array, remove_rows_and_cols_where_all
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -105,14 +105,9 @@ class ContinuousLayer(InputLayer, ABC):
         # calculate log probabilities of the entire interval
         log_probabilities = stacked_log_probabilities.logsumexp(dim=0)  # shape: (#nodes, 1)
 
-        stacked_log_probabilities.squeeze_()
-
-        # get the rows and columns that are not entirely -inf
-        valid_rows = (stacked_log_probabilities > -torch.inf).any(dim=1)
-        valid_cols = (stacked_log_probabilities > -torch.inf).any(dim=0)
-
-        # remove rows and cols that are entirely -inf
-        valid_log_probabilities = stacked_log_probabilities[valid_rows][:, valid_cols]
+        # remove rows and columns where all elements are -inf
+        stacked_log_probabilities.squeeze_(-1)
+        valid_log_probabilities = remove_rows_and_cols_where_all(stacked_log_probabilities, -torch.inf)
 
         # create sparse log weights
         log_weights = valid_log_probabilities.T.exp().to_sparse_coo()

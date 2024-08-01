@@ -91,3 +91,101 @@ def simple_interval_to_open_tensor(interval: SimpleInterval) -> torch.Tensor:
     if interval.right == Bound.CLOSED:
         upper = nextafter(upper, upper + 1)
     return torch.tensor([lower, upper])
+
+
+def remove_rows_and_cols_where_all(tensor: torch.Tensor, value: float) -> torch.Tensor:
+    """
+    Remove rows and columns from a tensor where all elements are equal to a given value.
+
+    :param tensor: The tensor to remove rows and columns from.
+    :param value: The value to remove.
+    :return: The tensor without the rows and columns.
+
+    Example::
+
+
+        >>> t = torch.tensor([[1, 0, 3], [0, 0, 0], [7, 0, 9]])
+        >>> remove_rows_and_cols_where_all(t, 0)
+        tensor([[1, 3],
+                [7, 9]])
+    """
+
+    # get the rows and columns that are not entirely -inf
+    valid_rows = (tensor != value).any(dim=1)
+    valid_cols = (tensor != value).any(dim=0)
+
+    # remove rows and cols that are entirely -inf
+    valid_tensor = tensor[valid_rows][:, valid_cols]
+    return valid_tensor
+
+
+def sparse_remove_rows_and_cols_where_all(tensor: torch.Tensor, value: float) -> torch.Tensor:
+    # get indices of values where all elements are equal to a given value
+    values = tensor.values()
+    valid_elements = (values != value)
+    valid_indices = tensor.indices()[valid_elements]
+    print(values)
+    print(valid_elements)
+    result = torch.sparse_coo_tensor(valid_indices, values[valid_elements]).coalesce()
+    return result
+
+
+def shrink_index_tensor(index_tensor: torch.Tensor) -> torch.Tensor:
+    """
+    Shrink a 2D index tensor to only contain successive indices.
+    The tensor has shape (#indices, 2).
+
+    Example::
+
+        >>> shrink_index_tensor(torch.tensor([[0, 3], [1, 0], [4, 1]]))
+            tensor([[0, 2], [1, 0], [2, 1]])
+    :param index_tensor: The index tensor to shrink.
+    :return: The shrunken index tensor.
+    """
+
+    result = index_tensor.clone()
+
+    for dim in range(2):
+        unique_indices = torch.unique(index_tensor[:, dim], sorted=True)
+
+        for new_index, unique_index in zip(range(len(unique_indices)), unique_indices):
+            result[result[:, dim] == unique_index, dim] = new_index
+
+    # map the old indices to the new indices
+    return result
+
+def sparse_dense_mul_inplace(sparse: torch.Tensor, dense: torch.Tensor):
+    """
+    Multiply a sparse tensor with a dense tensor element-wise in-place of the sparse tensor.
+    :param sparse: The sparse tensor
+    :param dense: The dense tensor
+    :return: The result of the multiplication
+    """
+    indices = sparse._indices()
+
+    # get values from relevant entries of dense matrix
+    dense_values_at_sparse_indices = dense[indices[0, :], indices[1, :]]
+
+    # multiply sparse values with dense values inplace
+    sparse.values().mul_(dense_values_at_sparse_indices)
+
+def add_sparse_edges_dense_child_tensor_inplace(edges: torch.Tensor, dense_child_tensor: torch.Tensor):
+    """
+    Add a dense tensor to a sparse tensor at the positions specified by the edge tensor.
+
+    This method is used when a weighted sum of the child tensor is necessary.
+    The edges specify how to weight the child tensor and the dense tensor is the child tensor.
+    The result is stored in the sparse tensor.
+
+    :param edges: The edge tensor of shape (#edges, n).
+    :param dense_child_tensor: The dense tensor of shape (n, 1).
+    :return: The result of the addition
+    """
+    # get indices of the sparse tensor
+    indices = edges._indices()
+
+    # get values from relevant entries of dense matrix
+    dense_values_at_sparse_indices = dense_child_tensor[indices[1]].squeeze()
+
+    # add sparse values with dense values inplace
+    edges.values().add_(dense_values_at_sparse_indices)

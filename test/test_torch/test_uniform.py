@@ -55,7 +55,7 @@ class UniformTestCase(unittest.TestCase):
         layer, ll = self.p_x.log_conditional_of_simple_event(event)
         self.assertEqual(layer.number_of_nodes, 2)
         assert_close(layer.interval, torch.tensor([[0.5, 1], [1, 2.5]]))
-        assert_close(torch.tensor([0.5, 0.75]).reshape(-1, 1).double(), ll)
+        assert_close(torch.tensor([0.5, 0.75]).reshape(-1, 1).double().log(), ll)
 
     def test_conditional_multiple_truncation(self):
         event = closed(-1, 0.5) | closed(0.7, 0.8) | closed(2., 3.) | closed(3.5, 4.)
