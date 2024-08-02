@@ -191,6 +191,18 @@ class Layer(nn.Module, ProbabilisticModel):
         """
         return None, torch.full((self.number_of_nodes, 1), -torch.inf)
 
+    @abstractmethod
+    def remove_nodes_inplace(self, remove_indices: Optional[torch.LongTensor] = None,
+                             keep_indices: Optional[torch.LongTensor] = None):
+        """
+        Remove nodes from the layer inplace.
+        Either `remove_indices` or `keep_indices` has to be specified.
+
+        :param remove_indices: The indices of the nodes to remove.
+        :param keep_indices: The indices of the nodes to keep.
+        """
+        raise NotImplementedError
+
 
 class InnerLayer(Layer, ABC):
     """
@@ -597,8 +609,20 @@ class ProductLayer(InnerLayer):
         pass
 
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
-        pass
+        log_probabilities = torch.zeros(self.number_of_nodes, 1)
+        conditional_child_layers = []
 
+        for edges, child_layer in zip(self.edges, self.child_layers):
+            conditional, child_log_prob = child_layer.log_conditional_of_simple_event(event)
+
+            if conditional is None:
+                return self.impossible_condition_result
+
+            log_probabilities += child_log_prob[edges]
+            conditional_child_layers.append(conditional)
+
+        possible_nodes = log_probabilities > -torch.inf
+        return self.__class__(conditional_child_layers, self.edges), log_probabilities
 
 @dataclass
 class AnnotatedLayer:
