@@ -120,13 +120,24 @@ def remove_rows_and_cols_where_all(tensor: torch.Tensor, value: float) -> torch.
 
 
 def sparse_remove_rows_and_cols_where_all(tensor: torch.Tensor, value: float) -> torch.Tensor:
+    """
+    Remove rows and columns from a sparse tensor where all elements are equal to a given value.
+    :param tensor: The sparse tensor to remove rows and columns from.
+    :param value: The value to remove.
+    :return: The tensor without the unnecessary rows and columns.
+    """
     # get indices of values where all elements are equal to a given value
     values = tensor.values()
     valid_elements = (values != value)
-    valid_indices = tensor.indices()[valid_elements]
-    print(values)
-    print(valid_elements)
-    result = torch.sparse_coo_tensor(valid_indices, values[valid_elements]).coalesce()
+
+    # filter indices by valid elements
+    valid_indices = tensor.indices().T[valid_elements]
+
+    # shrink indices
+    valid_indices = shrink_index_tensor(valid_indices)
+
+    # construct result tensor
+    result = torch.sparse_coo_tensor(valid_indices.T, values[valid_elements]).coalesce()
     return result
 
 
@@ -169,6 +180,7 @@ def sparse_dense_mul_inplace(sparse: torch.Tensor, dense: torch.Tensor):
     # multiply sparse values with dense values inplace
     sparse.values().mul_(dense_values_at_sparse_indices)
 
+
 def add_sparse_edges_dense_child_tensor_inplace(edges: torch.Tensor, dense_child_tensor: torch.Tensor):
     """
     Add a dense tensor to a sparse tensor at the positions specified by the edge tensor.
@@ -176,6 +188,20 @@ def add_sparse_edges_dense_child_tensor_inplace(edges: torch.Tensor, dense_child
     This method is used when a weighted sum of the child tensor is necessary.
     The edges specify how to weight the child tensor and the dense tensor is the child tensor.
     The result is stored in the sparse tensor.
+
+
+    Example::
+
+        >>> edges = torch.tensor([[0, 1], [1, 0], [1, 1]]).T
+        >>> values = torch.tensor([2., 3., 4.])
+        >>> sparse = torch.sparse_coo_tensor(edges, values, ).coalesce()
+        >>> dense = torch.tensor([1., 2.]).reshape(-1, 1)
+        >>> add_sparse_edges_dense_child_tensor_inplace(sparse, dense)
+        >>> sprase
+            tensor(indices=tensor([[0, 1, 1],
+                           [1, 0, 1]]),
+           values=tensor([4., 4., 6.]),
+           size=(2, 2), nnz=3, layout=torch.sparse_coo)
 
     :param edges: The edge tensor of shape (#edges, n).
     :param dense_child_tensor: The dense tensor of shape (n, 1).

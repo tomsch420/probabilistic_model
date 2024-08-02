@@ -9,6 +9,7 @@ from probabilistic_model.utils import type_converter
 import torch
 from probabilistic_model.utils import sparse_dense_mul_inplace, add_sparse_edges_dense_child_tensor_inplace, shrink_index_tensor
 
+
 class TypeConversionTestCase(unittest.TestCase):
 
     def test_univariate_distribution_type_converter(self):

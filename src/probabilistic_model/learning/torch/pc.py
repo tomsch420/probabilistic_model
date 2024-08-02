@@ -21,7 +21,7 @@ from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit,
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
 from ...probabilistic_model import ProbabilisticModel
 from ...utils import (remove_rows_and_cols_where_all, add_sparse_edges_dense_child_tensor_inplace,
-                      sparse_remove_rows_and_cols_where_all)
+                      sparse_remove_rows_and_cols_where_all, shrink_index_tensor)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -332,7 +332,7 @@ class SumLayer(InnerLayer):
     @property
     def log_normalization_constants(self) -> torch.Tensor:
         """
-        :return: The normalization constants for every node in this sum layer.
+        :return: The normalization constants for every node in this sum layer with shape (#nodes, ).
         """
         if self.concatenated_weights.is_sparse:
             result = self.concatenated_weights.clone().coalesce()
@@ -390,35 +390,42 @@ class SumLayer(InnerLayer):
         conditional_child_layers = []
         conditional_log_weights = []
 
-        probabilities = torch.zeros(self.number_of_nodes, 1)
+        probabilities = torch.zeros(self.number_of_nodes,)
 
         for log_weights, child_layer in self.log_weighted_child_layers:
-            # get the conditional of the child layer, log prob shape: (#child_nodes, 1)
 
+            # get the conditional of the child layer, log prob shape: (#child_nodes, 1)
             conditional, child_log_prob = child_layer.log_conditional_of_simple_event(event)
 
             if conditional is None:
                 continue
 
             if log_weights.is_sparse:
+                # clone weights
                 log_weights = log_weights.clone().coalesce().double()  # shape: (#nodes, #child_nodes)
-                add_sparse_edges_dense_child_tensor_inplace(log_weights, child_log_prob)
-                probabilities += log_weights.sum(1).unsqueeze(-1)
 
-                sparse_remove_rows_and_cols_where_all(log_weights, -torch.inf)
-                print("-" * 80)
+                # calculate the weighted sum of the child log probabilities
+                add_sparse_edges_dense_child_tensor_inplace(log_weights, child_log_prob)
+
+                # calculate the probabilities of the child nodes in total
+                current_probabilities = log_weights.clone().coalesce()
+                current_probabilities.values().exp_()
+                current_probabilities = current_probabilities.sum(1).to_dense()
+                probabilities += current_probabilities
+
+                # update log weights for conditional layer
+                log_weights = sparse_remove_rows_and_cols_where_all(log_weights, -torch.inf)
             else:
                 raise NotImplementedError("Only sparse weights are supported for conditioning.")
 
             conditional_child_layers.append(conditional)
             conditional_log_weights.append(log_weights)
 
-
         if len(conditional_child_layers) == 0:
             return self.impossible_condition_result
 
         resulting_layer = SumLayer(conditional_child_layers, conditional_log_weights)
-        return resulting_layer, probabilities.log()
+        return resulting_layer, (probabilities.log() - self.log_normalization_constants).reshape(-1, 1)
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],

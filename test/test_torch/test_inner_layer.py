@@ -69,18 +69,21 @@ class SparseSumUnitTestCase(unittest.TestCase):
     p1_x = UniformLayer(x, torch.Tensor([[0, 1]]))
     p2_x = UniformLayer(x, torch.Tensor([[1, 3], [1, 1.5]]))
     s1 = SumLayer([p1_x, p2_x],
-                  log_weights=[torch.tensor([[math.log(2)], [1]]).to_sparse_coo(),
-                               torch.tensor([[0, 0], [1, 1]]).to_sparse_coo()])
+                  log_weights=[torch.tensor([[2], [0]]).log().to_sparse_coo().coalesce(),
+                               torch.tensor([[0, 2], [2, 2]]).to_sparse_coo().coalesce()])
 
     def test_conditional(self):
         event = SimpleEvent({self.x: closed(2., 3.)}).as_composite_set()
         c, lp = self.s1.log_conditional(event)
         c.validate()
-        print(c.log_weights)
         self.assertEqual(c.number_of_nodes, 1)
+        self.assertEqual(len(c.child_layers), 1)
+        self.assertEqual(c.child_layers[0].number_of_nodes, 1)
+        assert_close(lp, torch.tensor([0., 0.25]).reshape(-1, 1).log())
 
-
-
+    def test_log_normalization_constant(self):
+        lz = self.s1.log_normalization_constants
+        print(lz)
 
 class ProductTestCase(unittest.TestCase):
     x = Continuous("x")
