@@ -169,6 +169,9 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
          """
         return self.left_included_condition(x) & self.right_included_condition(x)
 
+    def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
+        self.interval = self.interval[~remove_mask]
+
 
 class DiracDeltaLayer(ContinuousLayer):
 
@@ -233,3 +236,10 @@ class DiracDeltaLayer(ContinuousLayer):
 
     def cdf(self, x: torch.Tensor) -> torch.Tensor:
         return torch.where(x < self.location, 0, 1)
+
+    def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
+        self.location = self.location[~remove_mask]
+        self.density_cap = self.density_cap[~remove_mask]
+
+    def __deepcopy__(self):
+        return self.__class__(self.variable, self.location.clone(), self.density_cap.clone())

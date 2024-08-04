@@ -192,15 +192,18 @@ class Layer(nn.Module, ProbabilisticModel):
         return None, torch.full((self.number_of_nodes, 1), -torch.inf)
 
     @abstractmethod
-    def remove_nodes_inplace(self, remove_indices: Optional[torch.LongTensor] = None,
-                             keep_indices: Optional[torch.LongTensor] = None):
+    def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
         """
         Remove nodes from the layer inplace.
-        Either `remove_indices` or `keep_indices` has to be specified.
 
-        :param remove_indices: The indices of the nodes to remove.
-        :param keep_indices: The indices of the nodes to keep.
+        Also updates possible child layers if needed.
+
+        :param remove_mask: The mask that indicates which nodes to remove.
+        True indicates that the node should be removed.
         """
+        raise NotImplementedError
+
+    def __deepcopy__(self):
         raise NotImplementedError
 
 
@@ -496,6 +499,42 @@ class SumLayer(InnerLayer):
     def merge_with(self, others: List[Self]):
         raise NotImplementedError
 
+    def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
+        keep_mask = ~remove_mask
+        keep_indices = keep_mask.nonzero().squeeze(-1)
+
+        # initialize new log weights and child_layers
+        new_log_weights = []
+        new_child_layers = []
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+
+            # remove nodes (rows)
+            log_weights = log_weights.index_select(0, keep_indices).coalesce()
+
+            # calculate probabilities of child layer nodes
+            child_layer_probabilities = log_weights.clone().coalesce()
+            child_layer_probabilities = child_layer_probabilities.sum(0)  # shape: (#child_nodes,)
+            child_layer_probabilities.values().exp_()
+            child_layer_probabilities = child_layer_probabilities.to_dense()
+
+            # check if there is a child that has no incoming edge anymore
+            remove_mask: torch.BoolTensor = child_layer_probabilities == 0
+            if remove_mask.any():
+                child_layer.remove_nodes_inplace(remove_mask)
+
+            if child_layer.number_of_nodes > 0:
+                new_log_weights.append(sparse_remove_rows_and_cols_where_all(log_weights, -torch.inf))
+                new_child_layers.append(child_layer)
+
+        self.log_weights = new_log_weights
+        self.child_layers = new_child_layers
+
+    def __deepcopy__(self):
+        child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
+        log_weights = [log_weight.clone() for log_weight in self.log_weights]
+        return self.__class__(child_layers, log_weights)
+
 
 class ProductLayer(InnerLayer):
     """
@@ -521,6 +560,9 @@ class ProductLayer(InnerLayer):
     Due to decomposability and smoothness every product node in this layer has to map to exactly one node in each
     child layer. Nodes in the child layer can be mapped to by multiple nodes in this layer.
     """
+
+    def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
+        pass
 
     def merge_with(self, others: List[Self]):
         pass
@@ -623,6 +665,12 @@ class ProductLayer(InnerLayer):
 
         possible_nodes = log_probabilities > -torch.inf
         return self.__class__(conditional_child_layers, self.edges), log_probabilities
+
+    def __deepcopy__(self):
+        child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
+        edges = [edge.clone() for edge in self.edges]
+        return self.__class__(child_layers, edges)
+
 
 @dataclass
 class AnnotatedLayer:

@@ -66,11 +66,11 @@ class SumTestCase(unittest.TestCase):
 
 class SparseSumUnitTestCase(unittest.TestCase):
     x = Continuous("x")
-    p1_x = UniformLayer(x, torch.Tensor([[0, 1]]))
-    p2_x = UniformLayer(x, torch.Tensor([[1, 3], [1, 1.5]]))
+    p1_x = UniformLayer(x, torch.Tensor([[0, 1]]).double())
+    p2_x = UniformLayer(x, torch.Tensor([[1, 3], [1, 1.5]]).double())
     s1 = SumLayer([p1_x, p2_x],
-                  log_weights=[torch.tensor([[2], [0]]).log().to_sparse_coo().coalesce(),
-                               torch.tensor([[0, 2], [2, 2]]).to_sparse_coo().coalesce()])
+                  log_weights=[torch.tensor([[2], [0]]).log().to_sparse_coo().coalesce().double(),
+                               torch.tensor([[0, 2], [2, 2]]).to_sparse_coo().coalesce().double()])
 
     def test_conditional(self):
         event = SimpleEvent({self.x: closed(2., 3.)}).as_composite_set()
@@ -80,6 +80,14 @@ class SparseSumUnitTestCase(unittest.TestCase):
         self.assertEqual(len(c.child_layers), 1)
         self.assertEqual(c.child_layers[0].number_of_nodes, 1)
         assert_close(lp, torch.tensor([0., 0.25]).reshape(-1, 1).log())
+
+    def test_remove_nodes_inplace(self):
+        s1 = self.s1.__deepcopy__()
+        remove_mask = torch.tensor([1, 0]).bool()
+        s1.remove_nodes_inplace(remove_mask)
+        self.assertEqual(s1.number_of_nodes, 1)
+        s1.validate()
+        self.assertEqual(len(s1.child_layers), 1)
 
 
 class ProductTestCase(unittest.TestCase):

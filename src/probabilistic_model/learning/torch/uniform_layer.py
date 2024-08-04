@@ -103,3 +103,6 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         intervals = torch.stack([simple_interval_to_open_tensor(node.interval) for node in nodes])
         result = cls(nodes[0].variable, intervals)
         return AnnotatedLayer(result, nodes, hash_remap)
+
+    def __deepcopy__(self):
+        return self.__class__(self.variable, self.interval.clone())
