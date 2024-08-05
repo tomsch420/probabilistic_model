@@ -684,20 +684,7 @@ class ProductLayer(InnerLayer):
         new_edges = torch.full((len(conditional_child_layers), keep_mask.sum()), -1, dtype=torch.long)
 
         # perform a second pass through the new layers and clean up unused nodes
-        for index, (edges, child_layer) in enumerate(zip(remapped_edges, conditional_child_layers)):
-
-            # get indices to remove in the child layer
-            indices_to_remove_in_child_layer = edges[remove_mask]
-            print(indices_to_remove_in_child_layer)
-            print(child_layer.number_of_nodes)
-            indices_to_remove_in_child_layer = indices_to_remove_in_child_layer[~indices_to_remove_in_child_layer.isnan()]
-
-            # remove nodes in the child layer if needed
-            if len(indices_to_remove_in_child_layer) > 0:
-                remove_mask_child_layer = torch.zeros(child_layer.number_of_nodes).bool()
-                remove_mask_child_layer[indices_to_remove_in_child_layer.long()] = True
-                child_layer.remove_nodes_inplace(remove_mask_child_layer)
-
+        for index, edges in enumerate(remapped_edges):
             # update the edges
             new_edges[index] = edges[keep_mask]
 
