@@ -132,7 +132,6 @@ class ProductTestCase(unittest.TestCase):
         event = SimpleEvent({self.x: closed(0.5, 2.), self.y: closed(4, 5.5)})
         c, lp = self.product.log_conditional_of_simple_event(event)
         c.validate()
-        print(c.edges)
         self.assertEqual(c.number_of_nodes, 1)
         self.assertEqual(len(c.child_layers), 2)
         self.assertEqual(c.child_layers[0].number_of_nodes, 1)

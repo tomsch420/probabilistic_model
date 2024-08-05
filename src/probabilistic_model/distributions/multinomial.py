@@ -49,8 +49,9 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
     def variables(self) -> Tuple[Symbolic, ...]:
         return self._variables
 
+    @property
     def support(self) -> Event:
-        pass
+        raise NotImplementedError
 
     def sample(self, amount: int) -> np.array:
         return None

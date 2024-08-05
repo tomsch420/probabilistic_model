@@ -112,7 +112,7 @@ class ProductUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertIsNone(marginal)
 
     def test_domain(self):
-        domain = self.model.support()
+        domain = self.model.support
         domain_by_hand = SimpleEvent({self.x: closed(0, 1),
                                       self.y: closed(3, 4)}).as_composite_set()
         self.assertEqual(domain, domain_by_hand)
@@ -159,7 +159,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(len(self.model.latent_variable.domain.simple_sets), 2)
 
     def test_domain(self):
-        domain = self.model.support()
+        domain = self.model.support
         domain_by_hand = SimpleEvent({self.x: closed(0, 1) | closed(3, 4)}).as_composite_set()
         self.assertEqual(domain, domain_by_hand)
 
@@ -598,7 +598,7 @@ class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
         # first truncation
         conditional, probability = self.model.conditional(outer_event)
 
-        self.assertEqual(outer_event, conditional.support())
+        self.assertEqual(outer_event, conditional.support)
 
         # go.Figure(conditional.plot(), conditional.plotly_layout()).show()
         samples = list(conditional.sample(500))
@@ -618,7 +618,7 @@ class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
         # go.Figure(conditional.plot(), conditional.plotly_layout()).show()
 
         domain = outer_event & limiting_event
-        self.assertEqual(domain, conditional.support())
+        self.assertEqual(domain, conditional.support)
 
     def test_open_closed_set_bug(self):
         tg1 = TruncatedGaussianDistribution(self.y, open(-0.1, 0.1).simple_sets[0], 0, 1)

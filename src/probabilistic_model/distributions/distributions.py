@@ -29,6 +29,7 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
     def variables(self) -> Tuple[Variable, ...]:
         return (self.variable, )
 
+    @property
     def support(self) -> Event:
         return SimpleEvent({self.variable: self.univariate_support}).as_composite_set()
 

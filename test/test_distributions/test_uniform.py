@@ -22,7 +22,7 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(pdf[2], 0)
 
     def test_probability_of_domain(self):
-        self.assertEqual(self.distribution.probability(self.distribution.support()), 1)
+        self.assertEqual(self.distribution.probability(self.distribution.support), 1)
 
     def test_cdf(self):
         cdf = self.distribution.cdf(np.array([-1, 1, 2]).reshape(-1, 1))
@@ -36,7 +36,7 @@ class UniformDistributionTestCase(unittest.TestCase):
 
     def test_mode(self):
         modes, likelihood = self.distribution.mode()
-        self.assertEqual(modes, self.distribution.support())
+        self.assertEqual(modes, self.distribution.support)
         self.assertEqual(likelihood, 0.5)
 
     def test_sample(self):

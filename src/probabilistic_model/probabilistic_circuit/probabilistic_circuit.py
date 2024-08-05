@@ -110,11 +110,11 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return list(self.probabilistic_circuit.successors(self))
 
     def support(self) -> Event:
-        return self.support_property
+        return self.support
 
     @abstractmethod
     @cached_property
-    def support_property(self) -> Event:
+    def support(self) -> Event:
         raise NotImplementedError
 
     @property
@@ -328,10 +328,10 @@ class SumUnit(ProbabilisticCircuitMixin):
         self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
 
     @cached_property
-    def support_property(self) -> Event:
-        support = self.subcircuits[0].support()
+    def support(self) -> Event:
+        support = self.subcircuits[0].support
         for subcircuit in self.subcircuits[1:]:
-            support |= subcircuit.support()
+            support |= subcircuit.support
         return support
 
     @property
@@ -605,7 +605,7 @@ class SumUnit(ProbabilisticCircuitMixin):
         # for every unique combination of subcircuits
         for subcircuit_a, subcircuit_b in itertools.combinations(self.subcircuits, 2):
             # check if they intersect
-            if not subcircuit_a.support().intersection_with(subcircuit_b.support()).is_empty():
+            if not subcircuit_a.support.intersection_with(subcircuit_b.support).is_empty():
                 return False
 
         # if none intersect, the subcircuit is deterministic
@@ -662,10 +662,10 @@ class ProductUnit(ProbabilisticCircuitMixin):
         return result
 
     @cached_property
-    def support_property(self) -> Event:
-        support = self.subcircuits[0].support()
+    def support(self) -> Event:
+        support = self.subcircuits[0].support
         for subcircuit in self.subcircuits[1:]:
-            support &= subcircuit.support()
+            support &= subcircuit.support
         return support
 
     def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin):
@@ -954,8 +954,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def simplify(self) -> Self:
         return self.root.simplify().probabilistic_circuit
 
+    @property
     def support(self) -> Event:
-        return self.root.support()
+        return self.root.support
 
     def is_decomposable(self) -> bool:
         """

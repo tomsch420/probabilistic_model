@@ -141,7 +141,7 @@ class InductionStepTestCase(unittest.TestCase):
         data = np.random.normal(0, 1, 100).tolist()
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        domain = distribution.support()
+        domain = distribution.support
         self.assertEqual(len(domain.simple_sets), 1)
         self.assertEqual(domain.simple_sets[0][self.variable], closed(min(data), max(data)))
 
@@ -240,7 +240,7 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
         self.data = data
 
     def test_plot(self):
-        self.model.support()
+        self.model.support
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
 

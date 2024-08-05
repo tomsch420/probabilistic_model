@@ -46,9 +46,6 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
     def empty_copy(self) -> Self:
         return self.__copy__()
 
-    def support_property(self) -> Event:
-        return self.support()
-
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin, ABC):
 
@@ -102,7 +99,7 @@ class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, Proba
         variable = sum_unit.variables[0]
         probabilities = MissingDict(float)
 
-        for element in sum_unit.support().simple_sets[0][variable].simple_sets:
+        for element in sum_unit.support.simple_sets[0][variable].simple_sets:
             probability = sum_unit.probability_of_simple_event(SimpleEvent({variable: element}))
             if isinstance(element, SimpleInterval):
                 element = element.lower

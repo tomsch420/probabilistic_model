@@ -331,7 +331,7 @@ class ProbabilisticModel(abc.ABC):
         x_and_likelihood = np.concatenate((samples, likelihood.reshape(-1, 1)), axis=1)
         x_values = []
         y_values = []
-        supporting_interval: Interval = self.support().simple_sets[0][self.variables[0]]
+        supporting_interval: Interval = self.support.simple_sets[0][self.variables[0]]
 
         # add pdf trace for non-zero areas
         for simple_interval in supporting_interval.simple_sets:
@@ -390,7 +390,7 @@ class ProbabilisticModel(abc.ABC):
         :param max_of_samples: The maximum value of the samples.
         :return: A list of traces for the support of the model.
         """
-        supporting_interval: Interval = self.support().simple_sets[0][self.variables[0]]
+        supporting_interval: Interval = self.support.simple_sets[0][self.variables[0]]
         complement_of_support = supporting_interval.complement()
         limiting_interval = closed(min_of_samples - min_of_samples * PADDING_FACTOR_FOR_X_AXIS_IN_PLOT,
                                    max_of_samples + max_of_samples * PADDING_FACTOR_FOR_X_AXIS_IN_PLOT)
