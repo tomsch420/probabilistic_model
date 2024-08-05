@@ -79,7 +79,7 @@ class SparseSumUnitTestCase(unittest.TestCase):
         self.assertEqual(c.number_of_nodes, 1)
         self.assertEqual(len(c.child_layers), 1)
         self.assertEqual(c.child_layers[0].number_of_nodes, 1)
-        assert_close(lp, torch.tensor([0., 0.25]).reshape(-1, 1).log())
+        assert_close(lp, torch.tensor([0., 0.25]).reshape(-1, 1).double().log())
 
     def test_remove_nodes_inplace(self):
         s1 = self.s1.__deepcopy__()
@@ -109,7 +109,7 @@ class ProductTestCase(unittest.TestCase):
     p1_x = UniformLayer(x, torch.Tensor([[0, 1]]))
     p1_y = UniformLayer(y, torch.Tensor([[0.5, 1], [5, 6]]))
 
-    product = ProductLayer(child_layers=[p1_x, p1_y], edges=[torch.tensor([0, 0]), torch.tensor([0, 1])])
+    product = ProductLayer(child_layers=[p1_x, p1_y], edges=torch.tensor([[0, 0], [0, 1]]).long())
 
     def test_log_likelihood(self):
         data = [[0.5, 0.75], [0.9, 0.7], [0.5, 5.5]]
@@ -132,11 +132,21 @@ class ProductTestCase(unittest.TestCase):
         event = SimpleEvent({self.x: closed(0.5, 2.), self.y: closed(4, 5.5)})
         c, lp = self.product.log_conditional_of_simple_event(event)
         c.validate()
+        print(c.edges)
         self.assertEqual(c.number_of_nodes, 1)
         self.assertEqual(len(c.child_layers), 2)
         self.assertEqual(c.child_layers[0].number_of_nodes, 1)
         self.assertEqual(c.child_layers[1].number_of_nodes, 1)
         assert_close(lp, torch.tensor([0., 0.25]).reshape(-1, 1).log())
+
+    def test_remove_nodes_inplace(self):
+        product = self.product.__deepcopy__()
+        remove_mask = torch.tensor([1, 0]).bool()
+        product.remove_nodes_inplace(remove_mask)
+        self.assertEqual(product.number_of_nodes, 1)
+        product.validate()
+        self.assertEqual(len(product.child_layers), 2)
+        self.assertTrue((product.edges == 0).all())
 
 
 if __name__ == '__main__':

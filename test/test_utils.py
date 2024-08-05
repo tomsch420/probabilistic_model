@@ -39,6 +39,10 @@ class TorchUtilsTestCase(unittest.TestCase):
         shrank = shrink_index_tensor(torch.tensor([[0, 3], [1, 0], [4, 1]]))
         assert_close(torch.tensor([[0, 2], [1, 0], [2, 1]]), shrank)
 
+    def test_shrink_index_tensor_1d(self):
+        shrank = shrink_index_tensor(torch.tensor([[0], [1], [4]]))
+        assert_close(torch.tensor([[0], [1], [2]]), shrank)
+
 
 if __name__ == '__main__':
     unittest.main()

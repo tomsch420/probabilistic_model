@@ -550,24 +550,20 @@ class ProductLayer(InnerLayer):
     units with the same scope.
     """
 
-    edges: List[torch.Tensor]
+    edges: torch.LongTensor
     """
-    The edges consist of a list of tensors containing integers.
-    The outer list describes the edges for each child layer.
-    The tensors in the list describe the edges for each node in the child layer.
+    The edges consist of a matrix containing integers.
+    The first dimension describes the edges for each child layer.
+    The second dimension describes the edges for each node in the child layer.
     The integers are interpreted in such a way that n-th value represents a edge (n, edges[n]).
     
     Due to decomposability and smoothness every product node in this layer has to map to exactly one node in each
     child layer. Nodes in the child layer can be mapped to by multiple nodes in this layer.
+    
+    The shape is (#child_layers, #nodes).
     """
 
-    def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
-        pass
-
-    def merge_with(self, others: List[Self]):
-        pass
-
-    def __init__(self, child_layers: List[Layer], edges: List[torch.Tensor]):
+    def __init__(self, child_layers: List[Layer], edges: torch.LongTensor):
         """
         Initialize the product layer.
 
@@ -578,8 +574,9 @@ class ProductLayer(InnerLayer):
         self.edges = edges
 
     def validate(self):
-        for edges, child_layer in zip(self.edges, self.child_layers):
-            assert len(edges) == self.number_of_nodes, "The number of nodes must match the number of edges."
+        assert self.edges.shape == (len(self.child_layers), self.number_of_nodes), \
+            (f"The shape of the edges must be {(len(self.child_layers), self.number_of_nodes)} "
+             f"but was {self.edges.shape}.")
 
     @classmethod
     def original_class(cls) -> Tuple[Type, ...]:
@@ -587,7 +584,7 @@ class ProductLayer(InnerLayer):
 
     @property
     def number_of_nodes(self) -> int:
-        return self.edges[0].shape[0]
+        return self.edges.shape[1]
 
     @cached_property
     def columns_of_child_layers(self) -> Tuple[Tuple[int, ...], ...]:
@@ -651,24 +648,86 @@ class ProductLayer(InnerLayer):
         pass
 
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
+
+        # initialize the conditional child layers and the log probabilities
         log_probabilities = torch.zeros(self.number_of_nodes, 1)
         conditional_child_layers = []
 
-        for edges, child_layer in zip(self.edges, self.child_layers):
+        # create new edge matrix with nan as default value. nan indicates that an edge got deleted
+        remapped_edges = torch.full_like(self.edges, torch.nan, dtype=torch.float)
+
+        # for edge bundle and child layer
+        for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
+
+            # condition the child layer
             conditional, child_log_prob = child_layer.log_conditional_of_simple_event(event)
 
+            # if it is entirely impossible, this layer also is
             if conditional is None:
                 return self.impossible_condition_result
 
+            # create the remapping of the node indices. nan indicates the node got deleted
+            new_node_indices = torch.arange(conditional.number_of_nodes)
+            layer_remap = torch.full((child_layer.number_of_nodes, ), torch.nan)
+            layer_remap[child_log_prob.squeeze() > -torch.inf] = new_node_indices.float()
+            
+            # update the edges
+            remapped_edges[index] = layer_remap[edges]
+
+            # update the log probabilities and child layers
             log_probabilities += child_log_prob[edges]
             conditional_child_layers.append(conditional)
 
-        possible_nodes = log_probabilities > -torch.inf
-        return self.__class__(conditional_child_layers, self.edges), log_probabilities
+        # get nodes that should be removed as boolean mask
+        remove_mask = log_probabilities.squeeze(-1) == -torch.inf  # shape (#nodes, )
+        keep_mask = ~remove_mask
+        new_edges = torch.full((len(conditional_child_layers), keep_mask.sum()), -1, dtype=torch.long)
+
+        # perform a second pass through the new layers and clean up unused nodes
+        for index, (edges, child_layer) in enumerate(zip(remapped_edges, conditional_child_layers)):
+
+            # get indices to remove in the child layer
+            indices_to_remove_in_child_layer = edges[remove_mask]
+            print(indices_to_remove_in_child_layer)
+            print(child_layer.number_of_nodes)
+            indices_to_remove_in_child_layer = indices_to_remove_in_child_layer[~indices_to_remove_in_child_layer.isnan()]
+
+            # remove nodes in the child layer if needed
+            if len(indices_to_remove_in_child_layer) > 0:
+                remove_mask_child_layer = torch.zeros(child_layer.number_of_nodes).bool()
+                remove_mask_child_layer[indices_to_remove_in_child_layer.long()] = True
+                child_layer.remove_nodes_inplace(remove_mask_child_layer)
+
+            # update the edges
+            new_edges[index] = edges[keep_mask]
+
+        result = self.__class__(conditional_child_layers, new_edges)
+        return result, log_probabilities
+
+    def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
+
+        # remove nodes from the layer
+        self.edges = self.edges[:, ~remove_mask]
+
+        # remove nodes from the child layers
+        for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
+
+            # create a removal mask for the child layer
+            child_layer_remove_mask = torch.ones(child_layer.number_of_nodes).bool()
+            child_layer_remove_mask[edges] = False
+
+            # remove nodes from the child layer
+            child_layer.remove_nodes_inplace(child_layer_remove_mask)
+
+            # update the edges of this layer
+            self.edges[index] = shrink_index_tensor(edges.unsqueeze(-1)).squeeze(-1)
+
+    def merge_with(self, others: List[Self]):
+        pass
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
-        edges = [edge.clone() for edge in self.edges]
+        edges = self.edges.clone()
         return self.__class__(child_layers, edges)
 
 

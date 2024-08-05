@@ -156,7 +156,7 @@ def shrink_index_tensor(index_tensor: torch.Tensor) -> torch.Tensor:
 
     result = index_tensor.clone()
 
-    for dim in range(2):
+    for dim in range(index_tensor.shape[1]):
         unique_indices = torch.unique(index_tensor[:, dim], sorted=True)
 
         for new_index, unique_index in zip(range(len(unique_indices)), unique_indices):
