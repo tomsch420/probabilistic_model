@@ -40,6 +40,9 @@ class Layer(nn.Module, ProbabilisticModel):
     Layers have the same scope (set of variables) for every node in them.
     """
 
+    def mergable_with(self, other: Layer):
+        return self.variables == other.variables and type(self) == type(other)
+
     @property
     def support(self) -> Event:
         if self.number_of_nodes == 1:
@@ -440,9 +443,6 @@ class SumLayer(InnerLayer, ABC):
     def sample(self, amount: int) -> torch.Tensor:
         raise NotImplementedError
 
-    def merge_with(self, others: List[Self]):
-        raise NotImplementedError
-
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
         log_weights = [log_weight.clone() for log_weight in self.log_weights]
@@ -450,6 +450,9 @@ class SumLayer(InnerLayer, ABC):
 
 
 class DenseSumLayer(SumLayer):
+
+    def merge_with(self, others: List[Self]):
+        pass
 
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
         raise NotImplementedError
@@ -485,6 +488,12 @@ class DenseSumLayer(SumLayer):
 
 
 class SparseSumLayer(SumLayer):
+
+    def merge_with_one_layer(self, other: Self):
+        ...
+
+    def merge_with(self, others: List[Self]):
+        pass
 
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(x), self.number_of_nodes, dtype=torch.double)
