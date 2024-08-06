@@ -11,7 +11,7 @@ from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.variable import Continuous
 from typing_extensions import List, Tuple, Self
 
-from .pc import InputLayer, AnnotatedLayer, SumLayer
+from .pc import InputLayer, AnnotatedLayer, SparseSumLayer
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuitMixin
 from ...utils import interval_as_array, remove_rows_and_cols_where_all
 
@@ -113,7 +113,7 @@ class ContinuousLayer(InputLayer, ABC):
         log_weights = valid_log_probabilities.T.exp().to_sparse_coo()
         log_weights.values().log_()
 
-        resulting_layer = SumLayer([input_layer], [log_weights])
+        resulting_layer = SparseSumLayer([input_layer], [log_weights])
         return resulting_layer, log_probabilities
 
 

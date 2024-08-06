@@ -5,7 +5,7 @@ import math
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Optional
+from typing import Optional, Iterator
 
 import networkx as nx
 import torch
@@ -50,20 +50,30 @@ class Layer(nn.Module, ProbabilisticModel):
     @property
     @abstractmethod
     def support_per_node(self) -> List[Event]:
+        """
+        :return: The support of each node in the layer as a list of events.
+        """
         raise NotImplementedError
 
     @property
-    def deterministic(self) -> bool:
+    def deterministic(self) -> torch.BoolTensor:
+        """
+        :return: Rather, the layer is deterministic for each node as a boolean tensor.
+        """
         raise NotImplementedError
 
     @property
     def is_root(self) -> bool:
+        """
+        TODO there could be multiple circuits with one node that are not the root circuit
+        :return: Whether the layer is the root layer of the circuit.
+        """
         return self.number_of_nodes == 1
 
     @classmethod
     def original_class(cls) -> Tuple[Type, ...]:
         """
-        The original class of the layer.
+        :return: The tuple of matching classes of the layer in the probabilistic_model.probabilistic_circuit package.
         """
         return tuple()
 
@@ -71,7 +81,7 @@ class Layer(nn.Module, ProbabilisticModel):
     @abstractmethod
     def variables(self) -> Tuple[Variable, ...]:
         """
-        The variables of the layer.
+        :return: The variables of the layer.
         """
         raise NotImplementedError
 
@@ -102,11 +112,12 @@ class Layer(nn.Module, ProbabilisticModel):
         """
         raise NotImplementedError
 
-    def probability_of_simple_event(self, event: SimpleEvent) -> torch.Tensor:
+    def probability_of_simple_event(self, event: SimpleEvent) -> torch.DoubleTensor:
         """
         Calculate the probability of a simple event.
-        :param event: The event
-        :return: The probability of the event for each node in the layer as shape (#nodes, 1).
+        :param event: The simple event.
+        :return: The probability of the event for each node in the layer.
+        The result is a double tensor with shape (#nodes,).
         """
         raise NotImplementedError
 
@@ -163,16 +174,49 @@ class Layer(nn.Module, ProbabilisticModel):
         """
         raise NotImplementedError
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Layer], torch.Tensor]:
+    def log_conditional(self, event: Event) -> Tuple[Optional[Layer], float]:
         if event.is_empty():
-            return self.impossible_condition_result
-        if len(event.simple_sets) == 1:
-            return self.log_conditional_of_simple_event(event.simple_sets[0])
+            conditional, log_prob = self.impossible_condition_result
+        elif len(event.simple_sets) == 1:
+            conditional, log_prob = self.log_conditional_of_simple_event(event.simple_sets[0])
         else:
-            return self.log_conditional_of_composite_event(event)
+            conditional, log_prob = self.log_conditional_of_composite_event(event)
+        return conditional, log_prob.item()
+
+    def log_conditional_of_composite_event(self, event: Event) -> Tuple[Optional[Layer], torch.Tensor]:
+        """
+        :param event: The composite event.
+        :return: The conditional distribution and the log probability of the event.
+        The log probability is a double tensor with shape (#nodes,).
+        """
+        # get conditionals of each simple event
+        results = [self.log_conditional_of_simple_event(simple_event) for simple_event in event.simple_sets]
+
+        # filter valid input layers
+        possible_layers = [(layer, ll) for layer, ll in results if layer is not None]
+
+        # if the result is impossible, return it
+        if len(possible_layers) == 0:
+            return self.impossible_condition_result
+
+        # create new log weights and new layers inefficiently TODO: some merging of layers if possible
+        log_weights = [torch.sparse_coo_tensor(torch.tensor([[0], [0]]), ll) for _, ll in possible_layers]
+        layers = [layer for layer, _ in possible_layers]
+        # construct result
+        resulting_layer = SparseSumLayer(layers, log_weights)
+
+        # calculate log probability
+        log_prob = resulting_layer.log_normalization_constants
+
+        return resulting_layer, log_prob
 
     @abstractmethod
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
+        """
+        :param event: The simple event.
+        :return: The conditional distribution and the log probability of the event.
+        The log probability is a double tensor with shape (#nodes,).
+        """
         raise NotImplementedError
 
     @abstractmethod
@@ -189,7 +233,7 @@ class Layer(nn.Module, ProbabilisticModel):
         """
         :return: The result that a layer yields if it is conditioned on an event E with P(E) = 0
         """
-        return None, torch.full((self.number_of_nodes, 1), -torch.inf)
+        return None, torch.full((self.number_of_nodes,), -torch.inf, dtype=torch.double)
 
     @abstractmethod
     def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
@@ -209,7 +253,7 @@ class Layer(nn.Module, ProbabilisticModel):
 
 class InnerLayer(Layer, ABC):
     """
-    Class for inner layers
+    Abstract Base Class for inner layers
     """
 
     child_layers: List[Layer]
@@ -225,46 +269,12 @@ class InnerLayer(Layer, ABC):
     def variables(self) -> Tuple[Variable, ...]:
         return tuple(sorted(set().union(*[child_layer.variables for child_layer in self.child_layers])))
 
-    def log_conditional_of_composite_event(self, event: Event):
-        # get conditionals of each simple event
-        results = [self.log_conditional_of_simple_event(simple_event) for simple_event in event.simple_sets]
-
-        # create new input layer
-        possible_layers = [layer for layer, _ in results if layer is not None]
-
-        if len(possible_layers) == 0:
-            return self.impossible_condition_result
-
-        merged_layer = possible_layers[0]
-        merged_layer.merge_with(possible_layers[1:])
-
-        # stack the log probabilities
-        stacked_log_probabilities = torch.stack([log_prob for _, log_prob in results])  # shape: (#simple_intervals, #nodes, 1)
-
-        # calculate log probabilities of the entire interval
-        log_probabilities = stacked_log_probabilities.logsumexp(dim=0)  # shape: (#nodes, 1)
-
-        stacked_log_probabilities.squeeze_()
-
-        # get the rows and columns that are not entirely -inf
-        valid_rows = (stacked_log_probabilities > -torch.inf).any(dim=1)
-        valid_cols = (stacked_log_probabilities > -torch.inf).any(dim=0)
-
-        # remove rows and cols that are entirely -inf
-        valid_log_probabilities = stacked_log_probabilities[valid_rows][:, valid_cols]
-
-        # create sparse log weights
-        log_weights = valid_log_probabilities.T.exp().to_sparse_coo()
-        log_weights.values().log_()
-
-        resulting_layer = SumLayer([merged_layer], [log_weights])
-        return resulting_layer, log_probabilities
-
 
 class InputLayer(Layer, ABC):
     """
     Abstract base class for univariate input units.
-    Input layers should contain only one type of distribution such that the vectorization of the log likelihood
+
+    Input layers contain only one type of distribution such that the vectorization of the log likelihood
     calculation works without bottleneck statements like if/else or loops.
     """
 
@@ -295,12 +305,21 @@ class InputLayer(Layer, ABC):
         raise NotImplementedError
 
 
-class SumLayer(InnerLayer):
+class SumLayer(InnerLayer, ABC):
     """
     A layer that represents the sum of multiple other layers.
     """
 
     child_layers: Union[List[[ProductLayer]], List[InputLayer]]
+    """
+    Child layers of the sum unit. 
+            
+    Smoothness Requires that all sums go over the same scope. Hence the child layers have to have the same scope.
+    
+    In a smooth sum unit the child layers are 
+        - product layers if the sum is multivariate
+        - input layers if the sum is univariate
+    """
 
     log_weights: List[torch.Tensor]
     """
@@ -310,8 +329,9 @@ class SumLayer(InnerLayer):
     The first dimension of each tensor must match the number of nodes of this layer and hence has to be 
     constant.
     The second dimension of each tensor must match the number of nodes of the  respective child layer.
-
+    
     The weights are normalized per row.
+    Each weight tensor is of type double.
     """
 
     def __init__(self, child_layers: List[Layer], log_weights: List[torch.Tensor]):
@@ -337,110 +357,34 @@ class SumLayer(InnerLayer):
         return SumUnit,
 
     @property
-    def log_weighted_child_layers(self) -> List[Tuple[torch.Tensor, Union[ProductLayer, InputLayer]]]:
+    def log_weighted_child_layers(self) -> Iterator[Tuple[torch.Tensor, Union[ProductLayer, InputLayer]]]:
+        """
+        :returns: Yields log weights and the child layers zipped together.
+        """
         yield from zip(self.log_weights, self.child_layers)
 
     @property
     def concatenated_weights(self) -> torch.Tensor:
+        """
+        :return: The concatenated weights of the child layers for each node.
+        """
         return torch.cat(self.log_weights, dim=1)
 
     @property
+    @abstractmethod
     def log_normalization_constants(self) -> torch.Tensor:
         """
-        :return: The normalization constants for every node in this sum layer with shape (#nodes, ).
+        :return: The normalization constants for every node in this sum layer with shape (#nodes,).
         """
-        if self.concatenated_weights.is_sparse:
-            result = self.concatenated_weights.clone().coalesce()
-            result.values().exp_()
-            result = result.sum(1)
-            result.values().log_()
-            return result.to_dense()
-        else:
-            return torch.logsumexp(self.concatenated_weights, dim=1)
+        raise NotImplementedError
 
     @property
     def number_of_nodes(self) -> int:
-        """
-        The number of nodes in the layer.
-        """
         return self.log_weights[0].shape[0]
 
     @property
     def support_per_node(self) -> List[Event]:
         pass
-
-    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
-        result = torch.zeros(len(x), self.number_of_nodes)
-
-        for log_weights, child_layer in self.log_weighted_child_layers:
-            # get the log likelihoods of the child nodes
-            ll = child_layer.log_likelihood(x)
-            # assert ll.shape == (len(x), child_layer.number_of_nodes)
-
-            # weight the log likelihood of the child nodes by the weight for each node of this layer
-            if log_weights.is_sparse:
-                cloned_log_weights = log_weights.clone()  # clone the weights
-                cloned_log_weights.values().exp_()  # exponent weights
-                ll = ll.exp()  # calculate the exponential of the child log likelihoods
-
-                #  calculate the weighted sum in layer
-                ll = torch.matmul(ll, cloned_log_weights.T)
-            else:
-                # expand the log likelihood of the child nodes to the number of nodes in this layer, i.e.
-                # (#x, #child_nodes, #nodes)
-                ll = ll.unsqueeze(-1)
-                # assert ll.shape == (len(x), child_layer.number_of_nodes, 1)
-
-                # (#x, #child_nodes, #number_of_nodes)
-                ll = log_weights.T + ll
-                ll = torch.exp(ll).sum(dim=1)
-
-            # sum the child layer result
-            result += ll
-
-        return torch.log(result) - self.log_normalization_constants
-
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
-
-        conditional_child_layers = []
-        conditional_log_weights = []
-
-        probabilities = torch.zeros(self.number_of_nodes,)
-
-        for log_weights, child_layer in self.log_weighted_child_layers:
-
-            # get the conditional of the child layer, log prob shape: (#child_nodes, 1)
-            conditional, child_log_prob = child_layer.log_conditional_of_simple_event(event)
-
-            if conditional is None:
-                continue
-
-            if log_weights.is_sparse:
-                # clone weights
-                log_weights = log_weights.clone().coalesce().double()  # shape: (#nodes, #child_nodes)
-
-                # calculate the weighted sum of the child log probabilities
-                add_sparse_edges_dense_child_tensor_inplace(log_weights, child_log_prob)
-
-                # calculate the probabilities of the child nodes in total
-                current_probabilities = log_weights.clone().coalesce()
-                current_probabilities.values().exp_()
-                current_probabilities = current_probabilities.sum(1).to_dense()
-                probabilities += current_probabilities
-
-                # update log weights for conditional layer
-                log_weights = sparse_remove_rows_and_cols_where_all(log_weights, -torch.inf)
-            else:
-                raise NotImplementedError("Only sparse weights are supported for conditioning.")
-
-            conditional_child_layers.append(conditional)
-            conditional_log_weights.append(log_weights)
-
-        if len(conditional_child_layers) == 0:
-            return self.impossible_condition_result
-
-        resulting_layer = SumLayer(conditional_child_layers, conditional_log_weights)
-        return resulting_layer, (probabilities.log() - self.log_normalization_constants).reshape(-1, 1)
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
@@ -491,13 +435,76 @@ class SumLayer(InnerLayer):
         return result
 
     def log_mode(self) -> Tuple[Event, float]:
-        pass
+        raise NotImplementedError
 
     def sample(self, amount: int) -> torch.Tensor:
-        pass
+        raise NotImplementedError
 
     def merge_with(self, others: List[Self]):
         raise NotImplementedError
+
+    def __deepcopy__(self):
+        child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
+        log_weights = [log_weight.clone() for log_weight in self.log_weights]
+        return self.__class__(child_layers, log_weights)
+
+
+class DenseSumLayer(SumLayer):
+
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
+        raise NotImplementedError
+
+    def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
+        raise NotImplementedError
+
+    def log_normalization_constants(self) -> torch.Tensor:
+        return torch.logsumexp(self.concatenated_weights, dim=1)
+
+    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
+        result = torch.zeros(len(x), self.number_of_nodes)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the log likelihoods of the child nodes
+            ll = child_layer.log_likelihood(x)
+            # assert ll.shape == (len(x), child_layer.number_of_nodes)
+
+            # weight the log likelihood of the child nodes by the weight for each node of this layer
+            # expand the log likelihood of the child nodes to the number of nodes in this layer, i.e.
+            # (#x, #child_nodes, #nodes)
+            ll = ll.unsqueeze(-1)
+            # assert ll.shape == (len(x), child_layer.number_of_nodes, 1)
+
+            # (#x, #child_nodes, #number_of_nodes)
+            ll = log_weights.T + ll
+            ll = torch.exp(ll).sum(dim=1)
+
+            # sum the child layer result
+            result += ll
+
+        return torch.log(result) - self.log_normalization_constants
+
+
+class SparseSumLayer(SumLayer):
+
+    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
+        result = torch.zeros(len(x), self.number_of_nodes, dtype=torch.double)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the log likelihoods of the child nodes
+            ll = child_layer.log_likelihood(x)
+            # assert ll.shape == (len(x), child_layer.number_of_nodes)
+
+            # weight the log likelihood of the child nodes by the weight for each node of this layer
+            cloned_log_weights = log_weights.clone()  # clone the weights
+            cloned_log_weights.values().exp_()  # exponent weights
+            ll = ll.exp()  # calculate the exponential of the child log likelihoods
+            #  calculate the weighted sum in layer
+            ll = torch.matmul(ll, cloned_log_weights.T)
+
+            # sum the child layer result
+            result += ll
+
+        return torch.log(result) - self.log_normalization_constants
 
     def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
         keep_mask = ~remove_mask
@@ -530,10 +537,52 @@ class SumLayer(InnerLayer):
         self.log_weights = new_log_weights
         self.child_layers = new_child_layers
 
-    def __deepcopy__(self):
-        child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
-        log_weights = [log_weight.clone() for log_weight in self.log_weights]
-        return self.__class__(child_layers, log_weights)
+    @property
+    def log_normalization_constants(self) -> torch.Tensor:
+        result = self.concatenated_weights.clone().coalesce()
+        result.values().exp_()
+        result = result.sum(1)
+        result.values().log_()
+        return result.to_dense()
+
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
+
+        conditional_child_layers = []
+        conditional_log_weights = []
+
+        probabilities = torch.zeros(self.number_of_nodes, dtype=torch.double)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+
+            # get the conditional of the child layer, log prob shape: (#child_nodes, 1)
+            conditional, child_log_prob = child_layer.log_conditional_of_simple_event(event)
+
+            if conditional is None:
+                continue
+
+            # clone weights
+            log_weights = log_weights.clone().coalesce().double()  # shape: (#nodes, #child_nodes)
+
+            # calculate the weighted sum of the child log probabilities
+            add_sparse_edges_dense_child_tensor_inplace(log_weights, child_log_prob)
+
+            # calculate the probabilities of the child nodes in total
+            current_probabilities = log_weights.clone().coalesce()
+            current_probabilities.values().exp_()
+            current_probabilities = current_probabilities.sum(1).to_dense()
+            probabilities += current_probabilities
+
+            # update log weights for conditional layer
+            log_weights = sparse_remove_rows_and_cols_where_all(log_weights, -torch.inf)
+
+            conditional_child_layers.append(conditional)
+            conditional_log_weights.append(log_weights)
+
+        if len(conditional_child_layers) == 0:
+            return self.impossible_condition_result
+
+        resulting_layer = SparseSumLayer(conditional_child_layers, conditional_log_weights)
+        return resulting_layer, (probabilities.log() - self.log_normalization_constants)
 
 
 class ProductLayer(InnerLayer):
@@ -550,7 +599,7 @@ class ProductLayer(InnerLayer):
     units with the same scope.
     """
 
-    edges: torch.LongTensor
+    edges: torch.Tensor
     """
     The edges consist of a matrix containing integers.
     The first dimension describes the edges for each child layer.
@@ -563,7 +612,7 @@ class ProductLayer(InnerLayer):
     The shape is (#child_layers, #nodes).
     """
 
-    def __init__(self, child_layers: List[Layer], edges: torch.LongTensor):
+    def __init__(self, child_layers: List[Layer], edges: torch.Tensor):
         """
         Initialize the product layer.
 
@@ -588,6 +637,9 @@ class ProductLayer(InnerLayer):
 
     @cached_property
     def columns_of_child_layers(self) -> Tuple[Tuple[int, ...], ...]:
+        """
+        :return: The indices of the variables for each child layer in the variable-vector of this layer.
+        """
         result = []
         for layer in self.child_layers:
             layer_indices = [self.variables.index(variable) for variable in layer.variables]
@@ -596,7 +648,7 @@ class ProductLayer(InnerLayer):
 
     # @torch.compile
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
-        result = torch.zeros(len(x), self.number_of_nodes)
+        result = torch.zeros(len(x), self.number_of_nodes, dtype=torch.double)
         for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
             # calculate the log likelihood over the columns of the child layer
             ll = layer.log_likelihood(x[:, columns])
@@ -635,9 +687,6 @@ class ProductLayer(InnerLayer):
         return result
 
     def log_mode(self) -> Tuple[Event, float]:
-        pass
-
-    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
         pass
 
     def sample(self, amount: int) -> torch.Tensor:
@@ -688,7 +737,9 @@ class ProductLayer(InnerLayer):
             # update the edges
             new_edges[index] = edges[keep_mask]
 
+        # construct result and clean it up
         result = self.__class__(conditional_child_layers, new_edges)
+        result.clean_up_orphans_inplace()
         return result, log_probabilities
 
     def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
@@ -711,6 +762,25 @@ class ProductLayer(InnerLayer):
 
     def merge_with(self, others: List[Self]):
         pass
+
+    def clean_up_orphans_inplace(self):
+        """
+        Clean up the layer inplace by removing orphans in the child layers.
+        """
+        for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
+
+            # mask rather nodes have parent edges or not
+            orphans = torch.ones(child_layer.number_of_nodes, dtype=torch.bool)
+            orphans[edges] = False
+
+            # if orphans exist
+            if orphans.any():
+
+                # remove them from the child layer
+                child_layer.remove_nodes_inplace(orphans)
+
+                # update the indices of this layer
+                self.edges[index] = shrink_index_tensor(edges.unsqueeze(-1)).squeeze(-1)
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]

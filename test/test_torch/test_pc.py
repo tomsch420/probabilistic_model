@@ -1,151 +1,41 @@
 import math
 import unittest
 
-import numpy as np
 import torch
-from numpy.testing import assert_almost_equal
-from random_events.interval import SimpleInterval, closed
-from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
-from torch.testing import assert_close
 
-from probabilistic_model.learning.torch.pc import SumLayer, ProductLayer
+from probabilistic_model.learning.torch.pc import ProductLayer, SparseSumLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit, ProductUnit
+from random_events.product_algebra import Event, SimpleEvent
+from random_events.interval import closed
 
 
-class SumTestCase(unittest.TestCase):
-    x = Continuous("x")
-    p1_x = UniformLayer(x, torch.Tensor([[0, 1]]))
-    p2_x = UniformLayer(x, torch.Tensor([[1, 3], [1, 1.5]]))
-    s1 = SumLayer([p1_x, p2_x], log_weights=[torch.tensor([[math.log(2)], [1]]), torch.tensor([[0, 0], [1, 1]])])
-
-    p1_x_by_hand = UniformDistribution(x, SimpleInterval(0, 1))
-    p2_x_by_hand = UniformDistribution(x, SimpleInterval(1, 3))
-    p3_x_by_hand = UniformDistribution(x, SimpleInterval(1, 1.5))
-    s1_by_hand = SumUnit()
-    s1_by_hand.add_subcircuit(p1_x_by_hand, 1 / 2)
-    s1_by_hand.add_subcircuit(p2_x_by_hand, 1 / 4)
-    s1_by_hand.add_subcircuit(p3_x_by_hand, 1 / 4)
-
-    s2_by_hand = SumUnit()
-    s2_by_hand.probabilistic_circuit = s1_by_hand.probabilistic_circuit
-    s2_by_hand.add_subcircuit(p1_x_by_hand, 1 / 3)
-    s2_by_hand.add_subcircuit(p2_x_by_hand, 1 / 3)
-    s2_by_hand.add_subcircuit(p3_x_by_hand, 1 / 3)
-
-    def test_stack(self):
-        self.assertEqual(self.s1.concatenated_weights.shape, (2, 3))
-
-    def test_normalizing_constant(self):
-        assert_close(self.s1.log_normalization_constants,
-                     torch.tensor([torch.log(torch.tensor(4.)), torch.log(torch.exp(torch.tensor(1)) * 3)]))
-
-    def test_log_likelihood(self):
-        input = torch.tensor([0.5, 1.5, 2.5]).reshape(-1, 1)
-
-        p_by_hand_1 = self.s1_by_hand.log_likelihood(input)
-        p_by_hand_2 = self.s2_by_hand.log_likelihood(input)
-
-        self.assertEqual(input.shape, (3, 1))
-
-        ll = self.s1.log_likelihood(input)
-        self.assertEqual(ll.shape, (3, 2))
-        assert_almost_equal(p_by_hand_1.tolist(), ll[:, 0].tolist())
-        assert_almost_equal(p_by_hand_2.tolist(), ll[:, 1].tolist())
-
-    def test_probability(self):
-        event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(3, 5)})
-        prob = self.s1.probability_of_simple_event(event)
-        self.assertEqual(prob.shape, (2, 1))
-        p_by_hand_1 = self.s1_by_hand.probability_of_simple_event(event)
-        p_by_hand_2 = self.s2_by_hand.probability_of_simple_event(event)
-        assert_almost_equal([p_by_hand_1, p_by_hand_2], prob[:, 0].tolist())
-
-
-class SparseSumUnitTestCase(unittest.TestCase):
-    x = Continuous("x")
-    p1_x = UniformLayer(x, torch.Tensor([[0, 1]]).double())
-    p2_x = UniformLayer(x, torch.Tensor([[1, 3], [1, 1.5]]).double())
-    s1 = SumLayer([p1_x, p2_x],
-                  log_weights=[torch.tensor([[2], [0]]).log().to_sparse_coo().coalesce().double(),
-                               torch.tensor([[0, 2], [2, 2]]).to_sparse_coo().coalesce().double()])
-
-    def test_conditional(self):
-        event = SimpleEvent({self.x: closed(2., 3.)}).as_composite_set()
-        c, lp = self.s1.log_conditional(event)
-        c.validate()
-        self.assertEqual(c.number_of_nodes, 1)
-        self.assertEqual(len(c.child_layers), 1)
-        self.assertEqual(c.child_layers[0].number_of_nodes, 1)
-        assert_close(lp, torch.tensor([0., 0.25]).reshape(-1, 1).double().log())
-
-    def test_remove_nodes_inplace(self):
-        s1 = self.s1.__deepcopy__()
-        remove_mask = torch.tensor([1, 0]).bool()
-        s1.remove_nodes_inplace(remove_mask)
-        self.assertEqual(s1.number_of_nodes, 1)
-        s1.validate()
-        self.assertEqual(len(s1.child_layers), 1)
-
-
-class ProductTestCase(unittest.TestCase):
+class FullCircuitTestCase(unittest.TestCase):
     x = Continuous("x")
     y = Continuous("y")
-    p1_x_by_hand = UniformDistribution(x, SimpleInterval(0, 1))
-    p1_y_by_hand = UniformDistribution(y, SimpleInterval(0.5, 1))
-    p2_y_by_hand = UniformDistribution(y, SimpleInterval(5, 6))
 
-    product_1 = ProductUnit()
-    product_1.add_subcircuit(p1_x_by_hand)
-    product_1.add_subcircuit(p1_y_by_hand)
+    p_x = UniformLayer(x, torch.Tensor([[0, 1],
+                                        [1, 3]]).double())
+    p_y = UniformLayer(y, torch.Tensor([[2., 3],
+                                        [4, 5]]).double())
+    product_layer = ProductLayer([p_x, p_y], torch.tensor([[0, 1], [0, 1]]).long())
 
-    product_2 = ProductUnit()
-    product_2.probabilistic_circuit = product_1.probabilistic_circuit
-    product_2.add_subcircuit(p1_x_by_hand)
-    product_2.add_subcircuit(p2_y_by_hand)
-
-    p1_x = UniformLayer(x, torch.Tensor([[0, 1]]))
-    p1_y = UniformLayer(y, torch.Tensor([[0.5, 1], [5, 6]]))
-
-    product = ProductLayer(child_layers=[p1_x, p1_y], edges=torch.tensor([[0, 0], [0, 1]]).long())
+    model = SparseSumLayer([product_layer], log_weights=[torch.tensor([[1, 1]]).double().to_sparse_coo()])
+    model.validate()
 
     def test_log_likelihood(self):
-        data = [[0.5, 0.75], [0.9, 0.7], [0.5, 5.5]]
-        ll_p1_by_hand = self.product_1.log_likelihood(np.array(data))
-        ll_p2_by_hand = self.product_2.log_likelihood(np.array(data))
-        ll = self.product.log_likelihood(torch.tensor(data))
-        self.assertEqual(ll.shape, (3, 2))
-        assert_almost_equal(ll_p1_by_hand.tolist(), ll[:, 0].tolist())
-        assert_almost_equal(ll_p2_by_hand.tolist(), ll[:, 1].tolist())
+        data = torch.tensor([[0.5, 2.5], [1.5, 4.5]]).double()
+        ll = self.model.log_likelihood(data)
+        self.assertEqual(ll.shape, (2, 1))
+        self.assertAlmostEqual(ll[0, 0].item(), math.log(0.5))
+        self.assertAlmostEqual(ll[1, 0].item(), math.log(0.25))
 
-    def test_probability(self):
-        event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(3, 5), self.y: closed(0.5, 2.5) | closed(3, 5)})
-        prob = self.product.probability_of_simple_event(event)
-        self.assertEqual(prob.shape, (2, 1))
-        p_by_hand_1 = self.product_1.probability_of_simple_event(event)
-        p_by_hand_2 = self.product_2.probability_of_simple_event(event)
-        assert_almost_equal([p_by_hand_1, p_by_hand_2], prob[:, 0].tolist())
-
-    def test_conditional_of_simple_event(self):
-        event = SimpleEvent({self.x: closed(0.5, 2.), self.y: closed(4, 5.5)})
-        c, lp = self.product.log_conditional_of_simple_event(event)
-        c.validate()
-        self.assertEqual(c.number_of_nodes, 1)
-        self.assertEqual(len(c.child_layers), 2)
-        self.assertEqual(c.child_layers[0].number_of_nodes, 1)
-        self.assertEqual(c.child_layers[1].number_of_nodes, 1)
-        assert_close(lp, torch.tensor([0., 0.25]).reshape(-1, 1).log())
-
-    def test_remove_nodes_inplace(self):
-        product = self.product.__deepcopy__()
-        remove_mask = torch.tensor([1, 0]).bool()
-        product.remove_nodes_inplace(remove_mask)
-        self.assertEqual(product.number_of_nodes, 1)
-        product.validate()
-        self.assertEqual(len(product.child_layers), 2)
-        self.assertTrue((product.edges == 0).all())
+    def test_conditional(self):
+        event = SimpleEvent({self.x: closed(0.5, 2.5),
+                             self.y: closed(2.5, 4.5)}).as_composite_set().complement()
+        conditional, log_prob = self.model.conditional(event)
+        self.assertAlmostEqual(log_prob, 1 - (0.5 * 0.25 + 0.5 * 0.375))
+        conditional.conditional(event)
 
 
 if __name__ == '__main__':
