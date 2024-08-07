@@ -39,6 +39,9 @@ class SparseSumUnitTestCase(unittest.TestCase):
         self.assertEqual(len(s1.child_layers), 1)
 
 
+class SparseMergingTestCase(unittest.TestCase):
+    ...
+
 
 if __name__ == '__main__':
     unittest.main()
