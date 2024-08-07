@@ -33,9 +33,9 @@ class UniformTestCase(unittest.TestCase):
     def test_probability(self):
         event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(3, 5)})
         prob = self.p_x.probability_of_simple_event(event)
-        self.assertEqual(prob.shape, (2, 1))
+        self.assertEqual(prob.shape, (2,))
         result = [0.5, 0.75]
-        assert_close(prob, torch.tensor(result, dtype=prob.dtype).reshape(-1, 1))
+        assert_close(prob, torch.tensor(result, dtype=prob.dtype))
 
     def test_support_per_node(self):
         support = self.p_x.support_per_node
@@ -55,13 +55,13 @@ class UniformTestCase(unittest.TestCase):
         layer, ll = self.p_x.log_conditional_of_simple_event(event)
         self.assertEqual(layer.number_of_nodes, 2)
         assert_close(layer.interval, torch.tensor([[0.5, 1], [1, 2.5]]))
-        assert_close(torch.tensor([0.5, 0.75]).reshape(-1, 1).double().log(), ll)
+        assert_close(torch.tensor([0.5, 0.75]).double().log(), ll)
 
     def test_conditional_multiple_truncation(self):
         event = closed(-1, 0.5) | closed(0.7, 0.8) | closed(2., 3.) | closed(3.5, 4.)
 
         layer, ll = self.p_x.log_conditional_from_interval(event)
-        assert_close(torch.tensor([0.6, 0.5]).log().reshape(-1, 1).double(), ll)
+        assert_close(torch.tensor([0.6, 0.5]).log().double(), ll)
         self.assertIsInstance(layer, SumLayer)
 
         layer.validate()
@@ -76,7 +76,7 @@ class UniformTestCase(unittest.TestCase):
     def test_conditional_row_remove(self):
         event = closed(-1, 0.5) | closed(0.7, 0.8)
         layer, ll = self.p_x.log_conditional_from_interval(event)
-        assert_close(torch.tensor([0.6, 0.]).log().reshape(-1, 1).double(), ll)
+        assert_close(torch.tensor([0.6, 0.]).log().double(), ll)
         self.assertIsInstance(layer, SumLayer)
         layer.validate()
         self.assertEqual(layer.number_of_nodes, 1)

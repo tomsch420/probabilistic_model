@@ -21,7 +21,8 @@ from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit,
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
 from ...probabilistic_model import ProbabilisticModel
 from ...utils import (remove_rows_and_cols_where_all, add_sparse_edges_dense_child_tensor_inplace,
-                      sparse_remove_rows_and_cols_where_all, shrink_index_tensor)
+                      sparse_remove_rows_and_cols_where_all, shrink_index_tensor,
+                      embed_sparse_tensors_in_new_sparse_tensor)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -40,7 +41,7 @@ class Layer(nn.Module, ProbabilisticModel):
     Layers have the same scope (set of variables) for every node in them.
     """
 
-    def mergable_with(self, other: Layer):
+    def mergeable_with(self, other: Layer):
         return self.variables == other.variables and type(self) == type(other)
 
     @property
@@ -489,11 +490,63 @@ class DenseSumLayer(SumLayer):
 
 class SparseSumLayer(SumLayer):
 
-    def merge_with_one_layer(self, other: Self):
-        ...
+    def merge_with_one_layer_inplace(self, other: Self):
+        """
+        Merge this layer with another layer inplace.
+
+        :param other: The other layer
+
+        """
+
+        mergeable_matrix = torch.zeros((len(self.child_layers), len(other.child_layers)), dtype=torch.bool)
+
+        for i, layer in enumerate(self.child_layers):
+            for j, other_layer in enumerate(other.child_layers):
+                mergeable_matrix[i, j] = layer.mergeable_with(other_layer)
+
+        assert (mergeable_matrix.sum(dim=1) <= 1).all(), "There must be at most one mergeable layer per layer."
+
+        new_layers = []
+        new_log_weights = []
+
+        for log_weights, layer, mergeable_row in zip(self.log_weights, self.child_layers, mergeable_matrix):
+
+            # if this layer cant be merged with any other layer
+            if mergeable_row.sum() == 0:
+
+                # append the current parameters and skip the rest
+                new_layers.append(layer)
+                new_log_weights.append(log_weights)
+                continue
+
+            # filter for the mergeable layers
+            mergeable_other_layers = [(other_log_weights, other_layer) for other_log_weights, other_layer, mergeable
+                                      in zip(other.log_weights, other.child_layers, mergeable_row) if mergeable]
+
+            # filter for the mergeable log_weights
+            mergeable_log_weights = [log_weights] + [other_log_weights for other_log_weights, mergeable
+                                                     in zip(other.log_weights, mergeable_row) if mergeable]
+
+            # merge the log_weights
+            embedded_log_weights = embed_sparse_tensors_in_new_sparse_tensor(mergeable_log_weights)
+            new_log_weights.append(embedded_log_weights)
+
+            # merge the layers
+            layer.merge_with(mergeable_other_layers)
+            new_layers.append(layer)
+
+        # check if any child_layer from the other layer has not been merged
+        for other_log_weights, other_layer, mergeable_col in zip(other.log_weights, other.child_layers,
+                                                                 mergeable_matrix.T):
+            if mergeable_col.sum() == 0:
+                new_log_weights.append(other_log_weights)
+                new_layers.append(other_layer)
+
+        self.log_weights = new_log_weights
+        self.child_layers = new_layers
 
     def merge_with(self, others: List[Self]):
-        pass
+        [self.merge_with_one_layer_inplace(other) for other in others]
 
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(x), self.number_of_nodes, dtype=torch.double)
@@ -644,6 +697,13 @@ class ProductLayer(InnerLayer):
     def number_of_nodes(self) -> int:
         return self.edges.shape[1]
 
+    def decomposes_as(self, other: Layer) -> bool:
+        return set(child_layer.variables for child_layer in self.child_layers) == \
+                set(child_layer.variables for child_layer in other.child_layers)
+
+    def mergeable_with(self, other: Layer):
+        return super().mergeable_with(other) and self.decomposes_as(other)
+
     @cached_property
     def columns_of_child_layers(self) -> Tuple[Tuple[int, ...], ...]:
         """
@@ -688,7 +748,7 @@ class ProductLayer(InnerLayer):
         return AnnotatedLayer(layer, nodes, hash_remap)
 
     def probability_of_simple_event(self, event: SimpleEvent) -> torch.Tensor:
-        result = torch.ones(self.number_of_nodes, 1)
+        result = torch.ones(self.number_of_nodes,)
         for edges, layer in zip(self.edges, self.child_layers):
             child_layer_prob = layer.probability_of_simple_event(event)  # shape: (#child_nodes, 1)
             probabilities = child_layer_prob[edges]  # shape: (#nodes, 1)
@@ -708,7 +768,7 @@ class ProductLayer(InnerLayer):
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
 
         # initialize the conditional child layers and the log probabilities
-        log_probabilities = torch.zeros(self.number_of_nodes, 1)
+        log_probabilities = torch.zeros(self.number_of_nodes,)
         conditional_child_layers = []
 
         # create new edge matrix with nan as default value. nan indicates that an edge got deleted
@@ -769,8 +829,11 @@ class ProductLayer(InnerLayer):
             # update the edges of this layer
             self.edges[index] = shrink_index_tensor(edges.unsqueeze(-1)).squeeze(-1)
 
+    def merge_with_one_layer_inplace(self, other: Self):
+        ...
+
     def merge_with(self, others: List[Self]):
-        pass
+        raise NotImplementedError
 
     def clean_up_orphans_inplace(self):
         """

@@ -7,7 +7,8 @@ import probabilistic_model.probabilistic_circuit
 import probabilistic_model.probabilistic_circuit.distributions
 from probabilistic_model.utils import type_converter
 import torch
-from probabilistic_model.utils import sparse_dense_mul_inplace, add_sparse_edges_dense_child_tensor_inplace, shrink_index_tensor
+from probabilistic_model.utils import (sparse_dense_mul_inplace, add_sparse_edges_dense_child_tensor_inplace,
+                                       shrink_index_tensor, embed_sparse_tensors_in_new_sparse_tensor)
 
 
 class TypeConversionTestCase(unittest.TestCase):
@@ -42,6 +43,21 @@ class TorchUtilsTestCase(unittest.TestCase):
     def test_shrink_index_tensor_1d(self):
         shrank = shrink_index_tensor(torch.tensor([[0], [1], [4]]))
         assert_close(torch.tensor([[0], [1], [2]]), shrank)
+
+    def test_embed_sparse_tensors_in_new_sparse_tensor(self):
+        t1 = torch.tensor([[1, 2], [3, 4]]).to_sparse_coo()
+        t2 = torch.tensor([[5, 6, 7], [8, 9, 10], [11, 12, 13]]).to_sparse_coo()
+
+        dense_result = torch.tensor([[1, 2, 0, 0, 0],
+                                     [3, 4, 0, 0, 0],
+                                     [0, 0, 5, 6, 7],
+                                     [0, 0, 8, 9, 10],
+                                     [0, 0, 11, 12, 13]])
+
+        result = embed_sparse_tensors_in_new_sparse_tensor([t1, t2])
+        assert_close(result.to_dense(), dense_result)
+
+
 
 
 if __name__ == '__main__':

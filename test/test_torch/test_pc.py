@@ -37,6 +37,21 @@ class FullCircuitTestCase(unittest.TestCase):
         self.assertAlmostEqual(log_prob, 1 - (0.5 * 0.25 + 0.5 * 0.375))
         conditional.conditional(event)
 
+    def test_merging(self):
+        event = SimpleEvent({self.x: closed(0.5, 2.5),
+                             self.y: closed(2.5, 4.5)}).as_composite_set().complement()
+        conditional, log_prob = self.model.conditional(event)
+
+        c1: SparseSumLayer = conditional.child_layers[0]
+        c2: SparseSumLayer = conditional.child_layers[1]
+        c1.merge_with_one_layer_inplace(c2)
+        self.assertEqual(c1.number_of_nodes, 2)
+        print(c1.log_weights)
+        print(c1.child_layers[0].number_of_nodes)
+        c1.validate()
+
+
+
 
 if __name__ == '__main__':
     unittest.main()

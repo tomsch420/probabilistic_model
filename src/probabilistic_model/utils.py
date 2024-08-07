@@ -11,7 +11,7 @@ import torch.sparse
 from random_events.interval import SimpleInterval, Interval, Bound
 from random_events.utils import recursive_subclasses
 from torch import nextafter
-from typing_extensions import Type
+from typing_extensions import Type, List
 
 
 def simple_interval_as_array(interval: SimpleInterval) -> np.ndarray:
@@ -215,3 +215,43 @@ def add_sparse_edges_dense_child_tensor_inplace(edges: torch.Tensor, dense_child
 
     # add sparse values with dense values inplace
     edges.values().add_(dense_values_at_sparse_indices)
+
+
+def embed_sparse_tensors_in_new_sparse_tensor(sparse_tensors: List[torch.Tensor]) -> torch.Tensor:
+    """
+    Embed a list of sparse coo tensors into a new sparse co tensor containing all tensors without intersecting their
+    indices.
+
+    :param sparse_tensors: The list of sparse tensors to embed.
+    :return: The new sparse tensor.
+
+    Example::
+
+        >>> t1 = torch.tensor([[1, 2], [3, 4]]).to_sparse_coo()
+        >>> t2 = torch.tensor([[5, 6, 7], [8, 9, 10], [11, 12, 13]]).to_sparse_coo()
+        >>> result = embed_sparse_tensors_in_new_sparse_tensor([t1, t2]).to_dense()
+        tensor([[ 1,  2,  0,  0,  0],
+                [ 3,  4,  0,  0,  0],
+                [ 0,  0,  5,  6,  7],
+                [ 0,  0,  8,  9, 10],
+                [ 0,  0, 11, 12, 13]])
+
+    """
+    # calculate the shape of the new tensor
+    new_shape = sum(torch.tensor(sparse_tensor.shape) for sparse_tensor in sparse_tensors)
+
+    # initialize the new indices
+    new_indices = sparse_tensors[0].indices()
+
+    # shift the indices of the other tensors to not intersect with the already added tensors
+    for sparse_tensor in sparse_tensors[1:]:
+        current_indices = sparse_tensor.indices()
+        max_of_new_indices = new_indices.max(1).values.reshape(-1, 1)
+        current_indices += max_of_new_indices + 1
+        new_indices = torch.cat([new_indices, current_indices], dim=1)
+
+    # stack the new values
+    new_values = torch.cat([sparse_tensor.values() for sparse_tensor in sparse_tensors], 0)
+
+    # create the result
+    return torch.sparse_coo_tensor(new_indices, new_values, torch.Size(new_shape), is_coalesced=True)

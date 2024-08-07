@@ -48,10 +48,10 @@ class ProductTestCase(unittest.TestCase):
     def test_probability(self):
         event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(3, 5), self.y: closed(0.5, 2.5) | closed(3, 5)})
         prob = self.product.probability_of_simple_event(event)
-        self.assertEqual(prob.shape, (2, 1))
+        self.assertEqual(prob.shape, (2,))
         p_by_hand_1 = self.product_1.probability_of_simple_event(event)
         p_by_hand_2 = self.product_2.probability_of_simple_event(event)
-        assert_almost_equal([p_by_hand_1, p_by_hand_2], prob[:, 0].tolist())
+        assert_almost_equal([p_by_hand_1, p_by_hand_2], prob.tolist())
 
     def test_conditional_of_simple_event(self):
         event = SimpleEvent({self.x: closed(0.5, 2.), self.y: closed(4, 5.5)})
@@ -61,7 +61,7 @@ class ProductTestCase(unittest.TestCase):
         self.assertEqual(len(c.child_layers), 2)
         self.assertEqual(c.child_layers[0].number_of_nodes, 1)
         self.assertEqual(c.child_layers[1].number_of_nodes, 1)
-        assert_close(lp, torch.tensor([0., 0.25]).reshape(-1, 1).log())
+        assert_close(lp, torch.tensor([0., 0.25]).log())
 
     def test_remove_nodes_inplace(self):
         product = self.product.__deepcopy__()

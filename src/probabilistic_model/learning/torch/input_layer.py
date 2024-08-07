@@ -37,7 +37,7 @@ class ContinuousLayer(InputLayer, ABC):
         points = torch.tensor(interval_as_array(interval))
         upper_bound_cdf = self.cdf(points[:, (1,)])
         lower_bound_cdf = self.cdf(points[:, (0,)])
-        return (upper_bound_cdf - lower_bound_cdf).sum(dim=0).unsqueeze(-1)
+        return (upper_bound_cdf - lower_bound_cdf).sum(dim=0)
 
     def log_conditional_of_simple_event(self, event: SimpleEvent):
         if event.is_empty():
@@ -224,10 +224,10 @@ class DiracDeltaLayer(ContinuousLayer):
         valid_probabilities = probabilities > -torch.inf
 
         if not valid_probabilities.any():
-            return None, probabilities
+            return self.impossible_condition_result
 
-        result = self.__class__(self.variable, self.location[valid_probabilities[:, 0]],
-                                self.density_cap[valid_probabilities[:, 0]])
+        result = self.__class__(self.variable, self.location[valid_probabilities],
+                                self.density_cap[valid_probabilities])
         return result, probabilities
 
     def merge_with(self, others: List[Self]):

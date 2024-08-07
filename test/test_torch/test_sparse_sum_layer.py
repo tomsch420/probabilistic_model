@@ -28,7 +28,7 @@ class SparseSumUnitTestCase(unittest.TestCase):
         self.assertEqual(c.number_of_nodes, 1)
         self.assertEqual(len(c.child_layers), 1)
         self.assertEqual(c.child_layers[0].number_of_nodes, 1)
-        assert_close(lp, torch.tensor([0., 0.25]).reshape(-1, 1).double().log())
+        assert_close(lp, torch.tensor([0., 0.25]).double().log())
 
     def test_remove_nodes_inplace(self):
         s1 = self.s1.__deepcopy__()

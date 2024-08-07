@@ -32,7 +32,7 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
     def test_conditional_of_simple_interval(self):
         interval = closed(-0.5, 0.5).simple_sets[0]
         layer, ll = self.p_x.log_conditional_from_simple_interval(interval)
-        result = torch.tensor([1, 0]).log().reshape(-1, 1)
+        result = torch.tensor([1, 0]).log()
         assert_close(ll, result)
         layer.validate()
         self.assertEqual(layer.number_of_nodes, 1)
