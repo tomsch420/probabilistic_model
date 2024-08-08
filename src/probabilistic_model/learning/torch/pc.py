@@ -490,6 +490,27 @@ class DenseSumLayer(SumLayer):
 
 class SparseSumLayer(SumLayer):
 
+    def mergeable_layer_matrix(self, other: Self) -> torch.Tensor:
+        """
+        Create a matrix that describes which child layers of this layer can be merged with which child layers of the
+        other layer.
+
+        The entry [i, j] is True if the i-th child layer of this layer can be merged with the j-th child layer of the
+        other layer.
+
+        :param other: The other layer.
+        :return: The mergeable boolean matrix
+        """
+
+        # create matrix describing mergeable layers
+        mergeable_matrix = torch.zeros((len(self.child_layers), len(other.child_layers)), dtype=torch.bool)
+
+        # fill matrix
+        for i, layer in enumerate(self.child_layers):
+            for j, other_layer in enumerate(other.child_layers):
+                mergeable_matrix[i, j] = layer.mergeable_with(other_layer)
+        return mergeable_matrix
+
     def merge_with_one_layer_inplace(self, other: Self):
         """
         Merge this layer with another layer inplace.
@@ -498,14 +519,10 @@ class SparseSumLayer(SumLayer):
 
         """
 
-        mergeable_matrix = torch.zeros((len(self.child_layers), len(other.child_layers)), dtype=torch.bool)
-
-        for i, layer in enumerate(self.child_layers):
-            for j, other_layer in enumerate(other.child_layers):
-                mergeable_matrix[i, j] = layer.mergeable_with(other_layer)
-
+        mergeable_matrix = self.mergeable_layer_matrix(other)
         assert (mergeable_matrix.sum(dim=1) <= 1).all(), "There must be at most one mergeable layer per layer."
 
+        total_number_of_nodes = self.number_of_nodes + other.number_of_nodes
         new_layers = []
         new_log_weights = []
 
@@ -514,14 +531,18 @@ class SparseSumLayer(SumLayer):
             # if this layer cant be merged with any other layer
             if mergeable_row.sum() == 0:
 
-                # append the current parameters and skip the rest
+                # append impossible log weights to match the new number of nodes
+                log_weights = torch.sparse_coo_tensor(log_weights.indices(), log_weights.values(),
+                                                      (total_number_of_nodes, layer.number_of_nodes),
+                                                      dtype=torch.double, is_coalesced=True)
+
                 new_layers.append(layer)
                 new_log_weights.append(log_weights)
                 continue
 
             # filter for the mergeable layers
-            mergeable_other_layers = [(other_log_weights, other_layer) for other_log_weights, other_layer, mergeable
-                                      in zip(other.log_weights, other.child_layers, mergeable_row) if mergeable]
+            mergeable_other_layers = [other_layer for other_layer, mergeable
+                                      in zip(other.child_layers, mergeable_row) if mergeable]
 
             # filter for the mergeable log_weights
             mergeable_log_weights = [log_weights] + [other_log_weights for other_log_weights, mergeable
@@ -539,6 +560,11 @@ class SparseSumLayer(SumLayer):
         for other_log_weights, other_layer, mergeable_col in zip(other.log_weights, other.child_layers,
                                                                  mergeable_matrix.T):
             if mergeable_col.sum() == 0:
+
+                # append impossible log weights to match the new number of nodes
+                other_log_weights = torch.sparse_coo_tensor(other_log_weights.indices(), other_log_weights.values(),
+                                                            (total_number_of_nodes, other_layer.number_of_nodes),
+                                                            dtype=torch.double, is_coalesced=True)
                 new_log_weights.append(other_log_weights)
                 new_layers.append(other_layer)
 
@@ -606,6 +632,14 @@ class SparseSumLayer(SumLayer):
         result = result.sum(1)
         result.values().log_()
         return result.to_dense()
+
+    @property
+    def normalized_log_weights(self):
+        result = [log_weights.clone().coalesce() for log_weights in self.log_weights]
+        log_normalization_constants = self.log_normalization_constants
+        for log_weights in result:
+            log_weights.values().sub_(log_normalization_constants[log_weights.indices()[0]])
+        return result
 
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
 
