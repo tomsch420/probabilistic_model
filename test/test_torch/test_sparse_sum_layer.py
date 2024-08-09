@@ -9,17 +9,17 @@ from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 from torch.testing import assert_close
 
-from probabilistic_model.learning.torch.pc import SparseSumLayer, ProductLayer
+from probabilistic_model.learning.torch.pc import SumLayer, ProductLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
 
 
-class SparseSumUnitTestCase(unittest.TestCase):
+class SumUnitTestCase(unittest.TestCase):
     x = Continuous("x")
     p1_x = UniformLayer(x, torch.Tensor([[0, 1]]).double())
     p2_x = UniformLayer(x, torch.Tensor([[1, 3], [1, 1.5]]).double())
-    s1 = SparseSumLayer([p1_x, p2_x],
-                        log_weights=[torch.tensor([[2], [0]]).log().to_sparse_coo().coalesce().double(),
-                                     torch.tensor([[0, 2], [2, 2]]).to_sparse_coo().coalesce().double()])
+    s1 = SumLayer([p1_x, p2_x],
+                  log_weights=[torch.tensor([[2], [0]]).log().to_sparse_coo().coalesce().double(),
+                               torch.tensor([[0, 2], [2, 2]]).to_sparse_coo().coalesce().double()])
 
     def test_conditional(self):
         event = SimpleEvent({self.x: closed(2., 3.)})
@@ -56,18 +56,16 @@ class SparseSumUnitTestCase(unittest.TestCase):
         assert_close(catted_lnw.to_dense(), normalized)
 
 
-
-
-class SparseMergingTestCase(unittest.TestCase):
+class MergingTestCase(unittest.TestCase):
     x = Continuous("x")
     y = Continuous("y")
 
     u1 = UniformLayer(x, torch.Tensor([[0, 1]]).double())
     u2 = UniformLayer(y, torch.Tensor([[0, 1]]).double())
     u3 = UniformLayer(x, torch.Tensor([[1, 2]]).double())
-    s1 = SparseSumLayer([u1], log_weights=[torch.tensor([[1]]).double().to_sparse_coo().coalesce()])
-    s2 = SparseSumLayer([u2], log_weights=[torch.tensor([[1]]).double().to_sparse_coo().coalesce()])
-    s3 = SparseSumLayer([u3], log_weights=[torch.tensor([[3]]).double().to_sparse_coo().coalesce()])
+    s1 = SumLayer([u1], log_weights=[torch.tensor([[1]]).double().to_sparse_coo().coalesce()])
+    s2 = SumLayer([u2], log_weights=[torch.tensor([[1]]).double().to_sparse_coo().coalesce()])
+    s3 = SumLayer([u3], log_weights=[torch.tensor([[3]]).double().to_sparse_coo().coalesce()])
 
     def test_merge_s1s2(self):
         s1 = self.s1.__deepcopy__()

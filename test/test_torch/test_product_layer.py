@@ -15,6 +15,35 @@ from probabilistic_model.probabilistic_circuit.distributions import UniformDistr
 from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit, ProductUnit
 
 
+class ProductTestCase2(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+
+    p1_x = UniformLayer(x, torch.Tensor([[0, 1],
+                                        [1, 3]]).double())
+    p2_x = UniformLayer(x, torch.Tensor([[2, 4],
+                                        [4, 5]]).double())
+    p_y = UniformLayer(y, torch.Tensor([[2., 3],
+                                        [4, 6]]).double())
+
+    indices = torch.tensor([[0, 1, 2, 2, ],
+                            [0, 1, 0, 1, ]])
+    values = torch.tensor([0, 0, 0, 1])
+    edges = torch.sparse_coo_tensor(indices, values, (3, 2), is_coalesced=True)
+
+    product_layer = ProductLayer([p1_x, p2_x, p_y], edges)
+
+    def test_log_likelihood(self):
+        data = [[0.5, 2.5], [3.5, 4.5], [0, 5]]
+        ll = self.product_layer.log_likelihood(torch.tensor(data))
+        self.assertEqual(ll.shape, (3, 2))
+        result = torch.tensor([[0, -torch.inf],
+                               [-torch.inf, math.log(0.25)],
+                               [-torch.inf, -torch.inf]]).double()
+        assert_close(ll, result)
+
+
+
 class ProductTestCase(unittest.TestCase):
     x = Continuous("x")
     y = Continuous("y")

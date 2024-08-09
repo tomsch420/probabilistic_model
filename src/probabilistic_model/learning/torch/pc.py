@@ -207,7 +207,7 @@ class Layer(nn.Module, ProbabilisticModel):
         log_weights = [torch.sparse_coo_tensor(torch.tensor([[0], [0]]), ll) for _, ll in possible_layers]
         layers = [layer for layer, _ in possible_layers]
         # construct result
-        resulting_layer = SparseSumLayer(layers, log_weights)
+        resulting_layer = SumLayer(layers, log_weights)
 
         # calculate log probability
         log_prob = resulting_layer.log_normalization_constants
@@ -327,7 +327,7 @@ class SumLayer(InnerLayer, ABC):
 
     log_weights: List[torch.Tensor]
     """
-    The (sparse) logarithmic weights of each edge.
+    The sparse logarithmic weights of each edge.
     The list consists of tensor that are interpreted as weights for each child layer.
     
     The first dimension of each tensor must match the number of nodes of this layer and hence has to be 
@@ -375,14 +375,6 @@ class SumLayer(InnerLayer, ABC):
         return torch.cat(self.log_weights, dim=1)
 
     @property
-    @abstractmethod
-    def log_normalization_constants(self) -> torch.Tensor:
-        """
-        :return: The normalization constants for every node in this sum layer with shape (#nodes,).
-        """
-        raise NotImplementedError
-
-    @property
     def number_of_nodes(self) -> int:
         return self.log_weights[0].shape[0]
 
@@ -413,8 +405,6 @@ class SumLayer(InnerLayer, ABC):
                 for weight, subcircuit in node.weighted_subcircuits:
                     if hash(subcircuit) in child_layer.hash_remap:
                         indices.append((index, child_layer.hash_remap[hash(subcircuit)]))
-                        values.append(math.log(weight))
-                        # values.append(weight)
 
             log_weights.append(torch.sparse_coo_tensor(torch.tensor(indices).T,
                                                        torch.tensor(values),
@@ -448,47 +438,6 @@ class SumLayer(InnerLayer, ABC):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
         log_weights = [log_weight.clone() for log_weight in self.log_weights]
         return self.__class__(child_layers, log_weights)
-
-
-class DenseSumLayer(SumLayer):
-
-    def merge_with(self, others: List[Self]):
-        pass
-
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
-        raise NotImplementedError
-
-    def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
-        raise NotImplementedError
-
-    def log_normalization_constants(self) -> torch.Tensor:
-        return torch.logsumexp(self.concatenated_weights, dim=1)
-
-    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
-        result = torch.zeros(len(x), self.number_of_nodes)
-
-        for log_weights, child_layer in self.log_weighted_child_layers:
-            # get the log likelihoods of the child nodes
-            ll = child_layer.log_likelihood(x)
-            # assert ll.shape == (len(x), child_layer.number_of_nodes)
-
-            # weight the log likelihood of the child nodes by the weight for each node of this layer
-            # expand the log likelihood of the child nodes to the number of nodes in this layer, i.e.
-            # (#x, #child_nodes, #nodes)
-            ll = ll.unsqueeze(-1)
-            # assert ll.shape == (len(x), child_layer.number_of_nodes, 1)
-
-            # (#x, #child_nodes, #number_of_nodes)
-            ll = log_weights.T + ll
-            ll = torch.exp(ll).sum(dim=1)
-
-            # sum the child layer result
-            result += ll
-
-        return torch.log(result) - self.log_normalization_constants
-
-
-class SparseSumLayer(SumLayer):
 
     def mergeable_layer_matrix(self, other: Self) -> torch.Tensor:
         """
@@ -677,16 +626,13 @@ class SparseSumLayer(SumLayer):
         if len(conditional_child_layers) == 0:
             return self.impossible_condition_result
 
-        resulting_layer = SparseSumLayer(conditional_child_layers, conditional_log_weights)
+        resulting_layer = SumLayer(conditional_child_layers, conditional_log_weights)
         return resulting_layer, (probabilities.log() - self.log_normalization_constants)
 
 
 class ProductLayer(InnerLayer):
     """
     A layer that represents the product of multiple other units.
-
-    Every node in the layer has the same partitioning of variables.
-    The n-th child layer has the variables described in the n-th partition.
     """
 
     child_layers: List[Union[SumLayer, InputLayer]]
@@ -695,15 +641,14 @@ class ProductLayer(InnerLayer):
     units with the same scope.
     """
 
-    edges: torch.Tensor
+    edges: torch.Tensor  # SparseTensor[int]
     """
-    The edges consist of a matrix containing integers.
+    The edges consist of a sparse matrix containing integers.
     The first dimension describes the edges for each child layer.
     The second dimension describes the edges for each node in the child layer.
     The integers are interpreted in such a way that n-th value represents a edge (n, edges[n]).
     
-    Due to decomposability and smoothness every product node in this layer has to map to exactly one node in each
-    child layer. Nodes in the child layer can be mapped to by multiple nodes in this layer.
+    Nodes in the child layer can be mapped to by multiple nodes in this layer.
     
     The shape is (#child_layers, #nodes).
     """
@@ -753,14 +698,17 @@ class ProductLayer(InnerLayer):
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(x), self.number_of_nodes, dtype=torch.double)
         for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
+
+            edges = edges.coalesce()
             # calculate the log likelihood over the columns of the child layer
-            ll = layer.log_likelihood(x[:, columns])
+            ll = layer.log_likelihood(x[:, columns])  # shape: (#x, #child_nodes)
 
-            # rearrange the log likelihood to match the edges
-            ll = ll[:, edges]  # shape: (#x, #nodes)
-            # assert ll.shape == (len(x), self.number_of_nodes)
+            # gather the ll at the indices of the nodes that are required for the edges
+            ll = ll[:, edges.values()]  # shape: (#x, #len(edges.values()))
+            # assert ll.shape == (len(x), len(edges.values()))
 
-            result += ll
+            # add the gathered values to the result where the edges define the indices
+            result[:, edges.indices().squeeze(0)] += ll
         return result
 
     @classmethod

@@ -4,7 +4,7 @@ import unittest
 import torch
 from random_events.variable import Continuous
 
-from probabilistic_model.learning.torch.pc import ProductLayer, SparseSumLayer
+from probabilistic_model.learning.torch.pc import ProductLayer, SumLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.interval import closed
@@ -20,7 +20,7 @@ class FullCircuitTestCase(unittest.TestCase):
                                         [4, 5]]).double())
     product_layer = ProductLayer([p_x, p_y], torch.tensor([[0, 1], [0, 1]]).long())
 
-    model = SparseSumLayer([product_layer], log_weights=[torch.tensor([[1, 1]]).double().to_sparse_coo()])
+    model = SumLayer([product_layer], log_weights=[torch.tensor([[1, 1]]).double().to_sparse_coo()])
     model.validate()
 
     def test_log_likelihood(self):
@@ -42,8 +42,8 @@ class FullCircuitTestCase(unittest.TestCase):
                              self.y: closed(2.5, 4.5)}).as_composite_set().complement()
         conditional, log_prob = self.model.conditional(event)
 
-        c1: SparseSumLayer = conditional.child_layers[0]
-        c2: SparseSumLayer = conditional.child_layers[1]
+        c1: SumLayer = conditional.child_layers[0]
+        c2: SumLayer = conditional.child_layers[1]
         c1.merge_with_one_layer_inplace(c2)
         self.assertEqual(c1.number_of_nodes, 2)
         print(c1.log_weights)
