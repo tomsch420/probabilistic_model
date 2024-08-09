@@ -1,9 +1,11 @@
+import itertools
 import math
 from collections import deque
 from datetime import datetime
 from typing import Tuple, Union, Optional, List, Iterable, Dict, Any
 
 import networkx as nx
+import random_events
 from matplotlib import pyplot as plt
 from random_events.interval import closed_open, closed
 from typing_extensions import Self
@@ -38,6 +40,7 @@ class DecomposableProductUnit(PMDecomposableProductUnit):
     """
     The number of samples that are used to form this product unit.
     """
+
 
 
 class JPT(SumUnit):
