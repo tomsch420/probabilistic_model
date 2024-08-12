@@ -730,11 +730,22 @@ class ProductLayer(InnerLayer):
         return AnnotatedLayer(layer, nodes, hash_remap)
 
     def probability_of_simple_event(self, event: SimpleEvent) -> torch.Tensor:
-        result = torch.ones(self.number_of_nodes,)
+
+        # initialize the result
+        result = torch.ones(self.number_of_nodes, dtype=torch.double)
+
         for edges, layer in zip(self.edges, self.child_layers):
-            child_layer_prob = layer.probability_of_simple_event(event)  # shape: (#child_nodes, 1)
-            probabilities = child_layer_prob[edges]  # shape: (#nodes, 1)
-            result *= probabilities
+            edges = edges.coalesce()
+
+            # calculate the probabilities of the child layer
+            child_layer_prob = layer.probability_of_simple_event(event)  # shape: (#child_nodes, )
+
+            # get the probabilities of the child nodes that are connected to nodes of this layer
+            probabilities = child_layer_prob[edges.values()]  # shape: (#nodes, 1)
+
+            # update result
+            result[edges.indices()] *= probabilities
+
         return result
 
     def log_mode(self) -> Tuple[Event, float]:

@@ -36,12 +36,18 @@ class ProductTestCase2(unittest.TestCase):
     def test_log_likelihood(self):
         data = [[0.5, 2.5], [3.5, 4.5], [0, 5]]
         ll = self.product_layer.log_likelihood(torch.tensor(data))
-        self.assertEqual(ll.shape, (3, 2))
+        self.assertEqual(ll.shape, (len(data), self.product_layer.number_of_nodes))
         result = torch.tensor([[0, -torch.inf],
                                [-torch.inf, math.log(0.25)],
                                [-torch.inf, -torch.inf]]).double()
         assert_close(ll, result)
 
+    def test_probability(self):
+        event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(3, 5), self.y: closed(0.5, 2.5) | closed(3, 5)})
+        prob = self.product_layer.probability_of_simple_event(event)
+        self.assertEqual(prob.shape, (self.product_layer.number_of_nodes,))
+        result = torch.tensor([0.25, 3./8.]).double()
+        assert_close(result, prob)
 
 
 class ProductTestCase(unittest.TestCase):
