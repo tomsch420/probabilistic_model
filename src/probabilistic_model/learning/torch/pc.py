@@ -764,30 +764,44 @@ class ProductLayer(InnerLayer):
         log_probabilities = torch.zeros(self.number_of_nodes,)
         conditional_child_layers = []
 
-        # create new edge matrix with nan as default value. nan indicates that an edge got deleted
-        remapped_edges = torch.full_like(self.edges, torch.nan, dtype=torch.float)
+        # list for collecting the remapped sparse-edge tensors per child layer
+        remapped_edges = []
 
         # for edge bundle and child layer
         for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
+            edges = edges.coalesce()
 
             # condition the child layer
             conditional, child_log_prob = child_layer.log_conditional_of_simple_event(event)
 
             # if it is entirely impossible, this layer also is
             if conditional is None:
-                return self.impossible_condition_result
-
-            # create the remapping of the node indices. nan indicates the node got deleted
-            new_node_indices = torch.arange(conditional.number_of_nodes)
-            layer_remap = torch.full((child_layer.number_of_nodes, ), torch.nan)
-            layer_remap[child_log_prob.squeeze() > -torch.inf] = new_node_indices.float()
-            
-            # update the edges
-            remapped_edges[index] = layer_remap[edges]
+                remapped_edges.append(torch.zeros(self.number_of_nodes).to_sparse())
+                continue
 
             # update the log probabilities and child layers
-            log_probabilities += child_log_prob[edges]
+            log_probabilities += child_log_prob[edges.values()]
             conditional_child_layers.append(conditional)
+
+            # create the remapping of the node indices. nan indicates the node got deleted
+            # enumerate the indices of the conditional child layer nodes
+            new_node_indices = torch.arange(conditional.number_of_nodes)
+
+            # initialize the remapping of the child layer node indices
+            layer_remap = torch.full((child_layer.number_of_nodes, ), torch.nan)
+            layer_remap[child_log_prob > -torch.inf] = new_node_indices.float()
+
+            # update the edges
+            edge_values = edges.values()
+            remapped_child_edges = layer_remap[edge_values]
+            valid_edges = ~torch.isnan(remapped_child_edges)
+            new_edges = torch.sparse_coo_tensor(edges.indices()[:, valid_edges], remapped_child_edges[valid_edges],
+                                                (self.number_of_nodes, ), is_coalesced=True)
+
+            remapped_edges.append(new_edges)
+
+        remapped_edges = torch.stack(remapped_edges)
+        print(remapped_edges)
 
         # get nodes that should be removed as boolean mask
         remove_mask = log_probabilities.squeeze(-1) == -torch.inf  # shape (#nodes, )
