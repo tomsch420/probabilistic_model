@@ -8,6 +8,8 @@ from functools import cached_property
 from typing import Optional, Iterator
 
 import networkx as nx
+import numpy
+import numpy as np
 import torch
 import torch.nn as nn
 from random_events.product_algebra import Event, SimpleEvent
@@ -22,7 +24,7 @@ from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit,
 from ...probabilistic_model import ProbabilisticModel
 from ...utils import (remove_rows_and_cols_where_all, add_sparse_edges_dense_child_tensor_inplace,
                       sparse_remove_rows_and_cols_where_all, shrink_index_tensor,
-                      embed_sparse_tensors_in_new_sparse_tensor)
+                      embed_sparse_tensors_in_new_sparse_tensor, embed_sparse_tensor_in_nan_tensor)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -254,6 +256,19 @@ class Layer(nn.Module, ProbabilisticModel):
     def __deepcopy__(self):
         raise NotImplementedError
 
+    def sample(self, amount: int) -> np.array:
+        return self.sample_from_frequencies(torch.tensor([amount]))
+
+    def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
+        """
+        Sample from the layer.
+        The frequencies are used to determine the number of samples that should be drawn for each node.
+
+        :param frequencies: The frequencies for each node as LongTensor with shape (#nodes,).
+        :return: The samples with shape (#samples, #nodes).
+        """
+        raise NotImplementedError
+
 
 class InnerLayer(Layer, ABC):
     """
@@ -429,9 +444,6 @@ class SumLayer(InnerLayer, ABC):
         return result
 
     def log_mode(self) -> Tuple[Event, float]:
-        raise NotImplementedError
-
-    def sample(self, amount: int) -> torch.Tensor:
         raise NotImplementedError
 
     def __deepcopy__(self):
@@ -629,6 +641,20 @@ class SumLayer(InnerLayer, ABC):
         resulting_layer = SumLayer(conditional_child_layers, conditional_log_weights)
         return resulting_layer, (probabilities.log() - self.log_normalization_constants)
 
+    def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
+        for log_weights, child_layer in zip(self.normalized_log_weights, self.child_layers):
+
+            # calculate weights
+            weights = log_weights.clone()
+            weights = log_weights.values().exp_()
+            weights = log_weights.to_dense()
+
+            child_layer_frequencies = torch.zeros(child_layer.number_of_nodes, dtype=torch.long)
+            for index, weights_of_node in enumerate(weights):
+                print(frequencies[index].item())
+                print(torch.multinomial(weights_of_node, frequencies, replacement=True))
+            print(child_layer_frequencies)
+
 
 class ProductLayer(InnerLayer):
     """
@@ -776,7 +802,8 @@ class ProductLayer(InnerLayer):
 
             # if it is entirely impossible, this layer also is
             if conditional is None:
-                remapped_edges.append(torch.zeros(self.number_of_nodes).to_sparse())
+                # remapped_edges.append(torch.zeros(self.number_of_nodes).to_sparse())
+                # conditional_child_layers.append(conditional)
                 continue
 
             # update the log probabilities and child layers
@@ -795,26 +822,22 @@ class ProductLayer(InnerLayer):
             edge_values = edges.values()
             remapped_child_edges = layer_remap[edge_values]
             valid_edges = ~torch.isnan(remapped_child_edges)
-            new_edges = torch.sparse_coo_tensor(edges.indices()[:, valid_edges], remapped_child_edges[valid_edges],
+            new_edges = torch.sparse_coo_tensor(edges.indices()[:, valid_edges], remapped_child_edges[valid_edges].long(),
                                                 (self.number_of_nodes, ), is_coalesced=True)
 
             remapped_edges.append(new_edges)
 
-        remapped_edges = torch.stack(remapped_edges)
-        print(remapped_edges)
+        remapped_edges = torch.stack(remapped_edges).coalesce()
 
         # get nodes that should be removed as boolean mask
         remove_mask = log_probabilities.squeeze(-1) == -torch.inf  # shape (#nodes, )
         keep_mask = ~remove_mask
-        new_edges = torch.full((len(conditional_child_layers), keep_mask.sum()), -1, dtype=torch.long)
 
-        # perform a second pass through the new layers and clean up unused nodes
-        for index, edges in enumerate(remapped_edges):
-            # update the edges
-            new_edges[index] = edges[keep_mask]
+        # remove the nodes that have -inf log probabilities from remapped_edges
+        remapped_edges = remapped_edges.index_select(1, keep_mask.nonzero().squeeze(-1))
 
         # construct result and clean it up
-        result = self.__class__(conditional_child_layers, new_edges)
+        result = self.__class__(conditional_child_layers, remapped_edges.coalesce())
         result.clean_up_orphans_inplace()
         return result, log_probabilities
 
@@ -850,7 +873,11 @@ class ProductLayer(InnerLayer):
 
             # mask rather nodes have parent edges or not
             orphans = torch.ones(child_layer.number_of_nodes, dtype=torch.bool)
-            orphans[edges] = False
+
+            # mark nodes that have parents with False
+            values = edges.values()
+            if len(values) > 0:
+                orphans[edges.values()] = False
 
             # if orphans exist
             if orphans.any():
@@ -858,8 +885,10 @@ class ProductLayer(InnerLayer):
                 # remove them from the child layer
                 child_layer.remove_nodes_inplace(orphans)
 
-                # update the indices of this layer
-                self.edges[index] = shrink_index_tensor(edges.unsqueeze(-1)).squeeze(-1)
+        # compress edges
+        shrunken_indices = shrink_index_tensor(self.edges.indices())
+        self.edges =torch.sparse_coo_tensor(shrunken_indices, self.edges.values())
+
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]

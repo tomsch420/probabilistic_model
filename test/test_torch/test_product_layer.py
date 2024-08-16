@@ -50,14 +50,14 @@ class ProductTestCase2(unittest.TestCase):
         assert_close(result, prob)
 
     def test_conditional_of_simple_event(self):
-        event = SimpleEvent({self.x: closed(0.5, 2.), self.y: closed(4, 5.5)})
+        event = SimpleEvent({self.x: closed(0.5, 2.), self.y: closed(2, 2.5)})
         c, lp = self.product_layer.log_conditional_of_simple_event(event)
         c.validate()
         self.assertEqual(c.number_of_nodes, 1)
         self.assertEqual(len(c.child_layers), 2)
         self.assertEqual(c.child_layers[0].number_of_nodes, 1)
         self.assertEqual(c.child_layers[1].number_of_nodes, 1)
-        assert_close(lp, torch.tensor([0., 0.25]).log())
+        assert_close(lp, torch.tensor([0.25, 0.]).log())
 
 
 class ProductTestCase(unittest.TestCase):

@@ -55,6 +55,10 @@ class SumUnitTestCase(unittest.TestCase):
         catted_lnw.values().exp_()
         assert_close(catted_lnw.to_dense(), normalized)
 
+    def test_sampling(self):
+        samples = self.s1.sample(1000)
+        self.assertTrue(all(self.s1.likelihood(samples) > 0.))
+
 
 class MergingTestCase(unittest.TestCase):
     x = Continuous("x")

@@ -255,3 +255,9 @@ def embed_sparse_tensors_in_new_sparse_tensor(sparse_tensors: List[torch.Tensor]
 
     # create the result
     return torch.sparse_coo_tensor(new_indices, new_values, torch.Size(new_shape), is_coalesced=True)
+
+
+def embed_sparse_tensor_in_nan_tensor(sparse_tensor: torch.Tensor) -> torch.Tensor:
+    result = torch.full(sparse_tensor.shape, torch.nan, dtype=torch.double)
+    result[sparse_tensor.indices()[0], sparse_tensor.indices()[1]] = sparse_tensor.values()
+    return result
