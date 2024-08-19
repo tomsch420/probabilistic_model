@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Tuple, Optional, Union, Type, List
 
 import random_events.interval
+from numpy.ma.core import indices, shape
 from random_events.interval import SimpleInterval, Bound
 from typing_extensions import Self
 
@@ -79,8 +80,15 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
     def log_mode(self) -> Tuple[Event, float]:
         pass
 
-    def sample(self, amount: int) -> torch.Tensor:
-        pass
+    def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
+        result = []
+        max_frequency = max(frequencies)
+        for index, frequency in enumerate(frequencies):
+            samples = torch.distributions.Uniform(low=self.lower[index], high=self.upper[index]).sample((frequency, ))
+            samples = torch.sparse_coo_tensor(indices=torch.arange(frequency).unsqueeze(0),
+                                              values=samples, is_coalesced=True, size=(max_frequency, ))
+            result.append(samples)
+        return torch.stack(result).coalesce()
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, torch.Tensor]:
         probabilities = self.probability_of_simple_event(SimpleEvent({self.variable: interval})).log()

@@ -81,6 +81,19 @@ class UniformTestCase(unittest.TestCase):
         layer.validate()
         self.assertEqual(layer.number_of_nodes, 1)
 
+    def test_sampling(self):
+        samples = self.p_x.sample_from_frequencies(torch.tensor([20, 10]))
+        self.assertEqual(samples.shape, (2, 20))
+        samples = samples.values()
+        samples_n0 = samples[:20]
+        samples_n1 = samples[20:30]
+
+
+        l_n0 = self.p_x.likelihood(samples_n0.unsqueeze(-1))[:, 0]
+        l_n1 = self.p_x.likelihood(samples_n1.unsqueeze(-1))[:, 1]
+
+        self.assertTrue(all(l_n0 > 0))
+        self.assertTrue(all(l_n1 > 0))
 
 if __name__ == '__main__':
     unittest.main()
