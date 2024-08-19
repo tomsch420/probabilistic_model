@@ -90,6 +90,29 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
             result.append(samples)
         return torch.stack(result).coalesce()
 
+    def sample_from_frequencies_vmap(self, frequencies: torch.Tensor) -> torch.Tensor:
+        max_frequency = max(frequencies)
+
+        values_for_sparse_tensor = torch.distributions.Uniform(low=0, high=1).sample((sum(frequencies), ))
+        indices = torch.repeat_interleave(torch.arange(len(frequencies)), frequencies)
+
+        # generate the second dimension indexing dimension of the sparse tensor
+
+        def concatenate_without_loop(frequencies):
+            cumulative_sums = torch.cumsum(torch.tensor(frequencies), dim=0)
+            second_index_dimension = torch.arange(cumulative_sums[-1]).long()
+            second_index_dimension -= torch.repeat_interleave(cumulative_sums[:-1], frequencies[:-1])
+            return second_index_dimension
+
+        second_index_dimension = torch.concatenate([torch.arange(frequency) for frequency in frequencies])
+        print(second_index_dimension)
+        print(second_index_dimension.shape)
+        indices = torch.stack([indices, torch.arange(sum(frequencies))])
+
+        print(indices.shape)
+        exit()
+        return samples
+
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, torch.Tensor]:
         probabilities = self.probability_of_simple_event(SimpleEvent({self.variable: interval})).log()
         intersections = [interval.intersection_with(SimpleInterval(lower.item(), upper.item(),

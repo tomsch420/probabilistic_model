@@ -5,6 +5,7 @@ import torch
 from random_events.interval import closed, open
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
+from sympy.physics.units import frequency
 from torch.testing import assert_close
 
 from probabilistic_model.learning.torch import SumLayer
@@ -94,6 +95,19 @@ class UniformTestCase(unittest.TestCase):
 
         self.assertTrue(all(l_n0 > 0))
         self.assertTrue(all(l_n1 > 0))
+
+
+class UniformSamplingSpeedTest(unittest.TestCase):
+    x: Continuous = Continuous("x")
+
+    p_x = UniformLayer(x, torch.Tensor([[0, 1]] * 100))
+
+    def test_sampling(self):
+        frequencies = torch.full((self.p_x.number_of_nodes, ), 10)
+        frequencies[0] = 20
+        frequencies[1] = 2
+        # samples = self.p_x.sample_from_frequencies(frequencies)
+        samples_vmap = self.p_x.sample_from_frequencies_vmap(frequencies)
 
 if __name__ == '__main__':
     unittest.main()
