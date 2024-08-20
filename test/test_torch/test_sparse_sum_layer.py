@@ -56,7 +56,8 @@ class SumUnitTestCase(unittest.TestCase):
         assert_close(catted_lnw.to_dense(), normalized)
 
     def test_sampling(self):
-        samples = self.s1.sample(1000)
+        torch.random.manual_seed(69)
+        samples = self.s1.sample_from_frequencies(torch.tensor([4, 2]))
         self.assertTrue(all(self.s1.likelihood(samples) > 0.))
 
 

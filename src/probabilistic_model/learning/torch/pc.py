@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import inspect
-import math
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Optional, Iterator
 
 import networkx as nx
-import numpy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,9 +20,10 @@ from typing_extensions import List, Tuple, Type, Dict, Union, Self
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
 from ...probabilistic_model import ProbabilisticModel
-from ...utils import (remove_rows_and_cols_where_all, add_sparse_edges_dense_child_tensor_inplace,
+from ...utils import (add_sparse_edges_dense_child_tensor_inplace,
                       sparse_remove_rows_and_cols_where_all, shrink_index_tensor,
-                      embed_sparse_tensors_in_new_sparse_tensor, embed_sparse_tensor_in_nan_tensor)
+                      embed_sparse_tensors_in_new_sparse_tensor, embed_sparse_tensor_in_nan_tensor,
+                      create_sparse_tensor_indices_from_row_lengths)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -383,11 +382,35 @@ class SumLayer(InnerLayer, ABC):
         yield from zip(self.log_weights, self.child_layers)
 
     @property
-    def concatenated_weights(self) -> torch.Tensor:
+    def concatenated_log_weights(self) -> torch.Tensor:
         """
         :return: The concatenated weights of the child layers for each node.
         """
         return torch.cat(self.log_weights, dim=1)
+
+    @property
+    def log_normalization_constants(self) -> torch.Tensor:
+        result = self.concatenated_log_weights.clone().coalesce()
+        result.values().exp_()
+        result = result.sum(1)
+        result.values().log_()
+        return result.to_dense()
+
+    @property
+    def normalized_log_weights(self):
+        result = [log_weights.clone().coalesce() for log_weights in self.log_weights]
+        log_normalization_constants = self.log_normalization_constants
+        for log_weights in result:
+            log_weights.values().sub_(log_normalization_constants[log_weights.indices()[0]])
+        return result
+
+    @property
+    def concatenated_normalized_weights(self) -> torch.Tensor:
+        result = self.concatenated_log_weights.coalesce()
+        log_z = self.log_normalization_constants
+        result.values().sub_(log_z[result.indices()[0]])
+        result.values().exp_()
+        return result.coalesce()
 
     @property
     def number_of_nodes(self) -> int:
@@ -586,21 +609,6 @@ class SumLayer(InnerLayer, ABC):
         self.log_weights = new_log_weights
         self.child_layers = new_child_layers
 
-    @property
-    def log_normalization_constants(self) -> torch.Tensor:
-        result = self.concatenated_weights.clone().coalesce()
-        result.values().exp_()
-        result = result.sum(1)
-        result.values().log_()
-        return result.to_dense()
-
-    @property
-    def normalized_log_weights(self):
-        result = [log_weights.clone().coalesce() for log_weights in self.log_weights]
-        log_normalization_constants = self.log_normalization_constants
-        for log_weights in result:
-            log_weights.values().sub_(log_normalization_constants[log_weights.indices()[0]])
-        return result
 
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
 
@@ -642,18 +650,78 @@ class SumLayer(InnerLayer, ABC):
         return resulting_layer, (probabilities.log() - self.log_normalization_constants)
 
     def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
-        for log_weights, child_layer in zip(self.normalized_log_weights, self.child_layers):
 
-            # calculate weights
-            weights = log_weights.clone()
-            weights = log_weights.values().exp_()
-            weights = log_weights.to_dense()
+        # calculate the probabilities for the latent variable interpretation of this layer
+        catted_weights = self.concatenated_normalized_weights
 
-            child_layer_frequencies = torch.zeros(child_layer.number_of_nodes, dtype=torch.long)
-            for index, weights_of_node in enumerate(weights):
-                print(frequencies[index].item())
-                print(torch.multinomial(weights_of_node, frequencies, replacement=True))
-            print(child_layer_frequencies)
+        # initialize a list to gather the frequencies of the child layers
+        node_to_child_frequency_map = []
+
+        # for every node in this layer
+        for index, weights_of_node in enumerate(catted_weights):
+            weights_of_node = weights_of_node.coalesce()
+
+            # sample the latent variable of this node
+            samples = torch.multinomial(weights_of_node.values(), frequencies[index], replacement=True)
+
+            # convert to frequency count of the child nodes
+            unique, count = torch.unique(samples, return_counts=True)
+            frequencies_of_node = torch.zeros_like(weights_of_node.values(), dtype=torch.long)
+            frequencies_of_node[unique] = count
+            node_to_child_frequency_map.append(frequencies_of_node)
+
+        # convert the frequencies of the child layers to a sparse tensor
+        node_to_child_frequency_map = torch.cat(node_to_child_frequency_map)
+        node_to_child_frequency_map = torch.sparse_coo_tensor(indices=catted_weights.indices(),
+                                                              values=node_to_child_frequency_map,
+                                                              is_coalesced=True,
+                                                              size=catted_weights.size())  # shape: (#nodes, sum(#child_nodes))
+
+        # Create a list that keeps track of the processed samples per node.
+        # This is necessary to write the samples at the correct positions
+        processed_samples_per_node = torch.zeros(self.number_of_nodes)
+
+        # offset for shifting through the frequencies of the node_to_child_frequency_map
+        prev_column_index = 0
+        for child_layer in self.child_layers:
+
+            # get the block of frequencies for the child layer, shape (#nodes, #child_nodes)
+            current_frequency_block = (node_to_child_frequency_map.
+                                       index_select(dim=1,
+                                                    index=torch.arange(prev_column_index,
+                                                                       prev_column_index + child_layer.number_of_nodes))).coalesce()
+            # sample the child layer w. r. t. the sample frequencies
+            frequencies_for_child_nodes = current_frequency_block.sum(0).to_dense()
+
+            # if no samples should be taken, skip this iteration
+            if all(frequencies_for_child_nodes == 0):
+                prev_column_index += child_layer.number_of_nodes
+                continue
+
+            # sample the child layer
+            samples_from_child_layer = child_layer.sample_from_frequencies(frequencies_for_child_nodes)
+            flattened_max_funny_idea = (torch.arange(len(frequencies_for_child_nodes)).
+                                        repeat_interleave(frequencies_for_child_nodes))
+            range_vector = torch.arange(sum(current_frequency_block.values()))
+
+            print(range_vector + flattened_max_funny_idea)
+
+            # calculate how many samples belong to which node in this layer
+            sample_count_for_nodes = current_frequency_block.sum(1).to_dense()
+
+            currently_taken_from_child_nodes = torch.zeros(child_layer.number_of_nodes)
+            print(embed_sparse_tensor_in_nan_tensor(current_frequency_block.coalesce().double()))
+            # for every taking amount in the current frequency block
+            for taking_amount in current_frequency_block:
+                print(taking_amount.to_dense())
+                # samples_from_child_layer = samples_from_child_layer.index_select(0, taking_amount.indices().squeeze(0))
+                print(embed_sparse_tensor_in_nan_tensor(samples_from_child_layer.coalesce()))
+
+
+
+            prev_column_index += child_layer.number_of_nodes
+            processed_samples_per_node += sample_count_for_nodes
+
 
 
 class ProductLayer(InnerLayer):
