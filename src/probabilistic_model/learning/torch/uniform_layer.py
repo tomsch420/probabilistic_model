@@ -1,22 +1,19 @@
 from __future__ import annotations
 
-from typing import Tuple, Optional, Union, Type, List
+from typing_extensions import Tuple, Optional, Union, Type, List, Self
 
-import random_events.interval
-from numpy.ma.core import indices, shape
 from random_events.interval import SimpleInterval, Bound
-from typing_extensions import Self
 
 import torch
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous
 
-from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.learning.torch.input_layer import ContinuousLayerWithFiniteSupport
-from probabilistic_model.learning.torch.pc import AnnotatedLayer
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution as UniformUnit
-from probabilistic_model.probabilistic_model import ProbabilisticModel
-from probabilistic_model.utils import simple_interval_to_open_tensor
+from ...distributions.uniform import UniformDistribution
+from ...learning.torch.input_layer import ContinuousLayerWithFiniteSupport
+from ...learning.torch.pc import AnnotatedLayer
+from ...probabilistic_circuit.distributions import UniformDistribution as UniformUnit
+from ...probabilistic_model import ProbabilisticModel
+from ...utils import simple_interval_to_open_tensor, create_sparse_tensor_indices_from_row_lengths, timeit
 
 
 class UniformLayer(ContinuousLayerWithFiniteSupport):
@@ -81,37 +78,26 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         pass
 
     def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
-        result = []
-        max_frequency = max(frequencies)
-        for index, frequency in enumerate(frequencies):
-            samples = torch.distributions.Uniform(low=self.lower[index], high=self.upper[index]).sample((frequency, ))
-            samples = torch.sparse_coo_tensor(indices=torch.arange(frequency).unsqueeze(0),
-                                              values=samples, is_coalesced=True, size=(max_frequency, ))
-            result.append(samples)
-        return torch.stack(result).coalesce()
-
-    def sample_from_frequencies_vmap(self, frequencies: torch.Tensor) -> torch.Tensor:
         max_frequency = max(frequencies)
 
-        values_for_sparse_tensor = torch.distributions.Uniform(low=0, high=1).sample((sum(frequencies), ))
-        indices = torch.repeat_interleave(torch.arange(len(frequencies)), frequencies)
+        # create indices for the sparse result
+        indices = create_sparse_tensor_indices_from_row_lengths(frequencies)
 
-        # generate the second dimension indexing dimension of the sparse tensor
+        # sample from U(0,1)
+        standard_uniform_samples = torch.rand((indices.shape[1], ))
 
-        def concatenate_without_loop(frequencies):
-            cumulative_sums = torch.cumsum(torch.tensor(frequencies), dim=0)
-            second_index_dimension = torch.arange(cumulative_sums[-1]).long()
-            second_index_dimension -= torch.repeat_interleave(cumulative_sums[:-1], frequencies[:-1])
-            return second_index_dimension
+        # calculate range for each node
+        range_per_sample = (self.upper - self.lower).repeat_interleave(frequencies)
 
-        second_index_dimension = torch.concatenate([torch.arange(frequency) for frequency in frequencies])
-        print(second_index_dimension)
-        print(second_index_dimension.shape)
-        indices = torch.stack([indices, torch.arange(sum(frequencies))])
+        # calculate the right shift for each node
+        right_shift_per_sample = self.lower.repeat_interleave(frequencies)
 
-        print(indices.shape)
-        exit()
-        return samples
+        # apply the transformation to the desired intervals
+        samples = standard_uniform_samples * range_per_sample + right_shift_per_sample
+
+        result = torch.sparse_coo_tensor(indices=indices, values=samples, is_coalesced=True, size=(self.number_of_nodes,
+                                                                                                   max_frequency ))
+        return result
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, torch.Tensor]:
         probabilities = self.probability_of_simple_event(SimpleEvent({self.variable: interval})).log()

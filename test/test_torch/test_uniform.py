@@ -10,6 +10,7 @@ from torch.testing import assert_close
 
 from probabilistic_model.learning.torch import SumLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
+from probabilistic_model.utils import timeit
 
 
 class UniformTestCase(unittest.TestCase):
@@ -89,25 +90,12 @@ class UniformTestCase(unittest.TestCase):
         samples_n0 = samples[:20]
         samples_n1 = samples[20:30]
 
-
         l_n0 = self.p_x.likelihood(samples_n0.unsqueeze(-1))[:, 0]
         l_n1 = self.p_x.likelihood(samples_n1.unsqueeze(-1))[:, 1]
 
         self.assertTrue(all(l_n0 > 0))
         self.assertTrue(all(l_n1 > 0))
 
-
-class UniformSamplingSpeedTest(unittest.TestCase):
-    x: Continuous = Continuous("x")
-
-    p_x = UniformLayer(x, torch.Tensor([[0, 1]] * 100))
-
-    def test_sampling(self):
-        frequencies = torch.full((self.p_x.number_of_nodes, ), 10)
-        frequencies[0] = 20
-        frequencies[1] = 2
-        # samples = self.p_x.sample_from_frequencies(frequencies)
-        samples_vmap = self.p_x.sample_from_frequencies_vmap(frequencies)
 
 if __name__ == '__main__':
     unittest.main()

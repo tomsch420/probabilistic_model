@@ -5,7 +5,7 @@ from torch.testing import assert_close
 from probabilistic_model.distributions.distributions import SymbolicDistribution
 import probabilistic_model.probabilistic_circuit
 import probabilistic_model.probabilistic_circuit.distributions
-from probabilistic_model.utils import type_converter
+from probabilistic_model.utils import type_converter, create_sparse_tensor_indices_from_row_lengths
 import torch
 from probabilistic_model.utils import (sparse_dense_mul_inplace, add_sparse_edges_dense_child_tensor_inplace,
                                        shrink_index_tensor, embed_sparse_tensors_in_new_sparse_tensor)
@@ -56,6 +56,12 @@ class TorchUtilsTestCase(unittest.TestCase):
 
         result = embed_sparse_tensors_in_new_sparse_tensor([t1, t2])
         assert_close(result.to_dense(), dense_result)
+
+    def test_embed_sparse_tensors_in_new_sparse_tensor_1d(self):
+        row_lengths = torch.tensor([2, 3])
+        indices = create_sparse_tensor_indices_from_row_lengths(row_lengths)
+        result = torch.tensor([[0, 0, 1, 1, 1], [0, 1, 0, 1, 2]])
+        assert_close(result, indices)
 
 
 

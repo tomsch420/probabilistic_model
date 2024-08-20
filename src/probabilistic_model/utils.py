@@ -261,3 +261,38 @@ def embed_sparse_tensor_in_nan_tensor(sparse_tensor: torch.Tensor) -> torch.Tens
     result = torch.full(sparse_tensor.shape, torch.nan, dtype=torch.double)
     result[sparse_tensor.indices()[0], sparse_tensor.indices()[1]] = sparse_tensor.values()
     return result
+
+def create_sparse_tensor_indices_from_row_lengths(row_lengths: torch.Tensor) -> torch.Tensor:
+    """
+    Create the indices of a sparse tensor with the given row lengths.
+
+    The shape of the indices is (2, sum(row_lengths)).
+    The shape of the sparse tensor that the indices describe should be (len(row_lengths), max(row_lengths)).
+
+    Example::
+
+        >>> row_lengths = torch.tensor([2, 3])
+        >>> create_sparse_tensor_indices_from_row_lengths(row_lengths)
+        tensor([[0, 0, 1, 1, 1],
+                [0, 1, 0, 1, 2]])
+
+    :param row_lengths: The row lengths.
+    :return: The indices of the sparse tensor
+    """
+
+    # create row indices
+    row_indices = torch.arange(len(row_lengths)).repeat_interleave(row_lengths)
+
+    # offset the row lengths by the one element
+    offset_row_lengths = torch.concatenate([torch.tensor([0]), row_lengths[:-1]])
+
+    # create a cumulative sum of the offset row lengths and offset it by the first row length
+    cum_sum = offset_row_lengths.repeat_interleave(row_lengths)
+
+    # arrange column indices
+    summed_row_lengths = torch.arange(row_lengths.sum().item())
+
+    # create the column indices
+    col_indices = summed_row_lengths - cum_sum
+
+    return torch.stack([row_indices, col_indices])
