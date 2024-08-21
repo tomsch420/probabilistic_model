@@ -7,10 +7,12 @@ from numpy.testing import assert_almost_equal
 from random_events.interval import SimpleInterval, closed
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
+from toolz import frequencies
 from torch.testing import assert_close
 
 from probabilistic_model.learning.torch.pc import SumLayer, ProductLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
+from probabilistic_model.utils import embed_sparse_tensor_in_nan_tensor
 
 
 class SumUnitTestCase(unittest.TestCase):
@@ -57,8 +59,18 @@ class SumUnitTestCase(unittest.TestCase):
 
     def test_sampling(self):
         torch.random.manual_seed(69)
-        samples = self.s1.sample_from_frequencies(torch.tensor([4, 2]))
-        self.assertTrue(all(self.s1.likelihood(samples) > 0.))
+        frequencies = torch.tensor([4, 2])
+        samples = self.s1.sample_from_frequencies(frequencies)
+        for index, sample_row in enumerate(samples):
+            sample_row = sample_row.coalesce().values()
+            self.assertEqual(len(sample_row), frequencies[index])
+            sample_row = sample_row.reshape(-1, 1)
+            likelihood = self.s1.likelihood(sample_row)
+            self.assertTrue(all(likelihood[:, index] > 0.))
+
+
+class SumUnitTestCase2(unittest.TestCase):
+    ...
 
 
 class MergingTestCase(unittest.TestCase):
