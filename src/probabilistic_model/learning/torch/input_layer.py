@@ -13,7 +13,7 @@ from typing_extensions import List, Tuple, Self
 
 from .pc import InputLayer, AnnotatedLayer, SumLayer
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuitMixin
-from ...utils import interval_as_array, remove_rows_and_cols_where_all
+from ...utils import interval_as_array, remove_rows_and_cols_where_all, create_sparse_tensor_indices_from_row_lengths
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -200,7 +200,7 @@ class DiracDeltaLayer(ContinuousLayer):
         return len(self.location)
 
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.where(x == self.location, torch.log(self.density_cap), -torch.inf)
+        return torch.where(x == self.location, torch.log(self.density_cap), -torch.inf).reshape(1, -1)
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
@@ -240,6 +240,14 @@ class DiracDeltaLayer(ContinuousLayer):
     def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
         self.location = self.location[~remove_mask]
         self.density_cap = self.density_cap[~remove_mask]
+
+    def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
+        max_frequency = max(frequencies)
+        result_indices = create_sparse_tensor_indices_from_row_lengths(frequencies)
+        values = self.location.repeat_interleave(frequencies)
+        result = torch.sparse_coo_tensor(result_indices, values, (self.number_of_nodes, max_frequency),
+                                         is_coalesced=True)
+        return result
 
     def __deepcopy__(self):
         return self.__class__(self.variable, self.location.clone(), self.density_cap.clone())

@@ -39,6 +39,10 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         assert_close(layer.location, torch.tensor([0.]))
         assert_close(layer.density_cap, torch.tensor([1.]))
 
+    def test_sample(self):
+        s = self.p_x.sample_from_frequencies(torch.tensor([10, 5]))
+        self.assertTrue(torch.all(s.values()[:10] == 0.))
+        self.assertTrue(torch.all(s.values()[10:] == 1.))
 
 
 if __name__ == '__main__':

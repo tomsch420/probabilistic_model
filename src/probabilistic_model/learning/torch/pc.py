@@ -10,11 +10,13 @@ import networkx as nx
 import numpy as np
 import torch
 import torch.nn as nn
+from numpy.ma.core import shape, argsort
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.utils import recursive_subclasses
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
+from triton.language import dtype
 from typing_extensions import List, Tuple, Type, Dict, Union, Self
 
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
@@ -820,6 +822,7 @@ class ProductLayer(InnerLayer):
         for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
 
             edges = edges.coalesce()
+
             # calculate the log likelihood over the columns of the child layer
             ll = layer.log_likelihood(x[:, columns])  # shape: (#x, #child_nodes)
 
@@ -869,9 +872,6 @@ class ProductLayer(InnerLayer):
         return result
 
     def log_mode(self) -> Tuple[Event, float]:
-        pass
-
-    def sample(self, amount: int) -> torch.Tensor:
         pass
 
     @property
@@ -982,6 +982,38 @@ class ProductLayer(InnerLayer):
         # compress edges
         shrunken_indices = shrink_index_tensor(self.edges.indices())
         self.edges =torch.sparse_coo_tensor(shrunken_indices, self.edges.values())
+
+    def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
+
+        concatenated_samples_per_variable = [torch.zeros(0) for _ in range(len(self.variables))]
+
+        for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
+            edges: torch.Tensor = edges.coalesce()  # shape (self.number_of_nodes,)
+            squeezed_edge_indices = edges.indices().squeeze(0)
+
+            # count the number of samples for each child node
+            frequencies_for_child_layer = torch.zeros(child_layer.number_of_nodes, dtype=torch.long) #  shape (#child_nodes)
+            frequencies_for_child_layer = frequencies_for_child_layer.scatter_add(0, edges.values(),
+                                                                                  frequencies[squeezed_edge_indices])
+
+            # sample the child layer
+            child_layer_samples = child_layer.sample_from_frequencies(frequencies_for_child_layer)
+
+            # reorder the samples according to the order required by the values of the edges (request order of children)
+            reordered_sample_values = child_layer_samples.index_select(0, edges.values().unique_consecutive()).coalesce().values()
+
+            # write samples in the correct columns for the result
+            for column in self.columns_of_child_layers[index]:
+                concatenated_samples_per_variable[column] = (
+                    torch.cat((concatenated_samples_per_variable[column], reordered_sample_values)))
+
+        # assemble the result
+        result_indices = create_sparse_tensor_indices_from_row_lengths(frequencies)
+        result_values = torch.stack(concatenated_samples_per_variable, dim=1)
+        result = torch.sparse_coo_tensor(result_indices, result_values,
+                                         size=(self.number_of_nodes, max(frequencies), len(self.variables)),
+                                         is_coalesced=True)
+        return result
 
 
     def __deepcopy__(self):
