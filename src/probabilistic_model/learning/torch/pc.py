@@ -820,9 +820,7 @@ class ProductLayer(InnerLayer):
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(x), self.number_of_nodes, dtype=torch.double)
         for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
-
             edges = edges.coalesce()
-
             # calculate the log likelihood over the columns of the child layer
             ll = layer.log_likelihood(x[:, columns])  # shape: (#x, #child_nodes)
 
@@ -832,6 +830,7 @@ class ProductLayer(InnerLayer):
 
             # add the gathered values to the result where the edges define the indices
             result[:, edges.indices().squeeze(0)] += ll
+
         return result
 
     @classmethod

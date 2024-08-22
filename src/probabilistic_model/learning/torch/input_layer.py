@@ -200,7 +200,7 @@ class DiracDeltaLayer(ContinuousLayer):
         return len(self.location)
 
     def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.where(x == self.location, torch.log(self.density_cap), -torch.inf).reshape(1, -1)
+        return torch.where(x == self.location, torch.log(self.density_cap), -torch.inf)
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],

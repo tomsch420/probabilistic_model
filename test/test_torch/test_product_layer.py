@@ -91,9 +91,13 @@ class ProductDiracTestCase(unittest.TestCase):
     product_layer = ProductLayer([p_z, p1_x, p2_x, p_y, ], edges)
 
     def test_likelihood(self):
-        data = [[0., 5., 6.]]
-        likelihood = self.product_layer.log_likelihood(torch.tensor(data))
-        self.assertTrue(all(likelihood[:, 0] > 0))
+        data = torch.tensor([[0., 5., 6.],
+                             [2, 4, 6]]).double()
+        likelihood = self.product_layer.likelihood(data)
+        self.assertTrue(likelihood[0, 0] > 0)
+        self.assertTrue(likelihood[1, 1] > 0)
+        self.assertTrue(likelihood[0, 1] == 0)
+        self.assertTrue(likelihood[1, 0] == 0)
 
     def test_sample_from_frequencies(self):
         torch.random.manual_seed(69)
