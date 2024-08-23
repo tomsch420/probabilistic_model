@@ -119,6 +119,17 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [0., 0.,]]).double().log()
         assert_close(ll, result)
 
+    def test_sampling(self):
+        torch.random.manual_seed(69)
+        frequencies = torch.tensor([10, 5])
+        samples = self.sum_layer.sample_from_frequencies(frequencies)
+        for index, sample_row in enumerate(samples):
+            sample_row = sample_row.coalesce().values()
+            self.assertEqual(len(sample_row), frequencies[index])
+            sample_row = sample_row.reshape(-1, 1)
+            likelihood = self.sum_layer.likelihood(sample_row)
+            self.assertTrue(all(likelihood[:, index] > 0.))
+
 
 class MergingTestCase(unittest.TestCase):
     x = Continuous("x")

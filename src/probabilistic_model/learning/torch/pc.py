@@ -698,7 +698,6 @@ class SumLayer(InnerLayer, ABC):
         all_samples = []
 
         for child_layer in self.child_layers:
-
             # get the block of frequencies for the child layer, shape (#nodes, #child_nodes)
             current_frequency_block = (node_to_child_frequency_map.
                                        index_select(dim=1,
