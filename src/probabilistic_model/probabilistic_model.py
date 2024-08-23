@@ -8,7 +8,7 @@ from random_events.set import *
 from random_events.variable import *
 
 from .constants import *
-from .error import IntractableError
+from .error import IntractableError, UndefinedOperationError
 
 # Type definitions
 FullEvidenceType = np.array  # [Union[float, int, SetElement]]
@@ -347,7 +347,7 @@ class ProbabilisticModel(abc.ABC):
             cdf_y_values = self.cdf(cdf_x_values)
             cdf_trace = [go.Scatter(x=cdf_x_values[:, 0], y=cdf_y_values, mode="lines", legendgroup="CDF",
                                     name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))]
-        except NotImplementedError:
+        except UndefinedOperationError:
             cdf_trace = []
 
         pdf_trace = go.Scatter(x=x_values, y=y_values, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,

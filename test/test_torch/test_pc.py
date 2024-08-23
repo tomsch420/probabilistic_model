@@ -46,8 +46,6 @@ class FullCircuitTestCase(unittest.TestCase):
         c2: SumLayer = conditional.child_layers[1]
         c1.merge_with_one_layer_inplace(c2)
         self.assertEqual(c1.number_of_nodes, 2)
-        print(c1.log_weights)
-        print(c1.child_layers[0].number_of_nodes)
         c1.validate()
 
 

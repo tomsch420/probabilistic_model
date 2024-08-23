@@ -235,7 +235,7 @@ class DiracDeltaLayer(ContinuousLayer):
         self.density_cap = torch.cat([self.density_cap] + [other.density_cap for other in others])
 
     def cdf(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.where(x < self.location, 0, 1)
+        return torch.where(x < self.location, 0, 1).double()
 
     def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
         self.location = self.location[~remove_mask]

@@ -45,6 +45,11 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         self.assertTrue(torch.all(s.values()[:10] == 0.))
         self.assertTrue(torch.all(s.values()[10:] == 1.))
 
+    def test_cdf(self):
+        data = torch.tensor([-1, 0, 1, 2]).unsqueeze(-1).double()
+        cdf = self.p_x.cdf(data)
+        result = torch.tensor([[0, 0], [1, 0], [1, 1], [1, 1]]).double()
+        assert_close(cdf, result)
 
 if __name__ == '__main__':
     unittest.main()
