@@ -1014,6 +1014,22 @@ class ProductLayer(InnerLayer):
                                          is_coalesced=True)
         return result
 
+    def cdf(self, events: torch.Tensor) -> torch.Tensor:
+        result = torch.ones(len(events), self.number_of_nodes, dtype=torch.double)
+        for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
+            edges = edges.coalesce()
+
+            # calculate the cdf over the columns of the child layer
+            ll = layer.cdf(events[:, columns])  # shape: (#x, #child_nodes)
+
+            # gather the ll at the indices of the nodes that are required for the edges
+            ll = ll[:, edges.values()]  # shape: (#x, #len(edges.values()))
+            # assert ll.shape == (len(x), len(edges.values()))
+
+            # add the gathered values to the result where the edges define the indices
+            result[:, edges.indices().squeeze(0)] *= ll
+
+        return result
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]

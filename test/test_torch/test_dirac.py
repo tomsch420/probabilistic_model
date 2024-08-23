@@ -51,5 +51,6 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         result = torch.tensor([[0, 0], [1, 0], [1, 1], [1, 1]]).double()
         assert_close(cdf, result)
 
+
 if __name__ == '__main__':
     unittest.main()

@@ -405,7 +405,7 @@ $$
 P(E) \approx = \frac{1}{k} \sum_{i=1}^k \mathbb{1}_E(x_i).
 $$
 
-Since Monte Carlo estimates are not constrained by any for of $f$, we can use them to approximate any integral, such as
+Since Monte Carlo estimates are not constrained by any form of $f$, we can use them to approximate any integral, such as
 $P(x < y)$ or similar complex integrals.
 For further examples on Monte Carlo estimates, 
 I recommend [this Monte Carlo Integration example](https://en.wikipedia.org/wiki/Monte_Carlo_method).

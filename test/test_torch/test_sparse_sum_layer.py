@@ -1,21 +1,20 @@
 import math
 import unittest
 
-import numpy as np
 import torch
-from numpy.testing import assert_almost_equal
-from random_events.interval import SimpleInterval, closed
+
+from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
-from toolz import frequencies
 from torch.testing import assert_close
 
-from probabilistic_model.learning.torch.pc import SumLayer, ProductLayer
+from probabilistic_model.learning.torch import DiracDeltaLayer
+from probabilistic_model.learning.torch.pc import SumLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
 from probabilistic_model.utils import embed_sparse_tensor_in_nan_tensor
 
 
-class SumUnitTestCase(unittest.TestCase):
+class UniformSumUnitTestCase(unittest.TestCase):
     x = Continuous("x")
     p1_x = UniformLayer(x, torch.Tensor([[0, 1]]).double())
     p2_x = UniformLayer(x, torch.Tensor([[1, 3], [1, 1.5]]).double())
@@ -68,9 +67,57 @@ class SumUnitTestCase(unittest.TestCase):
             likelihood = self.s1.likelihood(sample_row)
             self.assertTrue(all(likelihood[:, index] > 0.))
 
+    def test_cdf(self):
+        data = torch.tensor([0.5, 1.5, 4]).reshape(-1, 1)
+        cdf = self.s1.cdf(data)
+        self.assertEqual(cdf.shape, (3, 2))
+        result = [[0.5, 0], [1, 0.25], [1, 1]]
+        assert_close(cdf, torch.tensor(result))
 
-class SumUnitTestCase2(unittest.TestCase):
-    ...
+
+class DiracSumUnitTestCase(unittest.TestCase):
+    x: Continuous = Continuous("x")
+
+    p1_x = DiracDeltaLayer(x, torch.tensor([0., 1.]).double(), torch.tensor([1, 2]).double())
+    p2_x = DiracDeltaLayer(x, torch.tensor([2.]).double(), torch.tensor([3]).double())
+    p3_x = DiracDeltaLayer(x, torch.tensor([3, 4, 5]).double(), torch.tensor([4, 5, 6]).double())
+    p4_x = DiracDeltaLayer(x, torch.tensor([6.]).double(), torch.tensor([1]).double())
+    sum_layer: SumLayer
+
+    @classmethod
+    def setUpClass(cls):
+        weights_p1 = torch.tensor([[0, 0.1], [0.4, 0]]).double().to_sparse_coo().coalesce() * 2
+        weights_p1.values().log_()
+
+        weights_p2 = torch.tensor([[0.2], [0.3]]).double().to_sparse_coo().coalesce() * 2
+        weights_p2.values().log_()
+
+        weights_p3 = torch.tensor([[0.3, 0, 0.4], [0., 0.1, 0.2]]).double().to_sparse_coo().coalesce() * 2
+        weights_p3.values().log_()
+
+        weights_p4 = torch.tensor([[0], [0]]).double().to_sparse_coo().coalesce() * 2
+        weights_p4.values().log_()
+
+        cls.sum_layer = SumLayer([cls.p1_x, cls.p2_x, cls.p3_x, cls.p4_x],
+                                 log_weights=[weights_p1, weights_p2, weights_p3, weights_p4])
+        cls.sum_layer.validate()
+
+    def test_normalization_constants(self):
+        log_normalization_constants = self.sum_layer.log_normalization_constants
+        result = torch.tensor([2, 2]).double().log()
+        assert_close(log_normalization_constants, result)
+
+    def test_ll(self):
+        data = torch.tensor([0., 1., 2., 3., 4., 5., 6.]).double().reshape(-1, 1)
+        ll = self.sum_layer.log_likelihood(data)
+        result = torch.tensor([[0., 0.4,],
+                               [0.1 * 2, 0.,],
+                               [0.2 * 3, 0.3 * 3,],
+                               [0.3 * 4, 0.,],
+                               [0., 0.1 * 5,],
+                               [0.4 * 6, 0.2 * 6,],
+                               [0., 0.,]]).double().log()
+        assert_close(ll, result)
 
 
 class MergingTestCase(unittest.TestCase):

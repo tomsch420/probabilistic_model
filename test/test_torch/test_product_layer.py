@@ -17,7 +17,7 @@ from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumU
 from probabilistic_model.utils import embed_sparse_tensor_in_nan_tensor
 
 
-class ProductTestCase2(unittest.TestCase):
+class UniformProductTestCase(unittest.TestCase):
     x = Continuous("x")
     y = Continuous("y")
 
@@ -68,12 +68,18 @@ class ProductTestCase2(unittest.TestCase):
         for index, sample_row in enumerate(samples):
             sample_row = sample_row.coalesce().values()
             self.assertEqual(len(sample_row), frequencies[index])
-            sample_row = sample_row.reshape(-1, 1)
             likelihood = self.product_layer.likelihood(sample_row)
             self.assertTrue(all(likelihood[:, index] > 0.))
 
+    def test_cdf(self):
+        data = torch.tensor([[1., 1.], [1, 2.5], [3, 5], [6, 6]]).double()
+        cdf = self.product_layer.cdf(data)
+        self.assertEqual(cdf.shape, (4, 2))
+        result = torch.tensor([[0, 0], [0.5, 0.0], [1, 0.25], [1, 1]]).double()
+        assert_close(cdf, result)
 
-class ProductDiracTestCase(unittest.TestCase):
+
+class DiracProductTestCase(unittest.TestCase):
     x = Continuous("x")
     y = Continuous("y")
     z = Continuous("z")
