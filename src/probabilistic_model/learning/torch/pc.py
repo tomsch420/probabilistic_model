@@ -1007,7 +1007,7 @@ class ProductLayer(InnerLayer):
 
         # assemble the result
         result_indices = create_sparse_tensor_indices_from_row_lengths(frequencies)
-        result_values = torch.stack(concatenated_samples_per_variable, dim=1)
+        result_values = torch.cat(concatenated_samples_per_variable, dim=-1)
         result = torch.sparse_coo_tensor(result_indices, result_values,
                                          size=(self.number_of_nodes, max(frequencies), len(self.variables)),
                                          is_coalesced=True)
