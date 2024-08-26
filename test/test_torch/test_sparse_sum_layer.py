@@ -63,7 +63,6 @@ class UniformSumUnitTestCase(unittest.TestCase):
         for index, sample_row in enumerate(samples):
             sample_row = sample_row.coalesce().values()
             self.assertEqual(len(sample_row), frequencies[index])
-            sample_row = sample_row.reshape(-1, 1)
             likelihood = self.s1.likelihood(sample_row)
             self.assertTrue(all(likelihood[:, index] > 0.))
 
@@ -126,7 +125,6 @@ class DiracSumUnitTestCase(unittest.TestCase):
         for index, sample_row in enumerate(samples):
             sample_row = sample_row.coalesce().values()
             self.assertEqual(len(sample_row), frequencies[index])
-            sample_row = sample_row.reshape(-1, 1)
             likelihood = self.sum_layer.likelihood(sample_row)
             self.assertTrue(all(likelihood[:, index] > 0.))
 

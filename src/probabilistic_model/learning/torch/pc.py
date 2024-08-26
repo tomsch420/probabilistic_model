@@ -675,7 +675,9 @@ class SumLayer(InnerLayer, ABC):
         # pseudo sample the latent variables by evaluating the events w. r. t. their probabilities (histogram)
         node_to_child_frequency_map = (catted_weights * frequencies.unsqueeze(-1)).coalesce()
 
-        # round the sample counts to integers
+        # Round the sample counts to integers.
+        # This rounding is the only bias introduced into this form of sampling.
+        # The bias is negligible for large sample counts.
         node_to_child_frequency_map.coalesce().values().round_()
 
         return self.assemble_samples_from_node_to_child_frequency_map(node_to_child_frequency_map.long())
@@ -703,6 +705,7 @@ class SumLayer(InnerLayer, ABC):
                                        index_select(dim=1,
                                                     index=torch.arange(prev_column_index,
                                                                        prev_column_index + child_layer.number_of_nodes))).coalesce()
+
             # sample the child layer w. r. t. the sample frequencies
             frequencies_for_child_nodes = current_frequency_block.sum(0).to_dense()
 
@@ -714,9 +717,11 @@ class SumLayer(InnerLayer, ABC):
             # calculate total samples requested for each node of this layer
             frequencies = current_frequency_block.sum(1).to_dense()
 
-            # calculate the row in this layer the samples in samples_from_child_layer.values() belong to
-            node_ownership = torch.arange(self.number_of_nodes).gather(0, current_frequency_block.indices()[1])
-            node_ownership = node_ownership.repeat_interleave(current_frequency_block.T.coalesce().values())
+            # calculate the row (node) in this layer the samples in samples_from_child_layer.values() belong to.
+            # the node_ownership should contain the node index in this layer for each sample
+            # Example: [1, 1, 0] means that the first two samples belong to node 1 and the last sample belongs to node 0.
+            node_ownership = current_frequency_block.indices()[1].repeat_interleave(current_frequency_block.T.
+                                                                                    coalesce().values())
 
             # sample the child layer
             samples_from_child_layer = child_layer.sample_from_frequencies(frequencies_for_child_nodes)
@@ -730,8 +735,8 @@ class SumLayer(InnerLayer, ABC):
 
             # create the sparse samples for this block of nodes
             samples_of_node_block = torch.sparse_coo_tensor(indices, reordered_by_row_index,
-                                                    (self.number_of_nodes, max(frequencies_for_child_nodes)),
-                                                    is_coalesced=True)
+                                                    (self.number_of_nodes, max(frequencies_for_child_nodes),
+                                                     len(self.variables)), is_coalesced=True)
 
             all_samples.append(samples_of_node_block)
 
@@ -739,7 +744,11 @@ class SumLayer(InnerLayer, ABC):
             prev_column_index += child_layer.number_of_nodes
 
         # concatenate the samples
-        samples = torch.cat(all_samples, 1).coalesce()
+        samples = torch.cat(all_samples, 1)
+
+        # rearrange samples to row-first order
+        argsorted_indices = torch.argsort(samples._indices()[0])
+        samples = samples._values()[argsorted_indices]
 
         # calculate the total number of samples for each node
         total_frequency = node_to_child_frequency_map.sum(1).to_dense()
@@ -747,8 +756,8 @@ class SumLayer(InnerLayer, ABC):
         # calculate the cleaned indices for the resulting tensor
         new_indices = create_sparse_tensor_indices_from_row_lengths(total_frequency)
 
-        return torch.sparse_coo_tensor(new_indices, samples.values(), is_coalesced=True,
-                                       size=(self.number_of_nodes, max(total_frequency)))
+        return torch.sparse_coo_tensor(new_indices, samples, is_coalesced=True,
+                                       size=(self.number_of_nodes, max(total_frequency), len(self.variables)))
 
 
 class ProductLayer(InnerLayer):
@@ -983,6 +992,7 @@ class ProductLayer(InnerLayer):
 
     def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
 
+        # create a list of empty tensors for the samples of each variable
         concatenated_samples_per_variable = [torch.zeros(0) for _ in range(len(self.variables))]
 
         for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
