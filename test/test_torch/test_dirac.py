@@ -33,7 +33,7 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
     def test_conditional_of_simple_interval(self):
         interval = closed(-0.5, 0.5).simple_sets[0]
         layer, ll = self.p_x.log_conditional_from_simple_interval(interval)
-        result = torch.tensor([1, 0]).log()
+        result = torch.tensor([1, 0]).log().double()
         assert_close(ll, result)
         layer.validate()
         self.assertEqual(layer.number_of_nodes, 1)
@@ -42,6 +42,7 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
 
     def test_sample(self):
         s = self.p_x.sample_from_frequencies(torch.tensor([10, 5]))
+        self.assertEqual(s.values().shape, torch.Size((15, 1)))
         self.assertTrue(torch.all(s.values()[:10] == 0.))
         self.assertTrue(torch.all(s.values()[10:] == 1.))
 

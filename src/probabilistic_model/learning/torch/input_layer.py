@@ -244,8 +244,8 @@ class DiracDeltaLayer(ContinuousLayer):
     def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
         max_frequency = max(frequencies)
         result_indices = create_sparse_tensor_indices_from_row_lengths(frequencies)
-        values = self.location.repeat_interleave(frequencies)
-        result = torch.sparse_coo_tensor(result_indices, values, (self.number_of_nodes, max_frequency),
+        values = self.location.repeat_interleave(frequencies).unsqueeze(-1)
+        result = torch.sparse_coo_tensor(result_indices, values, (self.number_of_nodes, max_frequency, 1),
                                          is_coalesced=True)
         return result
 

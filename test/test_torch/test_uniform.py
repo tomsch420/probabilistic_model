@@ -85,13 +85,14 @@ class UniformTestCase(unittest.TestCase):
 
     def test_sampling(self):
         samples = self.p_x.sample_from_frequencies(torch.tensor([20, 10]))
-        self.assertEqual(samples.shape, (2, 20))
+        self.assertEqual(samples.shape, (2, 20, 1))
         samples = samples.values()
+        self.assertEqual(samples.shape, torch.Size((30, 1)))
         samples_n0 = samples[:20]
         samples_n1 = samples[20:30]
 
-        l_n0 = self.p_x.likelihood(samples_n0.unsqueeze(-1))[:, 0]
-        l_n1 = self.p_x.likelihood(samples_n1.unsqueeze(-1))[:, 1]
+        l_n0 = self.p_x.likelihood(samples_n0)[:, 0]
+        l_n1 = self.p_x.likelihood(samples_n1)[:, 1]
 
         self.assertTrue(all(l_n0 > 0))
         self.assertTrue(all(l_n1 > 0))

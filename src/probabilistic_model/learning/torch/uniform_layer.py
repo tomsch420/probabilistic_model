@@ -84,7 +84,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         indices = create_sparse_tensor_indices_from_row_lengths(frequencies)
 
         # sample from U(0,1)
-        standard_uniform_samples = torch.rand((indices.shape[1], ))
+        standard_uniform_samples = torch.rand((indices.shape[1]))
 
         # calculate range for each node
         range_per_sample = (self.upper - self.lower).repeat_interleave(frequencies)
@@ -94,9 +94,10 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
 
         # apply the transformation to the desired intervals
         samples = standard_uniform_samples * range_per_sample + right_shift_per_sample
+        samples = samples.unsqueeze(-1)
 
-        result = torch.sparse_coo_tensor(indices=indices, values=samples, is_coalesced=True, size=(self.number_of_nodes,
-                                                                                                   max_frequency ))
+        result = torch.sparse_coo_tensor(indices=indices, values=samples, is_coalesced=True,
+                                         size=(self.number_of_nodes, max_frequency, 1))
         return result
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, torch.Tensor]:
