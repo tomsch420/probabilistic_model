@@ -735,7 +735,7 @@ class SumLayer(InnerLayer, ABC):
 
             # create the sparse samples for this block of nodes
             samples_of_node_block = torch.sparse_coo_tensor(indices, reordered_by_row_index,
-                                                    (self.number_of_nodes, max(frequencies_for_child_nodes),
+                                                    (self.number_of_nodes, max(frequencies),
                                                      len(self.variables)), is_coalesced=True)
 
             all_samples.append(samples_of_node_block)
@@ -744,11 +744,7 @@ class SumLayer(InnerLayer, ABC):
             prev_column_index += child_layer.number_of_nodes
 
         # concatenate the samples
-        samples = torch.cat(all_samples, 1)
-
-        # rearrange samples to row-first order
-        argsorted_indices = torch.argsort(samples._indices()[0])
-        samples = samples._values()[argsorted_indices]
+        samples = torch.cat(all_samples, 1).coalesce().values()
 
         # calculate the total number of samples for each node
         total_frequency = node_to_child_frequency_map.sum(1).to_dense()
