@@ -13,7 +13,7 @@ from probabilistic_model.learning.torch.input_layer import DiracDeltaLayer
 class DiracDeltaLayerTestCase(unittest.TestCase):
 
     x: Continuous = Continuous("x")
-    p_x = DiracDeltaLayer(x, torch.tensor([0., 1.]), torch.tensor([1., 2.]))
+    p_x = DiracDeltaLayer(x, torch.tensor([0., 1.]).double(), torch.tensor([1., 2.]).double())
 
     def test_likelihood(self):
         data = torch.tensor([0, 1, 2]).reshape(-1, 1)
@@ -22,7 +22,7 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         result = [[0, -torch.inf],
                   [-torch.inf, math.log(2)],
                   [-torch.inf, -torch.inf]]
-        assert_close(ll, torch.tensor(result))
+        assert_close(ll, torch.tensor(result).double())
 
     def test_support_per_node(self):
         support = self.p_x.support_per_node
@@ -37,8 +37,8 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         assert_close(ll, result)
         layer.validate()
         self.assertEqual(layer.number_of_nodes, 1)
-        assert_close(layer.location, torch.tensor([0.]))
-        assert_close(layer.density_cap, torch.tensor([1.]))
+        assert_close(layer.location, torch.tensor([0.]).double())
+        assert_close(layer.density_cap, torch.tensor([1.]).double())
 
     def test_sample(self):
         s = self.p_x.sample_from_frequencies(torch.tensor([10, 5]))
@@ -48,9 +48,16 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
 
     def test_cdf(self):
         data = torch.tensor([-1, 0, 1, 2]).unsqueeze(-1).double()
-        cdf = self.p_x.cdf(data)
+        cdf = self.p_x.cdf_of_nodes(data)
         result = torch.tensor([[0, 0], [1, 0], [1, 1], [1, 1]]).double()
         assert_close(cdf, result)
+
+    def test_moment(self):
+        order = torch.tensor([1.]).long()
+        center = torch.tensor([1.5]).double()
+        moment = self.p_x.moment_of_nodes(order, center)
+        result = torch.tensor([-1.5, -0.5]).double()
+        assert_close(moment, result)
 
 
 if __name__ == '__main__':

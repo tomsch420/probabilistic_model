@@ -123,7 +123,7 @@ class DiracSumUnitTestCase(unittest.TestCase):
 
     def test_cdf(self):
         data = torch.arange(7).reshape(-1, 1).double() - 0.5
-        cdf = self.sum_layer.cdf(data)
+        cdf = self.sum_layer.cdf_of_nodes(data)
         self.assertEqual(cdf.shape, (7, 2))
         result = torch.tensor([[0, 0], # -0.5
                                [0, 0.4], # 0.5

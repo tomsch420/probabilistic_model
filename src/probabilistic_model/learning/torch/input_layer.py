@@ -24,19 +24,14 @@ class ContinuousLayer(InputLayer, ABC):
     variable: Continuous
 
     @abstractmethod
-    def cdf(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Calculate the cumulative distribution function at x.
-        :param x: The data
-        :return: The cumulative distribution function at x with shape (#x, #number_of_nodes)
-        """
+    def cdf_of_nodes(self, x: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
     def probability_of_simple_event(self, event: SimpleEvent) -> torch.Tensor:
         interval: Interval = event[self.variable]
         points = torch.tensor(interval_as_array(interval))
-        upper_bound_cdf = self.cdf(points[:, (1,)])
-        lower_bound_cdf = self.cdf(points[:, (0,)])
+        upper_bound_cdf = self.cdf_of_nodes(points[:, (1,)])
+        lower_bound_cdf = self.cdf_of_nodes(points[:, (0,)])
         return (upper_bound_cdf - lower_bound_cdf).sum(dim=0)
 
     def log_conditional_of_simple_event(self, event: SimpleEvent):
@@ -234,7 +229,7 @@ class DiracDeltaLayer(ContinuousLayer):
         self.location = torch.cat([self.location] + [other.location for other in others])
         self.density_cap = torch.cat([self.density_cap] + [other.density_cap for other in others])
 
-    def cdf(self, x: torch.Tensor) -> torch.Tensor:
+    def cdf_of_nodes(self, x: torch.Tensor) -> torch.Tensor:
         return torch.where(x < self.location, 0, 1).double()
 
     def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
@@ -248,6 +243,16 @@ class DiracDeltaLayer(ContinuousLayer):
         result = torch.sparse_coo_tensor(result_indices, values, (self.number_of_nodes, max_frequency, 1),
                                          is_coalesced=True)
         return result
+
+    def moment_of_nodes(self, order: torch.Tensor, center: torch.Tensor) -> torch.Tensor:
+        order = order.item()
+        center = center.item()
+        if order == 0:
+            return torch.ones(self.number_of_nodes)
+        if order == 1:
+            return self.location - center
+        else:
+            return torch.zeros(self.number_of_nodes)
 
     def __deepcopy__(self):
         return self.__class__(self.variable, self.location.clone(), self.density_cap.clone())

@@ -92,7 +92,7 @@ class ProbabilisticModel(abc.ABC):
 
     def cdf(self, events: np.array) -> np.array:
         """
-        Calculate the cumulative distribution function of an array of events.
+        Calculate the cumulative distribution function of an event-array.
 
         The event belongs to the class of full evidence queries.
 

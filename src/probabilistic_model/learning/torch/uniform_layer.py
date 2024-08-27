@@ -35,7 +35,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         """
         super().__init__(variable, interval)
 
-    def cdf(self, x: torch.Tensor) -> torch.Tensor:
+    def cdf_of_nodes(self, x: torch.Tensor) -> torch.Tensor:
         """
         Calculate the cumulative distribution function at x.
         :param x: The data
@@ -124,3 +124,15 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
 
     def __deepcopy__(self):
         return self.__class__(self.variable, self.interval.clone())
+
+    def moment_of_nodes(self, order: torch.Tensor, center: torch.Tensor) -> torch.Tensor:
+        """
+        Calculate the moment of the uniform distribution.
+        """
+
+        order = order.item()
+        center = center.item()
+        pdf_value = torch.exp(self.log_pdf_value())
+        lower_integral_value = (pdf_value * (self.lower - center) ** (order + 1)) / (order + 1)
+        upper_integral_value = (pdf_value * (self.upper - center) ** (order + 1)) / (order + 1)
+        return upper_integral_value - lower_integral_value

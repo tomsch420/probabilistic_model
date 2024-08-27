@@ -11,17 +11,17 @@ import numpy as np
 import torch
 import torch.nn as nn
 from numpy.ma.core import shape, argsort
-from random_events.product_algebra import Event, SimpleEvent
+from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.utils import recursive_subclasses
-from random_events.variable import Variable
+from random_events.variable import Variable, Continuous, Integer
 from sortedcontainers import SortedSet
 from triton.language import dtype
 from typing_extensions import List, Tuple, Type, Dict, Union, Self
 
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
-from ...probabilistic_model import ProbabilisticModel
+from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ...utils import (add_sparse_edges_dense_child_tensor_inplace,
                       sparse_remove_rows_and_cols_where_all, shrink_index_tensor,
                       embed_sparse_tensors_in_new_sparse_tensor, embed_sparse_tensor_in_nan_tensor,
@@ -91,6 +91,10 @@ class Layer(nn.Module, ProbabilisticModel):
         :return: The variables of the layer.
         """
         raise NotImplementedError
+
+    @property
+    def numeric_variables(self) -> Tuple[Variable, ...]:
+        return tuple(v for v in self.variables if isinstance(v, (Continuous, Integer)))
 
     @abstractmethod
     def validate(self):
@@ -267,6 +271,39 @@ class Layer(nn.Module, ProbabilisticModel):
 
         :param frequencies: The frequencies for each node as LongTensor with shape (#nodes,).
         :return: The samples with shape (#samples, #nodes).
+        """
+        raise NotImplementedError
+
+    def cdf(self, events: Union[np.array, torch.Tensor]) -> np.array:
+        """
+        ..Note:: This will try to remove the node dimension of the layer. Use `cdf_of_nodes` if you want the cdf
+        for every node.
+        """
+        if isinstance(events, np.ndarray):
+            events = torch.from_numpy(events)
+        cdf = self.cdf_of_nodes(events)
+        return cdf.squeeze()
+
+    def cdf_of_nodes(self, events: torch.Tensor) -> torch.Tensor:
+        """
+        Calculate the cdf of each node in this layer for every event in ``events``.
+        :param events: The events to calculate the cdf for
+        :return: The cdf of every event for every node with shape (#events, #nodes)
+        """
+        raise NotImplementedError
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        order_and_center = torch.tensor([[order[v], center[v]] if v.is_numeric else [0, 0] for v in self.variables])
+        moment = self.moment_of_nodes(order_and_center[:, 0].long(), order_and_center[:, 1].double())
+        return VariableMap({v: m for v, m in zip(self.variables, moment) if v.is_numeric})
+
+    def moment_of_nodes(self, order: torch.Tensor, center: torch.Tensor) -> torch.Tensor:
+        """
+        Calculate the moments of all continuous/integer variables.
+
+        :param order: The order of the moment for each variable of this layer as long tensor
+        :param center: The center of the moment for each variable of this layer as float tensor
+        :return: The moment for each variable of this layer
         """
         raise NotImplementedError
 
@@ -580,12 +617,12 @@ class SumLayer(InnerLayer, ABC):
 
         return torch.log(result) - self.log_normalization_constants
 
-    def cdf(self, events: torch.Tensor) -> torch.Tensor:
+    def cdf_of_nodes(self, events: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(events), self.number_of_nodes, dtype=torch.double)
 
         for log_weights, child_layer in self.log_weighted_child_layers:
             # get the cdf of the child nodes
-            cdf = child_layer.cdf(events)
+            cdf = child_layer.cdf_of_nodes(events)
 
             # weight the cdf of the child nodes by the weight for each node of this layer
             cloned_weights = log_weights.clone()  # clone the weights
@@ -1039,20 +1076,19 @@ class ProductLayer(InnerLayer):
                                          is_coalesced=True)
         return result
 
-    def cdf(self, events: torch.Tensor) -> torch.Tensor:
+    def cdf_of_nodes(self, events: torch.Tensor) -> torch.Tensor:
         result = torch.ones(len(events), self.number_of_nodes, dtype=torch.double)
         for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
             edges = edges.coalesce()
 
             # calculate the cdf over the columns of the child layer
-            ll = layer.cdf(events[:, columns])  # shape: (#x, #child_nodes)
+            cdf = layer.cdf_of_nodes(events[:, columns])  # shape: (#x, #child_nodes)
 
-            # gather the ll at the indices of the nodes that are required for the edges
-            ll = ll[:, edges.values()]  # shape: (#x, #len(edges.values()))
-            # assert ll.shape == (len(x), len(edges.values()))
+            # gather the cdf at the indices of the nodes that are required for the edges
+            cdf = cdf[:, edges.values()]  # shape: (#x, #len(edges.values()))
 
             # add the gathered values to the result where the edges define the indices
-            result[:, edges.indices().squeeze(0)] *= ll
+            result[:, edges.indices().squeeze(0)] *= cdf
 
         return result
 

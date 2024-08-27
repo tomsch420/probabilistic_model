@@ -16,7 +16,7 @@ from probabilistic_model.utils import timeit
 class UniformTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
 
-    p_x = UniformLayer(x, torch.Tensor([[0, 1], [1, 3]]))
+    p_x = UniformLayer(x, torch.Tensor([[0, 1], [1, 3]]).double())
 
     def test_log_likelihood(self):
         data = torch.tensor([0.5, 1.5, 4]).reshape(-1, 1)
@@ -27,7 +27,7 @@ class UniformTestCase(unittest.TestCase):
 
     def test_cdf(self):
         data = torch.tensor([0.5, 1.5, 4]).reshape(-1, 1)
-        cdf = self.p_x.cdf(data)
+        cdf = self.p_x.cdf_of_nodes(data)
         self.assertEqual(cdf.shape, (3, 2))
         result = [[0.5, 0], [1, 0.25], [1, 1]]
         assert_close(cdf, torch.tensor(result))
@@ -96,6 +96,13 @@ class UniformTestCase(unittest.TestCase):
 
         self.assertTrue(all(l_n0 > 0))
         self.assertTrue(all(l_n1 > 0))
+
+    def test_moment(self):
+        order = torch.tensor([1]).long()
+        center = torch.tensor([1.]).double()
+        moment = self.p_x.moment_of_nodes(order, center)
+        result = torch.tensor([-0.5, 1.]).double()
+        assert_close(moment, result)
 
 
 if __name__ == '__main__':
