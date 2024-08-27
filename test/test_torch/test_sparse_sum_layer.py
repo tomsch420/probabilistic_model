@@ -66,13 +66,6 @@ class UniformSumUnitTestCase(unittest.TestCase):
             likelihood = self.s1.likelihood(sample_row)
             self.assertTrue(all(likelihood[:, index] > 0.))
 
-    def test_cdf(self):
-        data = torch.tensor([0.5, 1.5, 4]).reshape(-1, 1)
-        cdf = self.s1.cdf(data)
-        self.assertEqual(cdf.shape, (3, 2))
-        result = [[0.5, 0], [1, 0.25], [1, 1]]
-        assert_close(cdf, torch.tensor(result))
-
 
 class DiracSumUnitTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
@@ -127,6 +120,20 @@ class DiracSumUnitTestCase(unittest.TestCase):
             self.assertEqual(len(sample_row), frequencies[index])
             likelihood = self.sum_layer.likelihood(sample_row)
             self.assertTrue(all(likelihood[:, index] > 0.))
+
+    def test_cdf(self):
+        data = torch.arange(7).reshape(-1, 1).double() - 0.5
+        cdf = self.sum_layer.cdf(data)
+        self.assertEqual(cdf.shape, (7, 2))
+        result = torch.tensor([[0, 0], # -0.5
+                               [0, 0.4], # 0.5
+                               [0.1, 0.4], # 1.5
+                               [0.3, 0.7], # 2.5
+                               [0.6, 0.7], # 3.5
+                               [0.6, 0.8], # 4.5
+                               [1, 1], # 5.5
+                               ]).double()
+        assert_close(cdf, torch.tensor(result))
 
 
 class MergingTestCase(unittest.TestCase):

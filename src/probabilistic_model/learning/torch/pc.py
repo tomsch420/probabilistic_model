@@ -580,6 +580,26 @@ class SumLayer(InnerLayer, ABC):
 
         return torch.log(result) - self.log_normalization_constants
 
+    def cdf(self, events: torch.Tensor) -> torch.Tensor:
+        result = torch.zeros(len(events), self.number_of_nodes, dtype=torch.double)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the cdf of the child nodes
+            cdf = child_layer.cdf(events)
+
+            # weight the cdf of the child nodes by the weight for each node of this layer
+            cloned_weights = log_weights.clone()  # clone the weights
+            cloned_weights.values().exp_()  # exponent weights
+
+            #  calculate the weighted sum in layer
+            cdf = torch.matmul(cdf, cloned_weights.T)
+
+            # sum the child layer result
+            result += cdf
+
+        return result/torch.exp(self.log_normalization_constants)
+
+
     def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
         keep_mask = ~remove_mask
         keep_indices = keep_mask.nonzero().squeeze(-1)
