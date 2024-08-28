@@ -362,7 +362,7 @@ class InputLayer(Layer, ABC):
         raise NotImplementedError
 
 
-class SumLayer(InnerLayer, ABC):
+class SumLayer(InnerLayer):
     """
     A layer that represents the sum of multiple other layers.
     """
@@ -455,14 +455,15 @@ class SumLayer(InnerLayer, ABC):
     def number_of_nodes(self) -> int:
         return self.log_weights[0].shape[0]
 
-    @property
+    @cached_property
     def support_per_node(self) -> List[Event]:
         result = [Event() for _ in range(self.number_of_nodes)]
-        for edges, layer in zip(self.edges, self.child_layers):
-            edges = edges.coalesce()
-            child_layer_support = layer.support_per_node
-            for index, edge in zip(edges.indices().squeeze(0), edges.values()):
-                result[index] |= child_layer_support[edge]
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            for node, log_weights_of_node in enumerate(log_weights):
+                log_weights_of_node = log_weights_of_node.coalesce()
+                for child_idx, log_prob in zip(log_weights_of_node.indices()[0], log_weights_of_node.values()):
+                    if log_prob > -torch.inf:
+                        result[node] |= child_layer.support_per_node[child_idx]
         return result
 
     @classmethod
@@ -496,10 +497,6 @@ class SumLayer(InnerLayer, ABC):
 
         sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
         return AnnotatedLayer(sum_layer, nodes, result_hash_remap)
-
-    @property
-    def support(self) -> Event:
-        raise NotImplementedError
 
     def probability_of_simple_event(self, event: SimpleEvent) -> torch.Tensor:
         result = torch.zeros(self.number_of_nodes, 1)

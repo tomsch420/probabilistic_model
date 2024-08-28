@@ -3,7 +3,7 @@ import unittest
 
 import torch
 
-from random_events.interval import closed
+from random_events.interval import closed, singleton
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 from torch.testing import assert_close
@@ -142,6 +142,19 @@ class DiracSumUnitTestCase(unittest.TestCase):
         result = torch.tensor([[0.9],
                                [-0.5]]).double()
         assert_close(moment, result)
+
+    def test_support_per_node(self):
+        support = self.sum_layer.support_per_node
+        s1 = SimpleEvent({self.x: singleton(1)
+                                       | singleton(2)
+                                       | singleton(3)
+                                       | singleton(5)}).as_composite_set()
+        s2 = SimpleEvent({self.x: singleton(0)
+                                       | singleton(2)
+                                       | singleton(4)
+                                       | singleton(5)}).as_composite_set()
+        result = [s1, s2]
+        self.assertEqual(support, result)
 
 
 class MergingTestCase(unittest.TestCase):
