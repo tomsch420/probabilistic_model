@@ -457,7 +457,13 @@ class SumLayer(InnerLayer, ABC):
 
     @property
     def support_per_node(self) -> List[Event]:
-        pass
+        result = [Event() for _ in range(self.number_of_nodes)]
+        for edges, layer in zip(self.edges, self.child_layers):
+            edges = edges.coalesce()
+            child_layer_support = layer.support_per_node
+            for index, edge in zip(edges.indices().squeeze(0), edges.values()):
+                result[index] |= child_layer_support[edge]
+        return result
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
@@ -953,9 +959,16 @@ class ProductLayer(InnerLayer):
     def log_mode(self) -> Tuple[Event, float]:
         pass
 
-    @property
+    @cached_property
     def support_per_node(self) -> List[Event]:
-        pass
+        result = [self.universal_simple_event().as_composite_set() for _ in range(self.number_of_nodes)]
+        for edges, layer in zip(self.edges, self.child_layers):
+            edges = edges.coalesce()
+            child_layer_support = layer.support_per_node
+            for index, edge in zip(edges.indices().squeeze(0), edges.values()):
+                result[index] &= child_layer_support[edge]
+        return result
+
 
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
 

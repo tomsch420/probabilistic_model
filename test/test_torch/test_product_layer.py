@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 import torch
 from numpy.testing import assert_almost_equal
-from random_events.interval import SimpleInterval, closed
+from random_events.interval import SimpleInterval, closed, open
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 from torch.testing import assert_close
@@ -85,6 +85,12 @@ class UniformProductTestCase(unittest.TestCase):
         result = torch.tensor([[0.5, 1/3],
                                [3, 28/3]]).double()
         assert_close(moment, result)
+
+    def test_support_per_node(self):
+        support = self.product_layer.support_per_node
+        result = [SimpleEvent({self.x: open(0, 1), self.y: open(2, 3)}).as_composite_set(),
+                  SimpleEvent({self.x: open(2, 4), self.y: open(4, 6)}).as_composite_set()]
+        self.assertEqual(support, result)
 
 
 class DiracProductTestCase(unittest.TestCase):
