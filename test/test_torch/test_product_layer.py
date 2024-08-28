@@ -78,6 +78,14 @@ class UniformProductTestCase(unittest.TestCase):
         result = torch.tensor([[0, 0], [0.5, 0.0], [1, 0.25], [1, 1]]).double()
         assert_close(cdf, result)
 
+    def test_moment(self):
+        order = torch.tensor([1, 2]).long()
+        center = torch.tensor([0, 2]).double()
+        moment = self.product_layer.moment_of_nodes(order, center)
+        result = torch.tensor([[0.5, 1/3],
+                               [3, 28/3]]).double()
+        assert_close(moment, result)
+
 
 class DiracProductTestCase(unittest.TestCase):
     x = Continuous("x")

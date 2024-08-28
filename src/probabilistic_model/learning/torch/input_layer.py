@@ -248,11 +248,12 @@ class DiracDeltaLayer(ContinuousLayer):
         order = order.item()
         center = center.item()
         if order == 0:
-            return torch.ones(self.number_of_nodes)
+            result = torch.ones(self.number_of_nodes)
         if order == 1:
-            return self.location - center
+            result = self.location - center
         else:
-            return torch.zeros(self.number_of_nodes)
+            result = torch.zeros(self.number_of_nodes)
+        return result.unsqueeze(-1)
 
     def __deepcopy__(self):
         return self.__class__(self.variable, self.location.clone(), self.density_cap.clone())

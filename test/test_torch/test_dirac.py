@@ -56,7 +56,7 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         order = torch.tensor([1.]).long()
         center = torch.tensor([1.5]).double()
         moment = self.p_x.moment_of_nodes(order, center)
-        result = torch.tensor([-1.5, -0.5]).double()
+        result = torch.tensor([-1.5, -0.5]).double().unsqueeze(-1)
         assert_close(moment, result)
 
 

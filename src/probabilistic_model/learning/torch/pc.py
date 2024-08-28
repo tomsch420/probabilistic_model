@@ -295,15 +295,15 @@ class Layer(nn.Module, ProbabilisticModel):
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         order_and_center = torch.tensor([[order[v], center[v]] if v.is_numeric else [0, 0] for v in self.variables])
         moment = self.moment_of_nodes(order_and_center[:, 0].long(), order_and_center[:, 1].double())
-        return VariableMap({v: m for v, m in zip(self.variables, moment) if v.is_numeric})
+        return VariableMap({v: m.item() for v, m in zip(self.variables, moment[0]) if v.is_numeric})
 
     def moment_of_nodes(self, order: torch.Tensor, center: torch.Tensor) -> torch.Tensor:
         """
         Calculate the moments of all continuous/integer variables.
 
-        :param order: The order of the moment for each variable of this layer as long tensor
-        :param center: The center of the moment for each variable of this layer as float tensor
-        :return: The moment for each variable of this layer
+        :param order: The order of the moment for each variable of this layer as long tensor with shape (#variables,).
+        :param center: The center of the moment for each variable of this layer as float tensor with shape (#variables,).
+        :return: The moment of each node for each variable of this layer with shape (#nodes, #variables).
         """
         raise NotImplementedError
 
@@ -1091,6 +1091,24 @@ class ProductLayer(InnerLayer):
             result[:, edges.indices().squeeze(0)] *= cdf
 
         return result
+
+    def moment_of_nodes(self, order: torch.Tensor, center: torch.Tensor) -> torch.Tensor:
+        result = torch.ones(self.number_of_nodes, len(self.variables), dtype=torch.double)
+        for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
+            edges = edges.coalesce()
+
+            # extract arguments for the child layer moment
+            order_for_child_layer = order[columns]
+            center_for_child_layer = center[columns]
+
+            # calculate the moments over the columns of the child layer
+            child_layer_moment = layer.moment_of_nodes(order_for_child_layer, center_for_child_layer)
+
+            # gather the moments at the indices of the nodes that are required for the edges
+            result[edges.indices().squeeze(0), columns] *= child_layer_moment[edges.values()].squeeze(-1)
+
+        return result
+
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]

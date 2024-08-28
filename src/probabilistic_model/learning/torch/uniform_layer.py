@@ -135,4 +135,4 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         pdf_value = torch.exp(self.log_pdf_value())
         lower_integral_value = (pdf_value * (self.lower - center) ** (order + 1)) / (order + 1)
         upper_integral_value = (pdf_value * (self.upper - center) ** (order + 1)) / (order + 1)
-        return upper_integral_value - lower_integral_value
+        return (upper_integral_value - lower_integral_value).unsqueeze(-1)
