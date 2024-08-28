@@ -135,6 +135,14 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                ]).double()
         assert_close(cdf, torch.tensor(result))
 
+    def test_moment(self):
+        order = torch.tensor([1]).long()
+        center = torch.tensor([2.5]).double()
+        moment = self.sum_layer.moment_of_nodes(order, center)
+        result = torch.tensor([[0.9],
+                               [-0.5]]).double()
+        assert_close(moment, result)
+
 
 class MergingTestCase(unittest.TestCase):
     x = Continuous("x")

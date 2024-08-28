@@ -812,6 +812,25 @@ class SumLayer(InnerLayer, ABC):
         return torch.sparse_coo_tensor(new_indices, samples, is_coalesced=True,
                                        size=(self.number_of_nodes, max(total_frequency), len(self.variables)))
 
+    def moment_of_nodes(self, order: torch.Tensor, center: torch.Tensor) -> torch.Tensor:
+        result = torch.zeros(self.number_of_nodes, len(self.variables), dtype=torch.double)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the moment of the child nodes
+            moment = child_layer.moment_of_nodes(order, center) # shape (#child_layer_nodes, #variables)
+
+            # weight the moment of the child nodes by the weight for each node of this layer
+            weights = log_weights.clone()  # clone the weights, shape (#nodes, #child_layer_nodes)
+            weights.values().exp_()  # exponent weights
+
+            #  calculate the weighted sum in layer
+            moment = torch.matmul(weights, moment)
+
+            # sum the child layer result
+            result += moment
+
+        return result/torch.exp(self.log_normalization_constants.unsqueeze(-1))
+
 
 class ProductLayer(InnerLayer):
     """
