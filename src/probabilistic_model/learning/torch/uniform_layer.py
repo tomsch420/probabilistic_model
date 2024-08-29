@@ -64,7 +64,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         """
         return -torch.log(self.upper - self.lower)
 
-    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
+    def log_likelihood_of_nodes(self, x: torch.Tensor) -> torch.Tensor:
         """
         Calculate the log-likelihood of the uniform distribution.
 

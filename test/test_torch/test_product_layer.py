@@ -37,7 +37,7 @@ class UniformProductTestCase(unittest.TestCase):
 
     def test_log_likelihood(self):
         data = [[0.5, 2.5], [3.5, 4.5], [0, 5]]
-        ll = self.product_layer.log_likelihood(torch.tensor(data))
+        ll = self.product_layer.log_likelihood_of_nodes(torch.tensor(data))
         self.assertEqual(ll.shape, (len(data), self.product_layer.number_of_nodes))
         result = torch.tensor([[0, -torch.inf],
                                [-torch.inf, math.log(0.25)],
@@ -68,8 +68,8 @@ class UniformProductTestCase(unittest.TestCase):
         for index, sample_row in enumerate(samples):
             sample_row = sample_row.coalesce().values()
             self.assertEqual(len(sample_row), frequencies[index])
-            likelihood = self.product_layer.likelihood(sample_row)
-            self.assertTrue(all(likelihood[:, index] > 0.))
+            likelihood = self.product_layer.log_likelihood_of_nodes(sample_row)
+            self.assertTrue(all(likelihood[:, index] > -torch.inf))
 
     def test_cdf(self):
         data = torch.tensor([[1., 1.], [1, 2.5], [3, 5], [6, 6]]).double()
@@ -121,11 +121,11 @@ class DiracProductTestCase(unittest.TestCase):
     def test_likelihood(self):
         data = torch.tensor([[0., 5., 6.],
                              [2, 4, 6]]).double()
-        likelihood = self.product_layer.likelihood(data)
-        self.assertTrue(likelihood[0, 0] > 0)
-        self.assertTrue(likelihood[1, 1] > 0)
-        self.assertTrue(likelihood[0, 1] == 0)
-        self.assertTrue(likelihood[1, 0] == 0)
+        likelihood = self.product_layer.log_likelihood_of_nodes(data)
+        self.assertTrue(likelihood[0, 0] > -torch.inf)
+        self.assertTrue(likelihood[1, 1] > -torch.inf)
+        self.assertTrue(likelihood[0, 1] == -torch.inf)
+        self.assertTrue(likelihood[1, 0] == -torch.inf)
 
     def test_sample_from_frequencies(self):
         torch.random.manual_seed(69)

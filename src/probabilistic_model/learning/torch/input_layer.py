@@ -60,7 +60,7 @@ class ContinuousLayer(InputLayer, ABC):
         :return: The dirac delta layer and the log-likelihoods with shape (something <= #singletons, 1).
         """
         value = singleton.lower
-        log_likelihoods = self.log_likelihood(torch.tensor(value).reshape(-1, 1)).squeeze()  # shape: (#nodes, )
+        log_likelihoods = self.log_likelihood_of_nodes(torch.tensor(value).reshape(-1, 1)).squeeze()  # shape: (#nodes, )
         possible_indices = (log_likelihoods != -torch.inf).nonzero()[0]  # shape: (#dirac-nodes, )
         filtered_likelihood = log_likelihoods[possible_indices]
         locations = torch.full_like(filtered_likelihood, value)
@@ -194,7 +194,7 @@ class DiracDeltaLayer(ContinuousLayer):
     def number_of_nodes(self) -> int:
         return len(self.location)
 
-    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
+    def log_likelihood_of_nodes(self, x: torch.Tensor) -> torch.Tensor:
         return torch.where(x == self.location, torch.log(self.density_cap), -torch.inf)
 
     @classmethod

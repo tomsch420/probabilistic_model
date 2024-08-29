@@ -85,8 +85,8 @@ class ProbabilisticModel(abc.ABC):
 
         Check the documentation of `likelihood` for more information.
 
-        :param events: The full evidence event
-        :return: The log-likelihood of the event.
+        :param events: The full evidence event with shape (#events, #variables)
+        :return: The log-likelihood of the event with shape (#events).
         """
         raise NotImplementedError
 

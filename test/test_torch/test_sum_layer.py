@@ -14,6 +14,8 @@ from probabilistic_model.learning.torch.pc import SumLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
 from probabilistic_model.utils import embed_sparse_tensor_in_nan_tensor
 
+import plotly.graph_objects as go
+
 
 class UniformSumUnitTestCase(unittest.TestCase):
     x = Continuous("x")
@@ -64,8 +66,8 @@ class UniformSumUnitTestCase(unittest.TestCase):
         for index, sample_row in enumerate(samples):
             sample_row = sample_row.coalesce().values()
             self.assertEqual(len(sample_row), frequencies[index])
-            likelihood = self.s1.likelihood(sample_row)
-            self.assertTrue(all(likelihood[:, index] > 0.))
+            likelihood = self.s1.log_likelihood_of_nodes(sample_row)
+            self.assertTrue(all(likelihood[:, index] > -torch.inf))
 
     def test_is_deterministic(self):
         determinism = self.s1.is_deterministic
@@ -111,7 +113,7 @@ class DiracSumUnitTestCase(unittest.TestCase):
 
     def test_ll(self):
         data = torch.tensor([0., 1., 2., 3., 4., 5., 6.]).double().reshape(-1, 1)
-        ll = self.sum_layer.log_likelihood(data)
+        ll = self.sum_layer.log_likelihood_of_nodes(data)
         result = torch.tensor([[0., 0.4,],
                                [0.1 * 2, 0.,],
                                [0.2 * 3, 0.3 * 3,],
@@ -129,8 +131,8 @@ class DiracSumUnitTestCase(unittest.TestCase):
         for index, sample_row in enumerate(samples):
             sample_row = sample_row.coalesce().values()
             self.assertEqual(len(sample_row), frequencies[index])
-            likelihood = self.sum_layer.likelihood(sample_row)
-            self.assertTrue(all(likelihood[:, index] > 0.))
+            likelihood = self.sum_layer.log_likelihood_of_nodes(sample_row)
+            self.assertTrue(all(likelihood[:, index] > -torch.inf))
 
     def test_cdf(self):
         data = torch.arange(7).reshape(-1, 1).double() - 0.5
@@ -178,6 +180,38 @@ class DiracSumUnitTestCase(unittest.TestCase):
         assert_close(result_ll, ll)
         self.assertEqual(modes, result_modes)
 
+
+class PlottingTestCase(unittest.TestCase):
+    x: Continuous = Continuous("x")
+
+    p1_x = DiracDeltaLayer(x, torch.tensor([0., 1.]).double(), torch.tensor([1, 2]).double())
+    p2_x = DiracDeltaLayer(x, torch.tensor([2.]).double(), torch.tensor([3]).double())
+    p3_x = DiracDeltaLayer(x, torch.tensor([3, 4, 5]).double(), torch.tensor([4, 5, 6]).double())
+    p4_x = DiracDeltaLayer(x, torch.tensor([6.]).double(), torch.tensor([1]).double())
+    sum_layer: SumLayer
+
+    @classmethod
+    def setUpClass(cls):
+        weights_p1 = torch.tensor([[0, 0.1]]).double().to_sparse_coo().coalesce() * 2
+        weights_p1.values().log_()
+
+        weights_p2 = torch.tensor([[0.2]]).double().to_sparse_coo().coalesce() * 2
+        weights_p2.values().log_()
+
+        weights_p3 = torch.tensor([[0.3, 0, 0.4]]).double().to_sparse_coo().coalesce() * 2
+        weights_p3.values().log_()
+
+        weights_p4 = torch.tensor([[0]]).double().to_sparse_coo().coalesce() * 2
+        weights_p4.values().log_()
+
+        cls.sum_layer = SumLayer([cls.p1_x, cls.p2_x, cls.p3_x, cls.p4_x],
+                                 log_weights=[weights_p1, weights_p2, weights_p3, weights_p4])
+        cls.sum_layer.validate()
+
+    def test_plot(self):
+        traces = self.sum_layer.plot()
+        fig = go.Figure(traces)
+        fig.show()
 
 class MergingTestCase(unittest.TestCase):
     x = Continuous("x")

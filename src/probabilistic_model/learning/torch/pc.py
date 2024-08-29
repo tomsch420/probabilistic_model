@@ -137,8 +137,15 @@ class Layer(nn.Module, ProbabilisticModel):
         """
         raise NotImplementedError
 
+    def log_likelihood(self, events: np.ndarray) -> np.ndarray:
+        if isinstance(events, np.ndarray):
+            events = torch.from_numpy(events)
+
+        ll = self.log_likelihood_of_nodes(events)[0]
+        return ll.numpy()
+
     @abstractmethod
-    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
+    def log_likelihood_of_nodes(self, x: torch.Tensor) -> torch.Tensor:
         """
         Calculate the log-likelihood of the distribution.
 
@@ -303,7 +310,8 @@ class Layer(nn.Module, ProbabilisticModel):
         raise NotImplementedError
 
     def sample(self, amount: int) -> np.array:
-        return self.sample_from_frequencies(torch.tensor([amount]))
+        samples = self.sample_from_frequencies(torch.tensor([amount]))[0].to_dense()
+        return samples.numpy()
 
     def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
         """
@@ -715,12 +723,12 @@ class SumLayer(InnerLayer):
     def merge_with(self, others: List[Self]):
         [self.merge_with_one_layer_inplace(other) for other in others]
 
-    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
+    def log_likelihood_of_nodes(self, x: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(x), self.number_of_nodes, dtype=torch.double)
 
         for log_weights, child_layer in self.log_weighted_child_layers:
             # get the log likelihoods of the child nodes
-            ll = child_layer.log_likelihood(x)
+            ll = child_layer.log_likelihood_of_nodes(x)
             # assert ll.shape == (len(x), child_layer.number_of_nodes)
 
             # weight the log likelihood of the child nodes by the weight for each node of this layer
@@ -1039,12 +1047,12 @@ class ProductLayer(InnerLayer):
         return tuple(result)
 
     # @torch.compile
-    def log_likelihood(self, x: torch.Tensor) -> torch.Tensor:
+    def log_likelihood_of_nodes(self, x: torch.Tensor) -> torch.Tensor:
         result = torch.zeros(len(x), self.number_of_nodes, dtype=torch.double)
         for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
             edges = edges.coalesce()
             # calculate the log likelihood over the columns of the child layer
-            ll = layer.log_likelihood(x[:, columns])  # shape: (#x, #child_nodes)
+            ll = layer.log_likelihood_of_nodes(x[:, columns])  # shape: (#x, #child_nodes)
 
             # gather the ll at the indices of the nodes that are required for the edges
             ll = ll[:, edges.values()]  # shape: (#x, #len(edges.values()))

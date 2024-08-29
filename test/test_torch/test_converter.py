@@ -34,7 +34,7 @@ class FromNygaDistributionTestCase(unittest.TestCase):
 
         tensor_data = torch.tensor(self.data).unsqueeze(1)
 
-        ll_m = model.log_likelihood(tensor_data)
+        ll_m = model.log_likelihood_of_nodes(tensor_data)
         numpy_data = self.data.reshape(-1, 1)
         ll_n = self.nyga_distribution.log_likelihood(numpy_data)
 
@@ -70,10 +70,10 @@ class FromJPTTestCase(unittest.TestCase):
         lc = Layer.from_probabilistic_circuit(self.model.probabilistic_circuit).eval()
 
         tensor_data = torch.tensor(self.data.values)
-        lc.log_likelihood(tensor_data[:10])
-        lc.log_likelihood(tensor_data[:10])
+        lc.log_likelihood_of_nodes(tensor_data[:10])
+        lc.log_likelihood_of_nodes(tensor_data[:10])
         lc_ll_begin_time = time.time_ns()
-        lc_ll = lc.log_likelihood(tensor_data)
+        lc_ll = lc.log_likelihood_of_nodes(tensor_data)
         lc_ll_time_total = time.time_ns() - lc_ll_begin_time
         print(f"Time for log likelihood calculation: {lc_ll_time_total}")
 

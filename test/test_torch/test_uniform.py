@@ -20,17 +20,17 @@ class UniformTestCase(unittest.TestCase):
 
     def test_log_likelihood(self):
         data = torch.tensor([0.5, 1.5, 4]).reshape(-1, 1)
-        ll = self.p_x.log_likelihood(data)
+        ll = self.p_x.log_likelihood_of_nodes(data)
         self.assertEqual(ll.shape, (3, 2))
         result = [[0., -float("inf")], [-float("inf"), -math.log(2)], [-float("inf"), -float("inf")]]
-        assert_close(ll, torch.tensor(result))
+        assert_close(ll, torch.tensor(result).double())
 
     def test_cdf(self):
         data = torch.tensor([0.5, 1.5, 4]).reshape(-1, 1)
         cdf = self.p_x.cdf_of_nodes(data)
         self.assertEqual(cdf.shape, (3, 2))
         result = [[0.5, 0], [1, 0.25], [1, 1]]
-        assert_close(cdf, torch.tensor(result))
+        assert_close(cdf, torch.tensor(result).double())
 
     def test_probability(self):
         event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(3, 5)})
@@ -49,8 +49,8 @@ class UniformTestCase(unittest.TestCase):
         event = SimpleEvent({self.x: closed(0.5, 0.5)})
         layer, ll = self.p_x.log_conditional_of_simple_event(event)
         self.assertEqual(layer.number_of_nodes, 1)
-        assert_close(torch.tensor([0.5]), layer.location)
-        assert_close(torch.tensor([1.]), layer.density_cap)
+        assert_close(torch.tensor([0.5]).double(), layer.location)
+        assert_close(torch.tensor([1.]).double(), layer.density_cap)
 
     def test_conditional_single_truncation(self):
         event = SimpleEvent({self.x: closed(0.5, 2.5)})
@@ -91,11 +91,11 @@ class UniformTestCase(unittest.TestCase):
         samples_n0 = samples[:20]
         samples_n1 = samples[20:30]
 
-        l_n0 = self.p_x.likelihood(samples_n0)[:, 0]
-        l_n1 = self.p_x.likelihood(samples_n1)[:, 1]
+        l_n0 = self.p_x.log_likelihood_of_nodes(samples_n0)[:, 0]
+        l_n1 = self.p_x.log_likelihood_of_nodes(samples_n1)[:, 1]
 
-        self.assertTrue(all(l_n0 > 0))
-        self.assertTrue(all(l_n1 > 0))
+        self.assertTrue(all(l_n0 > -torch.inf))
+        self.assertTrue(all(l_n1 > -torch.inf))
 
     def test_moment(self):
         order = torch.tensor([1]).long()

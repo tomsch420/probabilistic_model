@@ -17,7 +17,7 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
 
     def test_likelihood(self):
         data = torch.tensor([0, 1, 2]).reshape(-1, 1)
-        ll = self.p_x.log_likelihood(data)
+        ll = self.p_x.log_likelihood_of_nodes(data)
         self.assertEqual(ll.shape, torch.Size((len(data), self.p_x.number_of_nodes)))
         result = [[0, -torch.inf],
                   [-torch.inf, math.log(2)],
