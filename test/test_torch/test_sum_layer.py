@@ -66,6 +66,11 @@ class UniformSumUnitTestCase(unittest.TestCase):
             likelihood = self.s1.likelihood(sample_row)
             self.assertTrue(all(likelihood[:, index] > 0.))
 
+    def test_is_deterministic(self):
+        determinism = self.s1.is_deterministic
+        result = torch.tensor([1, 0]).bool()
+        assert_close(determinism, result)
+
 
 class DiracSumUnitTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
@@ -155,6 +160,9 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                        | singleton(5)}).as_composite_set()
         result = [s1, s2]
         self.assertEqual(support, result)
+
+    def test_is_deterministic(self):
+        self.assertTrue(self.sum_layer.is_deterministic.all())
 
 
 class MergingTestCase(unittest.TestCase):

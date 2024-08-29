@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import itertools
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from functools import cached_property
@@ -492,18 +493,24 @@ class SumLayer(InnerLayer):
 
     @cached_property
     def is_deterministic(self) -> torch.Tensor:
-        # offset for shifting through the frequencies of the node_to_child_frequency_map
-        prev_column_index = 0
+        result = torch.ones(self.number_of_nodes, dtype=torch.bool)
+        child_layer_supports = [supp for layer in self.child_layers for supp in layer.support_per_node]#
 
-        all_samples = []
+        for node, node_log_weights in enumerate(self.concatenated_log_weights):
+            node_log_weights = node_log_weights.coalesce()
 
-        for child_layer in self.child_layers:
-            # get the block of frequencies for the child layer, shape (#nodes, #child_nodes)
-            current_frequency_block = (self.concatenated_log_weights.
-                                       index_select(dim=1,
-                                                    index=torch.arange(prev_column_index,
-                                                                       prev_column_index + child_layer.number_of_nodes))).coalesce()
-            print(current_frequency_block)
+            # get supports for this node
+            relevant_supports = [child_layer_supports[index] for index, log_weight in
+                                 zip(node_log_weights.indices()[0], node_log_weights.values())
+                                 if log_weight > -torch.inf]
+
+            # check if the supports intersect somewhere
+            for support_a, support_b in itertools.combinations(relevant_supports, 2):
+                if not support_a.intersection_with(support_b).is_empty():
+                    result[node] = False
+                    break
+
+        return result
 
     @property
     def concatenated_normalized_weights(self) -> torch.Tensor:
@@ -943,7 +950,7 @@ class ProductLayer(InnerLayer):
     def number_of_nodes(self) -> int:
         return self.edges.shape[1]
 
-    @property
+    @cached_property
     def is_decomposable(self) -> torch.Tensor:
 
         # create a matrix that counts which node partitions how
@@ -959,8 +966,12 @@ class ProductLayer(InnerLayer):
         result = (variable_containment_counts == 1).all(dim=1)
         return result
 
-    @property
+    @cached_property
     def is_smooth(self) -> torch.Tensor:
+        return torch.ones(self.number_of_nodes, dtype=torch.bool)
+
+    @cached_property
+    def is_deterministic(self) -> torch.Tensor:
         return torch.ones(self.number_of_nodes, dtype=torch.bool)
 
     def decomposes_as(self, other: Layer) -> bool:
