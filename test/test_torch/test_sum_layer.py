@@ -8,6 +8,7 @@ from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 from torch.testing import assert_close
 
+from probabilistic_model.error import IntractableError
 from probabilistic_model.learning.torch import DiracDeltaLayer
 from probabilistic_model.learning.torch.pc import SumLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
@@ -71,6 +72,10 @@ class UniformSumUnitTestCase(unittest.TestCase):
         result = torch.tensor([1, 0]).bool()
         assert_close(determinism, result)
 
+    def test_mode(self):
+        with self.assertRaises(IntractableError):
+            self.s1.log_mode_of_nodes()
+
 
 class DiracSumUnitTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
@@ -114,6 +119,7 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [0., 0.1 * 5,],
                                [0.4 * 6, 0.2 * 6,],
                                [0., 0.,]]).double().log()
+        print(result)
         assert_close(ll, result)
 
     def test_sampling(self):
@@ -163,6 +169,14 @@ class DiracSumUnitTestCase(unittest.TestCase):
 
     def test_is_deterministic(self):
         self.assertTrue(self.sum_layer.is_deterministic.all())
+
+    def test_log_mode(self):
+        modes, ll = self.sum_layer.log_mode_of_nodes()
+        result_modes = [SimpleEvent({self.x: singleton(5)}).as_composite_set(),
+                        SimpleEvent({self.x: singleton(5)}).as_composite_set()]
+        result_ll = torch.tensor([0.4 * 6, 0.2 * 6]).double().log()
+        assert_close(result_ll, ll)
+        self.assertEqual(modes, result_modes)
 
 
 class MergingTestCase(unittest.TestCase):

@@ -11,7 +11,7 @@ import networkx as nx
 import numpy as np
 import torch
 import torch.nn as nn
-from numpy.ma.core import shape, argsort
+from numpy.ma.core import shape, argsort, maximum
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.utils import recursive_subclasses
@@ -20,6 +20,7 @@ from sortedcontainers import SortedSet
 from triton.language import dtype
 from typing_extensions import List, Tuple, Type, Dict, Union, Self
 
+from ...error import IntractableError
 from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
@@ -154,6 +155,21 @@ class Layer(nn.Module, ProbabilisticModel):
         :param event: The simple event.
         :return: The probability of the event for each node in the layer.
         The result is a double tensor with shape (#nodes,).
+        """
+        raise NotImplementedError
+
+    def log_mode(self) -> Tuple[Event, float]:
+        assert self.is_root
+        modes, ll = self.log_mode_of_nodes()
+        return modes[0], ll.item()
+
+    @abstractmethod
+    def log_mode_of_nodes(self) -> Tuple[List[Event], torch.Tensor]:
+        """
+        Calculate the mode and logarithmic maximum for every node.
+
+        :return: A list of events representing the argmax, and a tensor representing the log max for every node.
+                The shapes for both are (#nodes).
         """
         raise NotImplementedError
 
@@ -577,8 +593,38 @@ class SumLayer(InnerLayer):
             result += probabilities
         return result
 
-    def log_mode(self) -> Tuple[Event, float]:
-        raise NotImplementedError
+    def log_mode_of_nodes(self) -> Tuple[List[Event], torch.Tensor]:
+        if not self.is_deterministic.all():
+            raise IntractableError("The mode of a layer that contains non-deterministic sum units is intractable.")
+
+        # initialize results
+        result_ll = torch.full((self.number_of_nodes, ), torch.nan, dtype=torch.double)
+        result_mode = [Event() for _ in range(self.number_of_nodes)]
+
+        # calculate and organize the child layer results
+        child_layer_results = [layer.log_mode_of_nodes() for  layer in self.child_layers]
+        child_layer_modes = [mode for modes, _ in child_layer_results for mode in modes]
+        concatenated_log_max = torch.cat([log_max for _, log_max in child_layer_results])
+        normalized_log_weights = torch.cat(self.normalized_log_weights, dim=1).coalesce()
+
+        # weight the log maxima
+        normalized_log_weights.values().add_(concatenated_log_max[normalized_log_weights.indices()[1]])
+
+        for node, log_maxima in enumerate(normalized_log_weights):
+            log_maxima = log_maxima.coalesce()
+            # calculate maximum
+            log_maxima_values = log_maxima.values()
+            log_max = log_maxima_values.max()
+            result_ll[node] = log_max
+
+            # merge modes
+            maxima_indices = (log_maxima_values == log_max).nonzero().squeeze(0)
+            for index in maxima_indices:
+                result_mode[node] |= child_layer_modes[log_maxima.indices()[0, index]]
+
+        return result_mode, result_ll
+
+
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]

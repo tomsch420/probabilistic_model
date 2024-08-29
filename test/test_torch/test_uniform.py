@@ -104,6 +104,12 @@ class UniformTestCase(unittest.TestCase):
         result = torch.tensor([[-0.5], [1.]]).double()
         assert_close(moment, result)
 
+    def test_log_mode(self):
+        mode, ll = self.p_x.log_mode_of_nodes()
+        result_ll = torch.tensor([1, 0.5]).log().double()
+        assert_close(result_ll, ll)
+        self.assertEqual(mode, self.p_x.support_per_node)
+
 
 if __name__ == '__main__':
     unittest.main()

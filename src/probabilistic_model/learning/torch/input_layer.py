@@ -207,11 +207,8 @@ class DiracDeltaLayer(ContinuousLayer):
     def univariate_support_per_node(self) -> List[AbstractCompositeSet]:
         return [singleton(location) for location in self.location]
 
-    def log_mode(self) -> Tuple[Event, float]:
-        pass
-
-    def sample(self, amount: int) -> torch.Tensor:
-        pass
+    def log_mode_of_nodes(self) -> Tuple[List[Event], torch.Tensor]:
+        return self.support_per_node, self.density_cap.log()
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, torch.Tensor]:
         probabilities = self.probability_of_simple_event(SimpleEvent({self.variable: interval})).log()

@@ -59,6 +59,12 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         result = torch.tensor([-1.5, -0.5]).double().unsqueeze(-1)
         assert_close(moment, result)
 
+    def test_mode(self):
+        mode, ll = self.p_x.log_mode_of_nodes()
+        result_ll = torch.tensor([1, 2]).log().double()
+        assert_close(result_ll, ll)
+        self.assertEqual(mode, self.p_x.support_per_node)
+
 
 if __name__ == '__main__':
     unittest.main()
