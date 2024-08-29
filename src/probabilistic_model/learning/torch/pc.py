@@ -1055,6 +1055,19 @@ class ProductLayer(InnerLayer):
 
         return result
 
+    def log_mode_of_nodes(self) -> Tuple[List[Event], torch.Tensor]:
+        result_ll = torch.zeros(self.number_of_nodes, dtype=torch.double)
+        result_modes = [self.universal_simple_event().as_composite_set() for _ in range(self.number_of_nodes)]
+
+        for node, (edges, layer) in enumerate(zip(self.edges, self.child_layers)):
+            edges = edges.coalesce()
+            layer_modes, layer_ll = layer.log_mode_of_nodes()
+            result_ll[edges.indices()[0]] += layer_ll[edges.values()]
+            for edge_index, edge_value in zip(edges.indices()[0], edges.values()):
+                result_modes[edge_index] &= layer_modes[edge_value]
+
+        return result_modes, result_ll
+
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProductUnit],
                                                          child_layers: List[AnnotatedLayer]) -> \
@@ -1091,9 +1104,6 @@ class ProductLayer(InnerLayer):
             result[edges.indices()] *= probabilities
 
         return result
-
-    def log_mode(self) -> Tuple[Event, float]:
-        pass
 
     @cached_property
     def support_per_node(self) -> List[Event]:

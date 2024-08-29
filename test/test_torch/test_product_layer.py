@@ -92,6 +92,14 @@ class UniformProductTestCase(unittest.TestCase):
                   SimpleEvent({self.x: open(2, 4), self.y: open(4, 6)}).as_composite_set()]
         self.assertEqual(support, result)
 
+    def test_log_mode(self):
+        mode, ll = self.product_layer.log_mode_of_nodes()
+        result_modes = self.product_layer.support_per_node
+        result_ll = torch.tensor([1., 1/4]).double().log()
+        self.assertEqual(mode, result_modes)
+        assert_close(ll, result_ll)
+
+
 
 class DiracProductTestCase(unittest.TestCase):
     x = Continuous("x")
@@ -136,6 +144,12 @@ class DiracProductTestCase(unittest.TestCase):
     def test_is_decomposable(self):
         self.assertTrue(self.product_layer.is_decomposable.all())
 
+    def test_log_mode(self):
+        mode, ll = self.product_layer.log_mode_of_nodes()
+        result_modes = self.product_layer.support_per_node
+        result_ll = torch.tensor([0., 0.]).double()
+        self.assertEqual(mode, result_modes)
+        assert_close(ll, result_ll)
 
 
 class CleanUpTestCase(unittest.TestCase):
