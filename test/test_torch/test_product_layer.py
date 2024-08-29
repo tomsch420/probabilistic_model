@@ -1,9 +1,7 @@
 import math
 import unittest
 
-import numpy as np
 import torch
-from numpy.testing import assert_almost_equal
 from random_events.interval import SimpleInterval, closed, open
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
@@ -12,9 +10,9 @@ from torch.testing import assert_close
 from probabilistic_model.learning.torch import DiracDeltaLayer
 from probabilistic_model.learning.torch.pc import SumLayer, ProductLayer
 from probabilistic_model.learning.torch.uniform_layer import UniformLayer
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit, ProductUnit
 from probabilistic_model.utils import embed_sparse_tensor_in_nan_tensor
+
+import plotly.graph_objects as go
 
 
 class UniformProductTestCase(unittest.TestCase):
@@ -150,6 +148,30 @@ class DiracProductTestCase(unittest.TestCase):
         result_ll = torch.tensor([0., 0.]).double()
         self.assertEqual(mode, result_modes)
         assert_close(ll, result_ll)
+
+
+class PlotProductLayerTestCase(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+
+    p1_x = UniformLayer(x, torch.Tensor([[0, 1],
+                                        [1, 3]]).double())
+    p2_x = UniformLayer(x, torch.Tensor([[2, 4],
+                                        [4, 5]]).double())
+    p_y = UniformLayer(y, torch.Tensor([[2., 3],
+                                        [4, 6]]).double())
+
+    indices = torch.tensor([[0, 2],
+                            [0, 0]])
+    values = torch.tensor([0, 0])
+    edges = torch.sparse_coo_tensor(indices, values, (3, 1), is_coalesced=True)
+
+    product_layer = ProductLayer([p1_x, p2_x, p_y], edges)
+
+    def test_plot(self):
+        traces = self.product_layer.plot()
+        fig = go.Figure(traces)
+        # fig.show()
 
 
 class CleanUpTestCase(unittest.TestCase):

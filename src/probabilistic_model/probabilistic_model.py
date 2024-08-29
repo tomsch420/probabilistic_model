@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 
-from random_events.interval import closed
+from random_events.interval import closed, SimpleInterval
 from random_events.product_algebra import *
 from random_events.set import *
 from random_events.variable import *

@@ -138,7 +138,7 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
 
     @property
     def univariate_support_per_node(self) -> List[AbstractCompositeSet]:
-        return [random_events.interval.open(lower, upper) for lower, upper in self.interval]
+        return [random_events.interval.open(lower.item(), upper.item()) for lower, upper in self.interval]
 
     def left_included_condition(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -205,7 +205,7 @@ class DiracDeltaLayer(ContinuousLayer):
 
     @property
     def univariate_support_per_node(self) -> List[AbstractCompositeSet]:
-        return [singleton(location) for location in self.location]
+        return [singleton(location.item()) for location in self.location]
 
     def log_mode_of_nodes(self) -> Tuple[List[Event], torch.Tensor]:
         return self.support_per_node, self.density_cap.log()

@@ -137,11 +137,11 @@ class Layer(nn.Module, ProbabilisticModel):
         """
         raise NotImplementedError
 
-    def log_likelihood(self, events: np.ndarray) -> np.ndarray:
+    def log_likelihood(self, events: np.ndarray) -> torch.Tensor:
         if isinstance(events, np.ndarray):
             events = torch.from_numpy(events)
 
-        ll = self.log_likelihood_of_nodes(events)[0]
+        ll = self.log_likelihood_of_nodes(events)
         return ll.numpy()
 
     @abstractmethod

@@ -211,7 +211,7 @@ class PlottingTestCase(unittest.TestCase):
     def test_plot(self):
         traces = self.sum_layer.plot()
         fig = go.Figure(traces)
-        fig.show()
+        # fig.show()
 
 class MergingTestCase(unittest.TestCase):
     x = Continuous("x")
