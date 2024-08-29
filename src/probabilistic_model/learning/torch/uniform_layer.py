@@ -12,7 +12,6 @@ from ...distributions.uniform import UniformDistribution
 from ...learning.torch.input_layer import ContinuousLayerWithFiniteSupport
 from ...learning.torch.pc import AnnotatedLayer
 from ...probabilistic_circuit.distributions import UniformDistribution as UniformUnit
-from ...probabilistic_model import ProbabilisticModel
 from ...utils import simple_interval_to_open_tensor, create_sparse_tensor_indices_from_row_lengths, timeit
 
 

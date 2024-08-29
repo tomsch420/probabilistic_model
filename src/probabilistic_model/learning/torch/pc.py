@@ -93,6 +93,30 @@ class Layer(nn.Module, ProbabilisticModel):
         raise NotImplementedError
 
     @property
+    @abstractmethod
+    def is_smooth(self) -> torch.Tensor:
+        """
+        :return: A bool tensor that indicates if a node is smooth or not with shape (#nodes).
+        """
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def is_decomposable(self) -> torch.Tensor:
+        """
+        :return: A bool tensor that indicates if a node is decomposable or not with shape (#nodes).
+        """
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def is_deterministic(self) -> torch.Tensor:
+        """
+        :return: A bool tensor that indicates if a node is deterministic or not with shape (#nodes).
+        """
+        raise NotImplementedError
+
+    @property
     def numeric_variables(self) -> Tuple[Variable, ...]:
         return tuple(v for v in self.variables if isinstance(v, (Continuous, Integer)))
 
@@ -361,6 +385,18 @@ class InputLayer(Layer, ABC):
         """
         raise NotImplementedError
 
+    @cached_property
+    def is_decomposable(self) -> torch.Tensor:
+        return torch.ones(self.number_of_nodes, dtype=torch.bool)
+
+    @cached_property
+    def is_smooth(self) -> torch.Tensor:
+        return torch.ones(self.number_of_nodes, dtype=torch.bool)
+
+    @cached_property
+    def is_deterministic(self) -> torch.Tensor:
+        return torch.ones(self.number_of_nodes, dtype=torch.bool)
+
 
 class SumLayer(InnerLayer):
     """
@@ -442,6 +478,32 @@ class SumLayer(InnerLayer):
         for log_weights in result:
             log_weights.values().sub_(log_normalization_constants[log_weights.indices()[0]])
         return result
+
+    @cached_property
+    def is_decomposable(self) -> torch.Tensor:
+        return torch.ones(self.number_of_nodes, dtype=torch.bool)
+
+    @cached_property
+    def is_smooth(self) -> torch.Tensor:
+        for child_layer in self.child_layers:
+            if child_layer.variables != self.variables:
+                return torch.zeros(self.number_of_nodes, dtype=torch.bool)
+        return torch.ones(self.number_of_nodes, dtype=torch.bool)
+
+    @cached_property
+    def is_deterministic(self) -> torch.Tensor:
+        # offset for shifting through the frequencies of the node_to_child_frequency_map
+        prev_column_index = 0
+
+        all_samples = []
+
+        for child_layer in self.child_layers:
+            # get the block of frequencies for the child layer, shape (#nodes, #child_nodes)
+            current_frequency_block = (self.concatenated_log_weights.
+                                       index_select(dim=1,
+                                                    index=torch.arange(prev_column_index,
+                                                                       prev_column_index + child_layer.number_of_nodes))).coalesce()
+            print(current_frequency_block)
 
     @property
     def concatenated_normalized_weights(self) -> torch.Tensor:
@@ -880,6 +942,26 @@ class ProductLayer(InnerLayer):
     @property
     def number_of_nodes(self) -> int:
         return self.edges.shape[1]
+
+    @property
+    def is_decomposable(self) -> torch.Tensor:
+
+        # create a matrix that counts which node partitions how
+        variable_containment_counts = torch.zeros(self.number_of_nodes, len(self.variables), dtype=torch.long)
+
+        for columns, edges, layer in zip(self.columns_of_child_layers, self.edges, self.child_layers):
+            edges = edges.coalesce()
+
+            # count how often variables occur for every node
+            variable_containment_counts[edges.indices()[0], columns] += 1
+
+        # check that every variable occurs exactly 1 time for every node
+        result = (variable_containment_counts == 1).all(dim=1)
+        return result
+
+    @property
+    def is_smooth(self) -> torch.Tensor:
+        return torch.ones(self.number_of_nodes, dtype=torch.bool)
 
     def decomposes_as(self, other: Layer) -> bool:
         return set(child_layer.variables for child_layer in self.child_layers) == \

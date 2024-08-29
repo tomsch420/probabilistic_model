@@ -133,6 +133,9 @@ class DiracProductTestCase(unittest.TestCase):
         self.assertTrue(torch.all(samples_n0 == torch.tensor([0, 5 ,6])))
         self.assertTrue(torch.all(samples_n1[:3] == torch.tensor([2, 4 ,6])))
 
+    def test_is_decomposable(self):
+        self.assertTrue(self.product_layer.is_decomposable.all())
+
 
 
 class CleanUpTestCase(unittest.TestCase):
