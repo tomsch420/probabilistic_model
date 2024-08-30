@@ -209,8 +209,8 @@ from random_events.interval import *
 
 import plotly.graph_objects as go
 
-from probabilistic_model.probabilistic_circuit.distributions.distributions import GaussianDistribution, TruncatedGaussianDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit
+from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import GaussianDistribution, TruncatedGaussianDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit
 import numpy as np
 
 ```

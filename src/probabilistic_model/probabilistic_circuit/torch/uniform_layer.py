@@ -8,11 +8,11 @@ import torch
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous
 
-from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.torch import ContinuousLayerWithFiniteSupport
-from probabilistic_model.probabilistic_circuit.torch import AnnotatedLayer
-from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution as UniformUnit
-from probabilistic_model.utils import simple_interval_to_open_tensor, create_sparse_tensor_indices_from_row_lengths
+from ...distributions.uniform import UniformDistribution
+from .input_layer import ContinuousLayerWithFiniteSupport
+from .pc import AnnotatedLayer
+from ..nx.distributions import UniformDistribution as UniformUnit
+from ...utils import simple_interval_to_open_tensor, create_sparse_tensor_indices_from_row_lengths
 
 
 class UniformLayer(ContinuousLayerWithFiniteSupport):

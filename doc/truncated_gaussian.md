@@ -27,7 +27,7 @@ First, let us create a Normal distribution:
 from random_events.interval import closed
 from random_events.variable import Continuous
 from random_events.product_algebra import Event, SimpleEvent
-from probabilistic_model.probabilistic_circuit.distributions import GaussianDistribution, TruncatedGaussianDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import GaussianDistribution, TruncatedGaussianDistribution
 import plotly
 plotly.offline.init_notebook_mode()
 import plotly.graph_objects as go

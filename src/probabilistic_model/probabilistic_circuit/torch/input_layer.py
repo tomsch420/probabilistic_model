@@ -9,11 +9,12 @@ from random_events.interval import Interval, SimpleInterval, singleton
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.variable import Continuous
-from typing_extensions import List, Tuple, Self
+from typing_extensions import List, Tuple, Self, Type
 
 from .pc import InputLayer, AnnotatedLayer, SumLayer
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuitMixin
-from probabilistic_model.utils import interval_as_array, remove_rows_and_cols_where_all, create_sparse_tensor_indices_from_row_lengths
+from ..nx.distributions import DiracDeltaDistribution
+from ...probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuitMixin
+from ...utils import interval_as_array, remove_rows_and_cols_where_all, create_sparse_tensor_indices_from_row_lengths
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -198,10 +199,18 @@ class DiracDeltaLayer(ContinuousLayer):
         return torch.where(x == self.location, torch.log(self.density_cap), -torch.inf)
 
     @classmethod
+    def original_class(cls) -> Tuple[Type, ...]:
+        return DiracDeltaDistribution,
+
+    @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
                                                          child_layers: List[AnnotatedLayer]) -> \
             AnnotatedLayer:
-        raise NotImplementedError
+        hash_remap = {hash(node): index for index, node in enumerate(nodes)}
+        locations = torch.tensor([node.location for node in nodes], dtype=torch.double)
+        density_caps = torch.tensor([node.density_cap for node in nodes], dtype=torch.double)
+        result = cls(nodes[0].variable, locations, density_caps)
+        return AnnotatedLayer(result, nodes, hash_remap)
 
     @property
     def univariate_support_per_node(self) -> List[AbstractCompositeSet]:

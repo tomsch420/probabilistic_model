@@ -144,7 +144,7 @@ variance the sample variance.
 
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.distributions import GaussianDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import GaussianDistribution
 mean = dataframe["sepal length (cm)"].mean()
 variance = dataframe["sepal length (cm)"].std()
 
@@ -328,7 +328,7 @@ go.Figure(distribution.plot(), distribution.plotly_layout()).show()
 We can see that conditioning a Gaussian on such an event already creates a mode that has two points. Furthermore, modes can be sets of infinite many points, such as shown below.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution
 uniform = UniformDistribution(Continuous("x"), open(-1, 1).simple_sets[0])
 go.Figure(uniform.plot(), uniform.plotly_layout()).show() 
 ```
@@ -440,8 +440,8 @@ We now construct a gaussian distribution over the free space
 to describe locations and their probabilities to access the fridge.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProductUnit
-from probabilistic_model.probabilistic_circuit.distributions import GaussianDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
+from probabilistic_model.probabilistic_circuit.nx.distributions import GaussianDistribution
 
 
 p_x = GaussianDistribution(x, 5.5, 0.5)

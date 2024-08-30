@@ -261,8 +261,8 @@ fig.show()
 Comparing this to the gaussian distribution we sampled from, we can see that the result is very similar.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.distributions import GaussianDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import SumUnit
+from probabilistic_model.probabilistic_circuit.nx.distributions import GaussianDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit
 
 gaussian_1 = GaussianDistribution(Continuous("x"), 0, 1)
 gaussian_2 = GaussianDistribution(Continuous("x"), 5, 0.5)
