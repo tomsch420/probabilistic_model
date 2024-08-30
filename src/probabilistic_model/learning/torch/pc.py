@@ -6,20 +6,17 @@ import math
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Optional, Iterator
+from typing import Optional, Iterator, Iterable
 
 import networkx as nx
 import numpy as np
 import torch
 import torch.nn as nn
-from argon2 import hash_password
-from numpy.ma.core import shape, argsort, maximum, indices
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.utils import recursive_subclasses
 from random_events.variable import Variable, Continuous, Integer
 from sortedcontainers import SortedSet
-from triton.language import dtype
 from typing_extensions import List, Tuple, Type, Dict, Union, Self
 
 from ...error import IntractableError
@@ -28,8 +25,8 @@ from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit,
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ...utils import (add_sparse_edges_dense_child_tensor_inplace,
                       sparse_remove_rows_and_cols_where_all, shrink_index_tensor,
-                      embed_sparse_tensors_in_new_sparse_tensor, embed_sparse_tensor_in_nan_tensor,
-                      create_sparse_tensor_indices_from_row_lengths)
+                      embed_sparse_tensors_in_new_sparse_tensor, create_sparse_tensor_indices_from_row_lengths,
+                      embed_sparse_tensor_in_nan_tensor)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -76,8 +73,7 @@ class Layer(nn.Module, ProbabilisticModel):
     @property
     def is_root(self) -> bool:
         """
-        TODO there could be multiple circuits with one node that are not the root circuit
-        :return: Whether the layer is the root layer of the circuit.
+        :return: Whether the layer is a possible root layer of the circuit.
         """
         return self.number_of_nodes == 1
 
@@ -135,7 +131,7 @@ class Layer(nn.Module, ProbabilisticModel):
     @abstractmethod
     def number_of_nodes(self) -> int:
         """
-        The number of nodes in the layer.
+        :return: The number of nodes in the layer.
         """
         raise NotImplementedError
 
@@ -423,6 +419,11 @@ class InputLayer(Layer, ABC):
     def is_deterministic(self) -> torch.Tensor:
         return torch.ones(self.number_of_nodes, dtype=torch.bool)
 
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        if self.variable in variables:
+            return self
+        return None
+
 
 class SumLayer(InnerLayer):
     """
@@ -519,7 +520,7 @@ class SumLayer(InnerLayer):
     @cached_property
     def is_deterministic(self) -> torch.Tensor:
         result = torch.ones(self.number_of_nodes, dtype=torch.bool)
-        child_layer_supports = [supp for layer in self.child_layers for supp in layer.support_per_node]#
+        child_layer_supports = [supp for layer in self.child_layers for supp in layer.support_per_node]  #
 
         for node, node_log_weights in enumerate(self.concatenated_log_weights):
             node_log_weights = node_log_weights.coalesce()
@@ -612,11 +613,11 @@ class SumLayer(InnerLayer):
             raise IntractableError("The mode of a layer that contains non-deterministic sum units is intractable.")
 
         # initialize results
-        result_ll = torch.full((self.number_of_nodes, ), torch.nan, dtype=torch.double)
+        result_ll = torch.full((self.number_of_nodes,), torch.nan, dtype=torch.double)
         result_mode = [Event() for _ in range(self.number_of_nodes)]
 
         # calculate and organize the child layer results
-        child_layer_results = [layer.log_mode_of_nodes() for  layer in self.child_layers]
+        child_layer_results = [layer.log_mode_of_nodes() for layer in self.child_layers]
         child_layer_modes = [mode for modes, _ in child_layer_results for mode in modes]
         concatenated_log_max = torch.cat([log_max for _, log_max in child_layer_results])
         normalized_log_weights = torch.cat(self.normalized_log_weights, dim=1).coalesce()
@@ -637,8 +638,6 @@ class SumLayer(InnerLayer):
                 result_mode[node] |= child_layer_modes[log_maxima.indices()[0, index]]
 
         return result_mode, result_ll
-
-
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
@@ -685,7 +684,6 @@ class SumLayer(InnerLayer):
 
             # if this layer cant be merged with any other layer
             if mergeable_row.sum() == 0:
-
                 # append impossible log weights to match the new number of nodes
                 log_weights = torch.sparse_coo_tensor(log_weights.indices(), log_weights.values(),
                                                       (total_number_of_nodes, layer.number_of_nodes),
@@ -715,7 +713,6 @@ class SumLayer(InnerLayer):
         for other_log_weights, other_layer, mergeable_col in zip(other.log_weights, other.child_layers,
                                                                  mergeable_matrix.T):
             if mergeable_col.sum() == 0:
-
                 # append impossible log weights to match the new number of nodes
                 other_log_weights = torch.sparse_coo_tensor(other_log_weights.indices(), other_log_weights.values(),
                                                             (total_number_of_nodes, other_layer.number_of_nodes),
@@ -766,8 +763,7 @@ class SumLayer(InnerLayer):
             # sum the child layer result
             result += cdf
 
-        return result/torch.exp(self.log_normalization_constants)
-
+        return result / torch.exp(self.log_normalization_constants)
 
     def remove_nodes_inplace(self, remove_mask: torch.BoolTensor):
         keep_mask = ~remove_mask
@@ -799,7 +795,6 @@ class SumLayer(InnerLayer):
 
         self.log_weights = new_log_weights
         self.child_layers = new_child_layers
-
 
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Layer], torch.Tensor]:
 
@@ -871,8 +866,8 @@ class SumLayer(InnerLayer):
 
         return self.assemble_samples_from_node_to_child_frequency_map(node_to_child_frequency_map.long())
 
-
-    def assemble_samples_from_node_to_child_frequency_map(self, node_to_child_frequency_map: torch.Tensor) -> torch.Tensor:
+    def assemble_samples_from_node_to_child_frequency_map(self,
+                                                          node_to_child_frequency_map: torch.Tensor) -> torch.Tensor:
         """
         Assemble the samples from the frequencies of the child layers.
 
@@ -924,8 +919,8 @@ class SumLayer(InnerLayer):
 
             # create the sparse samples for this block of nodes
             samples_of_node_block = torch.sparse_coo_tensor(indices, reordered_by_row_index,
-                                                    (self.number_of_nodes, max(frequencies),
-                                                     len(self.variables)), is_coalesced=True)
+                                                            (self.number_of_nodes, max(frequencies),
+                                                             len(self.variables)), is_coalesced=True)
 
             all_samples.append(samples_of_node_block)
 
@@ -949,7 +944,7 @@ class SumLayer(InnerLayer):
 
         for log_weights, child_layer in self.log_weighted_child_layers:
             # get the moment of the child nodes
-            moment = child_layer.moment_of_nodes(order, center) # shape (#child_layer_nodes, #variables)
+            moment = child_layer.moment_of_nodes(order, center)  # shape (#child_layer_nodes, #variables)
 
             # weight the moment of the child nodes by the weight for each node of this layer
             weights = log_weights.clone()  # clone the weights, shape (#nodes, #child_layer_nodes)
@@ -961,7 +956,14 @@ class SumLayer(InnerLayer):
             # sum the child layer result
             result += moment
 
-        return result/torch.exp(self.log_normalization_constants.unsqueeze(-1))
+        return result / torch.exp(self.log_normalization_constants.unsqueeze(-1))
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        if all(variable not in variables for variable in self.variables):
+            return None
+        marginal_child_layers = [layer.marginal(variables) for layer in self.child_layers]
+        return self.__class__(marginal_child_layers, self.log_weights)
+
 
 
 class ProductLayer(InnerLayer):
@@ -1036,7 +1038,7 @@ class ProductLayer(InnerLayer):
 
     def decomposes_as(self, other: Layer) -> bool:
         return set(child_layer.variables for child_layer in self.child_layers) == \
-                set(child_layer.variables for child_layer in other.child_layers)
+            set(child_layer.variables for child_layer in other.child_layers)
 
     def mergeable_with(self, other: Layer):
         return super().mergeable_with(other) and self.decomposes_as(other)
@@ -1104,7 +1106,6 @@ class ProductLayer(InnerLayer):
                 for subcircuit_index, subcircuit in enumerate(node.subcircuits):
                     # if the scopes are compatible
                     if cl_variables == subcircuit.variables:
-
                         # add the edge
                         edge_indices.append([child_layer_index, node_index])
                         edge_values.append(child_layer.hash_remap[hash(subcircuit)])
@@ -1112,7 +1113,6 @@ class ProductLayer(InnerLayer):
         # assemble sparse edge tensor
         edges = torch.sparse_coo_tensor(indices=torch.tensor(edge_indices, dtype=torch.long).T,
                                         values=torch.tensor(edge_values, dtype=torch.long)).coalesce()
-
 
         layer = cls([cl.layer for cl in child_layers], edges)
         return AnnotatedLayer(layer, nodes, hash_remap)
@@ -1146,7 +1146,6 @@ class ProductLayer(InnerLayer):
                 result[index] &= child_layer_support[edge]
         return result
 
-
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
 
         # initialize the conditional child layers and the log probabilities
@@ -1176,14 +1175,15 @@ class ProductLayer(InnerLayer):
             new_node_indices = torch.arange(conditional.number_of_nodes)
 
             # initialize the remapping of the child layer node indices
-            layer_remap = torch.full((child_layer.number_of_nodes, ), torch.nan)
+            layer_remap = torch.full((child_layer.number_of_nodes,), torch.nan)
             layer_remap[child_log_prob > -torch.inf] = new_node_indices.float()
 
             # update the edges
             remapped_child_edges = layer_remap[edges.values()]
             valid_edges = ~torch.isnan(remapped_child_edges)
-            new_edges = torch.sparse_coo_tensor(edges.indices()[:, valid_edges], remapped_child_edges[valid_edges].long(),
-                                                (self.number_of_nodes, ), is_coalesced=True)
+            new_edges = torch.sparse_coo_tensor(edges.indices()[:, valid_edges],
+                                                remapped_child_edges[valid_edges].long(),
+                                                (self.number_of_nodes,), is_coalesced=True)
             remapped_edges.append(new_edges)
 
         remapped_edges = torch.stack(remapped_edges).coalesce()
@@ -1207,7 +1207,6 @@ class ProductLayer(InnerLayer):
 
         # remove nodes from the child layers
         for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
-
             # create a removal mask for the child layer
             child_layer_remove_mask = torch.ones(child_layer.number_of_nodes).bool()
             child_layer_remove_mask[edges] = False
@@ -1259,7 +1258,8 @@ class ProductLayer(InnerLayer):
             squeezed_edge_indices = edges.indices().squeeze(0)
 
             # count the number of samples for each child node
-            frequencies_for_child_layer = torch.zeros(child_layer.number_of_nodes, dtype=torch.long) #  shape (#child_nodes)
+            frequencies_for_child_layer = torch.zeros(child_layer.number_of_nodes,
+                                                      dtype=torch.long)  # shape (#child_nodes)
             frequencies_for_child_layer = frequencies_for_child_layer.scatter_add(0, edges.values(),
                                                                                   frequencies[squeezed_edge_indices])
 
@@ -1267,7 +1267,8 @@ class ProductLayer(InnerLayer):
             child_layer_samples = child_layer.sample_from_frequencies(frequencies_for_child_layer)
 
             # reorder the samples according to the order required by the values of the edges (request order of children)
-            reordered_sample_values = child_layer_samples.index_select(0, edges.values().unique_consecutive()).coalesce().values()
+            reordered_sample_values = child_layer_samples.index_select(0,
+                                                                       edges.values().unique_consecutive()).coalesce().values()
 
             # write samples in the correct columns for the result
             for column in self.columns_of_child_layers[index]:
@@ -1315,11 +1316,18 @@ class ProductLayer(InnerLayer):
 
         return result
 
-
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
         edges = self.edges.clone()
         return self.__class__(child_layers, edges)
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        if all(variable not in variables for variable in self.variables):
+            return None
+        marginal_child_layers = [layer.marginal(variables) for layer in self.child_layers]
+        keep_mask_of_edges = torch.tensor([marginal is not None for marginal in marginal_child_layers], dtype=torch.bool)
+        new_edges = self.edges.index_select(0, keep_mask_of_edges.nonzero().squeeze()).coalesce()
+        return self.__class__([layer for layer in marginal_child_layers if layer is not None], new_edges)
 
 
 @dataclass

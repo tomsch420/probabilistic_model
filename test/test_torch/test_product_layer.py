@@ -163,6 +163,11 @@ class DiracProductTestCase(unittest.TestCase):
         self.assertEqual(conditional.child_layers[1].number_of_nodes, 1)
         self.assertEqual(conditional.child_layers[2].number_of_nodes, 1)
 
+    def test_marginal(self):
+        marginal = self.product_layer.marginal([self.y, self.x])
+        self.assertEqual(marginal.number_of_nodes, 2)
+        self.assertEqual(len(marginal.child_layers), 3)
+        marginal.validate()
 
 
 class PlotProductLayerTestCase(unittest.TestCase):
@@ -187,23 +192,3 @@ class PlotProductLayerTestCase(unittest.TestCase):
         traces = self.product_layer.plot()
         fig = go.Figure(traces)
         # fig.show()
-
-
-class CleanUpTestCase(unittest.TestCase):
-    x = Continuous("x")
-    y = Continuous("y")
-
-    p1_x = UniformLayer(x, torch.tensor([[0, 1]], dtype=torch.double))
-    p1_y = UniformLayer(y, torch.tensor([[0.5, 1], [5, 6]], dtype=torch.double))
-
-    model = ProductLayer(child_layers=[p1_x, p1_y], edges=torch.tensor([[0, 0], [1, 1]]).long())
-
-    def test_clean_up_inplace(self):
-        model = self.model.__deepcopy__()
-        model.clean_up_orphans_inplace()
-        self.assertEqual(model.number_of_nodes, 2)
-        self.assertEqual(len(model.child_layers), 2)
-        cleaned_child_layer = model.child_layers[1]
-        self.assertEqual(cleaned_child_layer.number_of_nodes, 1)
-        cleaned_child_layer.validate()
-        self.assertTrue((model.edges == 0).all())

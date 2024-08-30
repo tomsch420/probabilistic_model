@@ -145,7 +145,7 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [0.6, 0.8], # 4.5
                                [1, 1], # 5.5
                                ]).double()
-        assert_close(cdf, torch.tensor(result))
+        assert_close(cdf, result)
 
     def test_moment(self):
         order = torch.tensor([1]).long()
