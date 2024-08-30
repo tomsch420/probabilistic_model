@@ -4,9 +4,9 @@ import unittest
 import torch
 from random_events.variable import Continuous
 
-from probabilistic_model.learning.torch.pc import ProductLayer, SumLayer
-from probabilistic_model.learning.torch.uniform_layer import UniformLayer
-from random_events.product_algebra import Event, SimpleEvent
+from probabilistic_model.probabilistic_circuit.torch.pc import ProductLayer, SumLayer
+from probabilistic_model.probabilistic_circuit.torch.uniform_layer import UniformLayer
+from random_events.product_algebra import SimpleEvent
 from random_events.interval import closed
 
 @unittest.skip("This test is not working yet.")

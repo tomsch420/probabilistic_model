@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 from random_events.interval import closed
-from random_events.product_algebra import Event, SimpleEvent
+from random_events.product_algebra import SimpleEvent
 from random_events.set import SetElement, Set
 from random_events.variable import Symbolic, Continuous
 
@@ -13,8 +13,8 @@ from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwor
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
                                                                 ConditionalProbabilisticCircuit)
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution, SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProductUnit
+from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution, SymbolicDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
 from probabilistic_model.utils import MissingDict
 
 

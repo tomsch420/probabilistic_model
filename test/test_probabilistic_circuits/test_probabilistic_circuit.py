@@ -1,25 +1,20 @@
-import json
-import os.path
 import unittest
-import numpy as np
 
 from matplotlib import pyplot as plt
 from random_events.interval import closed, open, closed_open
 from random_events.variable import Integer, Continuous
-from sortedcontainers import SortedSet
 from typing_extensions import Union
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
-from probabilistic_model.probabilistic_circuit.convolution.convolution import (UniformDistributionConvolution,
-                                                                               GaussianDistributionConvolution,
-                                                                               TruncatedGaussianDistributionConvolution,
-                                                                               DiracDeltaDistributionConvolution)
-from probabilistic_model.probabilistic_circuit.distributions.distributions import (ContinuousDistribution,
-                                                                                   UniformDistribution,
-                                                                                   GaussianDistribution,
-                                                                                   DiracDeltaDistribution,
-                                                                                   TruncatedGaussianDistribution)
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
-import plotly.graph_objects as go
+from probabilistic_model.probabilistic_circuit.nx.convolution.convolution import (UniformDistributionConvolution,
+                                                                                  GaussianDistributionConvolution,
+                                                                                  TruncatedGaussianDistributionConvolution,
+                                                                                  DiracDeltaDistributionConvolution)
+from probabilistic_model.probabilistic_circuit.nx.distributions import (ContinuousDistribution,
+                                                                        UniformDistribution,
+                                                                        GaussianDistribution,
+                                                                        DiracDeltaDistribution,
+                                                                        TruncatedGaussianDistribution)
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 
 
 class ShowMixin:

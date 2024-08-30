@@ -1,23 +1,16 @@
 from __future__ import annotations
 
-import itertools
 from abc import abstractmethod
 from functools import cached_property
 
-from matplotlib import pyplot as plt
-from random_events.product_algebra import SimpleEvent, Event, VariableMap
-from random_events.variable import Variable, Symbolic, Integer
-from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict, TYPE_CHECKING
+from random_events.product_algebra import SimpleEvent
+from random_events.variable import Variable, Symbolic
+from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
 
-from probabilistic_model.probabilistic_circuit.distributions import (SymbolicDistribution, IntegerDistribution,
-                                                                     DiscreteDistribution as PCDiscreteDistribution)
-from probabilistic_model.probabilistic_model import ProbabilisticModel
-from probabilistic_model.distributions.multinomial import MultinomialDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import (SymbolicDistribution)
 import networkx as nx
-import numpy as np
 
-from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit, SumUnit,
-                                                           ProductUnit, ProbabilisticCircuitMixin)
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit, SumUnit)
 
 
 class BayesianNetworkMixin:

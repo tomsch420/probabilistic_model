@@ -4,7 +4,7 @@ from torch.testing import assert_close
 
 from probabilistic_model.distributions.distributions import SymbolicDistribution
 import probabilistic_model.probabilistic_circuit
-import probabilistic_model.probabilistic_circuit.distributions
+import probabilistic_model.probabilistic_circuit.nx.distributions
 from probabilistic_model.utils import type_converter, create_sparse_tensor_indices_from_row_lengths
 import torch
 from probabilistic_model.utils import (sparse_dense_mul_inplace, add_sparse_edges_dense_child_tensor_inplace,
@@ -15,7 +15,7 @@ class TypeConversionTestCase(unittest.TestCase):
 
     def test_univariate_distribution_type_converter(self):
         result = type_converter(SymbolicDistribution, probabilistic_model.probabilistic_circuit)
-        self.assertEqual(result, probabilistic_model.probabilistic_circuit.distributions.SymbolicDistribution)
+        self.assertEqual(result, probabilistic_model.probabilistic_circuit.nx.distributions.SymbolicDistribution)
 
 
 class TorchUtilsTestCase(unittest.TestCase):

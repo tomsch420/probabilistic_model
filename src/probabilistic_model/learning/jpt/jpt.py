@@ -1,10 +1,7 @@
 import math
 from collections import deque
-from datetime import datetime
 from typing import Tuple, Union, Optional, List, Iterable, Dict, Any
 
-import networkx as nx
-from matplotlib import pyplot as plt
 from random_events.interval import closed_open, closed
 from typing_extensions import Self
 
@@ -15,11 +12,11 @@ from random_events.product_algebra import VariableMap, Event, SimpleEvent
 from random_events.variable import Variable
 from .variables import Continuous, Integer, Symbolic, ScaledContinuous
 from ..nyga_distribution import NygaDistribution
-from ...probabilistic_circuit.distributions.distributions import (DiracDeltaDistribution,
-                                                                  SymbolicDistribution,
-                                                                  IntegerDistribution, UnivariateDistribution)
-from ...probabilistic_circuit.probabilistic_circuit import (SumUnit,
-                                                            ProductUnit as PMDecomposableProductUnit)
+from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import (DiracDeltaDistribution,
+                                                                                      SymbolicDistribution,
+                                                                                      IntegerDistribution, UnivariateDistribution)
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit,
+                                                                                ProductUnit as PMDecomposableProductUnit)
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go

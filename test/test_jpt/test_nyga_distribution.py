@@ -4,13 +4,12 @@ import numpy as np
 import plotly.graph_objects as go
 from numpy import testing
 from random_events.interval import closed, closed_open
-from random_events.product_algebra import Event
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.probabilistic_circuit.distributions import DiracDeltaDistribution
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SumUnit
+from probabilistic_model.probabilistic_circuit.nx.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit
 from random_events.utils import SubclassJSONSerializer
 
 

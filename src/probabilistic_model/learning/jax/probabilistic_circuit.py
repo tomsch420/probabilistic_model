@@ -12,11 +12,11 @@ from random_events.utils import recursive_subclasses
 from random_events.variable import Continuous
 from typing_extensions import Self, Type, Dict, Any
 
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution as PCUniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import (SumUnit as PCSumUnit,
-                                                                             ProbabilisticCircuit as PMProbabilisticCircuit,
-                                                                             ProductUnit as PCProductUnit,
-                                                                             ProbabilisticCircuitMixin)
+from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution as PCUniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit as PCSumUnit,
+                                                                                ProbabilisticCircuit as PMProbabilisticCircuit,
+                                                                                ProductUnit as PCProductUnit,
+                                                                                ProbabilisticCircuitMixin)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[ModuleMixin]:

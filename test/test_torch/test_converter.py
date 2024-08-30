@@ -1,5 +1,4 @@
 import time
-import time
 import unittest
 
 import numpy as np
@@ -11,7 +10,7 @@ from random_events.variable import Continuous, Integer, Symbolic
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.learning.torch.pc import SumLayer, Layer
+from probabilistic_model.probabilistic_circuit.torch.pc import SumLayer, Layer
 
 
 class FromNygaDistributionTestCase(unittest.TestCase):

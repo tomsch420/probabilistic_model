@@ -19,14 +19,13 @@ from random_events.variable import Variable, Continuous, Integer
 from sortedcontainers import SortedSet
 from typing_extensions import List, Tuple, Type, Dict, Union, Self
 
-from ...error import IntractableError
-from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, \
+from probabilistic_model.error import IntractableError
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, \
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
-from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
-from ...utils import (add_sparse_edges_dense_child_tensor_inplace,
-                      sparse_remove_rows_and_cols_where_all, shrink_index_tensor,
-                      embed_sparse_tensors_in_new_sparse_tensor, create_sparse_tensor_indices_from_row_lengths,
-                      embed_sparse_tensor_in_nan_tensor)
+from probabilistic_model.probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
+from probabilistic_model.utils import (add_sparse_edges_dense_child_tensor_inplace,
+                                       sparse_remove_rows_and_cols_where_all, shrink_index_tensor,
+                                       embed_sparse_tensors_in_new_sparse_tensor, create_sparse_tensor_indices_from_row_lengths)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:

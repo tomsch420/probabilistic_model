@@ -6,7 +6,6 @@ from functools import cached_property
 
 import networkx as nx
 import numpy as np
-import torch
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.variable import Variable, Symbolic
@@ -14,13 +13,12 @@ from sortedcontainers import SortedSet
 
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, TYPE_CHECKING
 
-from ..error import IntractableError
-from ..probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
+from probabilistic_model.error import IntractableError
+from probabilistic_model.probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from random_events.utils import SubclassJSONSerializer
-from ..utils import timeit
 
 if TYPE_CHECKING:
-    from .distributions import UnivariateDistribution
+    from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDistribution
 
 
 def cache_inference_result(func):

@@ -7,7 +7,7 @@ from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 from torch.testing import assert_close
 
-from probabilistic_model.learning.torch.input_layer import DiracDeltaLayer
+from probabilistic_model.probabilistic_circuit.torch.input_layer import DiracDeltaLayer
 
 
 class DiracDeltaLayerTestCase(unittest.TestCase):

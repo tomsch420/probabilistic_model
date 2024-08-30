@@ -12,8 +12,8 @@ from random_events.variable import Continuous
 from typing_extensions import List, Tuple, Self
 
 from .pc import InputLayer, AnnotatedLayer, SumLayer
-from ...probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuitMixin
-from ...utils import interval_as_array, remove_rows_and_cols_where_all, create_sparse_tensor_indices_from_row_lengths
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuitMixin
+from probabilistic_model.utils import interval_as_array, remove_rows_and_cols_where_all, create_sparse_tensor_indices_from_row_lengths
 
 
 class ContinuousLayer(InputLayer, ABC):

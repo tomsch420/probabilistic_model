@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing_extensions import Tuple, Optional, Union, Type, List, Self
+from typing_extensions import Tuple, Type, List, Self
 
 from random_events.interval import SimpleInterval, Bound
 
@@ -8,11 +8,11 @@ import torch
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous
 
-from ...distributions.uniform import UniformDistribution
-from ...learning.torch.input_layer import ContinuousLayerWithFiniteSupport
-from ...learning.torch.pc import AnnotatedLayer
-from ...probabilistic_circuit.distributions import UniformDistribution as UniformUnit
-from ...utils import simple_interval_to_open_tensor, create_sparse_tensor_indices_from_row_lengths, timeit
+from probabilistic_model.distributions.uniform import UniformDistribution
+from probabilistic_model.probabilistic_circuit.torch import ContinuousLayerWithFiniteSupport
+from probabilistic_model.probabilistic_circuit.torch import AnnotatedLayer
+from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution as UniformUnit
+from probabilistic_model.utils import simple_interval_to_open_tensor, create_sparse_tensor_indices_from_row_lengths
 
 
 class UniformLayer(ContinuousLayerWithFiniteSupport):

@@ -2,15 +2,14 @@ import math
 import unittest
 
 import torch
-from random_events.interval import SimpleInterval, closed, open
+from random_events.interval import closed, open
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 from torch.testing import assert_close
 
-from probabilistic_model.learning.torch import DiracDeltaLayer
-from probabilistic_model.learning.torch.pc import SumLayer, ProductLayer
-from probabilistic_model.learning.torch.uniform_layer import UniformLayer
-from probabilistic_model.utils import embed_sparse_tensor_in_nan_tensor
+from probabilistic_model.probabilistic_circuit.torch import DiracDeltaLayer
+from probabilistic_model.probabilistic_circuit.torch.pc import ProductLayer
+from probabilistic_model.probabilistic_circuit.torch.uniform_layer import UniformLayer
 
 import plotly.graph_objects as go
 

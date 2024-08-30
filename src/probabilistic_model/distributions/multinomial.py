@@ -2,12 +2,11 @@ import itertools
 
 import numpy as np
 from random_events.product_algebra import SimpleEvent, Event
-from random_events.variable import Integer, Symbolic, Variable
-from sortedcontainers import SortedSet
-from typing_extensions import Self, Any, Union, Iterable, List, Optional, Tuple, Dict
+from random_events.variable import Symbolic, Variable
+from typing_extensions import Self, Any, Iterable, List, Optional, Tuple, Dict
 
-from ..probabilistic_circuit.distributions.distributions import SymbolicDistribution, IntegerDistribution
-from ..probabilistic_circuit.probabilistic_circuit import (ProductUnit, SumUnit)
+from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import SymbolicDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProductUnit, SumUnit)
 from ..probabilistic_model import ProbabilisticModel
 from random_events.utils import SubclassJSONSerializer
 from ..utils import MissingDict

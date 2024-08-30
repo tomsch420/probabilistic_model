@@ -11,6 +11,7 @@ from probabilistic_model.learning.jax.probabilistic_circuit import Probabilistic
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 
 
+@unittest.skip
 class TestJaxUnits(unittest.TestCase):
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")

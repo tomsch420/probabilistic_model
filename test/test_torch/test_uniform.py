@@ -5,12 +5,10 @@ import torch
 from random_events.interval import closed, open
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
-from sympy.physics.units import frequency
 from torch.testing import assert_close
 
-from probabilistic_model.learning.torch import SumLayer
-from probabilistic_model.learning.torch.uniform_layer import UniformLayer
-from probabilistic_model.utils import timeit
+from probabilistic_model.probabilistic_circuit.torch import SumLayer
+from probabilistic_model.probabilistic_circuit.torch.uniform_layer import UniformLayer
 
 
 class UniformTestCase(unittest.TestCase):
