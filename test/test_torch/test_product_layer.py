@@ -57,7 +57,7 @@ class UniformProductTestCase(unittest.TestCase):
         self.assertEqual(len(c.child_layers), 2)
         self.assertEqual(c.child_layers[0].number_of_nodes, 1)
         self.assertEqual(c.child_layers[1].number_of_nodes, 1)
-        assert_close(lp, torch.tensor([0.25, 0.]).log())
+        assert_close(lp, torch.tensor([0.25, 0.]).log().double())
 
     def test_sample_from_frequencies(self):
         torch.random.manual_seed(69)
@@ -148,6 +148,21 @@ class DiracProductTestCase(unittest.TestCase):
         result_ll = torch.tensor([0., 0.]).double()
         self.assertEqual(mode, result_modes)
         assert_close(ll, result_ll)
+
+    def test_conditioning(self):
+        event = SimpleEvent({self.x: closed(-1, 1),
+                             self.y: closed(4.5, 5.5),
+                             self.z: closed(5.5, 6.5)})
+
+        conditional, log_prob = self.product_layer.log_conditional_of_simple_event(event)
+        conditional.validate()
+        assert_close(log_prob, torch.tensor([1., 0.]).log().double())
+        self.assertEqual(conditional.number_of_nodes, 1)
+        self.assertEqual(len(conditional.child_layers), 3)
+        self.assertEqual(conditional.child_layers[0].number_of_nodes, 1)
+        self.assertEqual(conditional.child_layers[1].number_of_nodes, 1)
+        self.assertEqual(conditional.child_layers[2].number_of_nodes, 1)
+
 
 
 class PlotProductLayerTestCase(unittest.TestCase):

@@ -14,7 +14,6 @@ from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.learning.torch.pc import SumLayer, Layer
 
 
-@unittest.skip("Outdated")
 class FromNygaDistributionTestCase(unittest.TestCase):
     x = Continuous("x")
     nyga_distribution = NygaDistribution(x, min_likelihood_improvement=0.001, min_samples_per_quantile=10)
@@ -41,7 +40,6 @@ class FromNygaDistributionTestCase(unittest.TestCase):
         assert_almost_equal(ll_m.squeeze().tolist(), ll_n.tolist(), decimal=4)
 
 
-@unittest.skip("Outdated")
 class FromJPTTestCase(unittest.TestCase):
     data: pd.DataFrame
     x: Continuous
@@ -53,7 +51,7 @@ class FromJPTTestCase(unittest.TestCase):
     def setUp(self):
         np.random.seed(69)
         data = pd.DataFrame()
-        size = 100
+        size = 1000
         data["x"] = np.random.normal(2, 4, size)
         data["y"] = np.random.normal(2, 4, size)
         data["integer"] = np.concatenate(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import itertools
+import math
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from functools import cached_property
@@ -11,7 +12,8 @@ import networkx as nx
 import numpy as np
 import torch
 import torch.nn as nn
-from numpy.ma.core import shape, argsort, maximum
+from argon2 import hash_password
+from numpy.ma.core import shape, argsort, maximum, indices
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.utils import recursive_subclasses
@@ -193,7 +195,6 @@ class Layer(nn.Module, ProbabilisticModel):
         node_to_depth_map = {node: nx.shortest_path_length(pc, pc.root, node) for node in pc.nodes}
         layer_to_nodes_map = {depth: [node for node, n_depth in node_to_depth_map.items() if depth == n_depth] for depth
                               in set(node_to_depth_map.values())}
-
         child_layers = []
 
         for layer_index, nodes in reversed(layer_to_nodes_map.items()):
@@ -573,20 +574,25 @@ class SumLayer(InnerLayer):
                                  variables]
         log_weights = []
 
+        # for every possible child layer
         for child_layer in filtered_child_layers:
 
+            # initialize indices and values for sparse weight matrix
             indices = []
             values = []
 
+            # gather indices and log weights
             for index, node in enumerate(nodes):
                 for weight, subcircuit in node.weighted_subcircuits:
                     if hash(subcircuit) in child_layer.hash_remap:
                         indices.append((index, child_layer.hash_remap[hash(subcircuit)]))
+                        values.append((math.log(weight)))
 
+            # assemble sparse log weight matrix
             log_weights.append(torch.sparse_coo_tensor(torch.tensor(indices).T,
-                                                       torch.tensor(values),
+                                                       torch.tensor(values, dtype=torch.double),
                                                        (number_of_nodes, child_layer.layer.number_of_nodes),
-                                                       is_coalesced=True).double())
+                                                       is_coalesced=True))
 
         sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
         return AnnotatedLayer(sum_layer, nodes, result_hash_remap)
@@ -1083,14 +1089,31 @@ class ProductLayer(InnerLayer):
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
         number_of_nodes = len(nodes)
 
-        edges = [torch.full((child_layer.layer.number_of_nodes,), torch.nan).int() for child_layer in child_layers]
+        edge_indices = []
+        edge_values = []
 
-        for index, node in enumerate(nodes):
-            for child_layer in child_layers:
+        # for every node in the nodes for this layer
+        for node_index, node in enumerate(nodes):
+
+            # for every child layer
+            for child_layer_index, child_layer in enumerate(child_layers):
+
                 cl_variables = SortedSet(child_layer.layer.variables)
+
+                # for every subcircuit
                 for subcircuit_index, subcircuit in enumerate(node.subcircuits):
+                    # if the scopes are compatible
                     if cl_variables == subcircuit.variables:
-                        edges[subcircuit_index][index] = child_layer.hash_remap[hash(subcircuit)]
+
+                        # add the edge
+                        edge_indices.append([child_layer_index, node_index])
+                        edge_values.append(child_layer.hash_remap[hash(subcircuit)])
+
+        # assemble sparse edge tensor
+        edges = torch.sparse_coo_tensor(indices=torch.tensor(edge_indices, dtype=torch.long).T,
+                                        values=torch.tensor(edge_values, dtype=torch.long)).coalesce()
+
+
         layer = cls([cl.layer for cl in child_layers], edges)
         return AnnotatedLayer(layer, nodes, hash_remap)
 
@@ -1127,7 +1150,7 @@ class ProductLayer(InnerLayer):
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], torch.Tensor]:
 
         # initialize the conditional child layers and the log probabilities
-        log_probabilities = torch.zeros(self.number_of_nodes,)
+        log_probabilities = torch.zeros(self.number_of_nodes, dtype=torch.double)
         conditional_child_layers = []
 
         # list for collecting the remapped sparse-edge tensors per child layer
@@ -1142,12 +1165,10 @@ class ProductLayer(InnerLayer):
 
             # if it is entirely impossible, this layer also is
             if conditional is None:
-                # remapped_edges.append(torch.zeros(self.number_of_nodes).to_sparse())
-                # conditional_child_layers.append(conditional)
                 continue
 
             # update the log probabilities and child layers
-            log_probabilities += child_log_prob[edges.values()]
+            log_probabilities[edges.indices()] += child_log_prob[edges.values()]
             conditional_child_layers.append(conditional)
 
             # create the remapping of the node indices. nan indicates the node got deleted
@@ -1159,12 +1180,10 @@ class ProductLayer(InnerLayer):
             layer_remap[child_log_prob > -torch.inf] = new_node_indices.float()
 
             # update the edges
-            edge_values = edges.values()
-            remapped_child_edges = layer_remap[edge_values]
+            remapped_child_edges = layer_remap[edges.values()]
             valid_edges = ~torch.isnan(remapped_child_edges)
             new_edges = torch.sparse_coo_tensor(edges.indices()[:, valid_edges], remapped_child_edges[valid_edges].long(),
                                                 (self.number_of_nodes, ), is_coalesced=True)
-
             remapped_edges.append(new_edges)
 
         remapped_edges = torch.stack(remapped_edges).coalesce()
@@ -1221,13 +1240,14 @@ class ProductLayer(InnerLayer):
 
             # if orphans exist
             if orphans.any():
-
                 # remove them from the child layer
                 child_layer.remove_nodes_inplace(orphans)
 
         # compress edges
-        shrunken_indices = shrink_index_tensor(self.edges.indices())
-        self.edges =torch.sparse_coo_tensor(shrunken_indices, self.edges.values())
+        # print(self.edges)
+        # shrunken_indices = shrink_index_tensor(self.edges.indices())
+        # print(shrunken_indices)
+        # self.edges =torch.sparse_coo_tensor(shrunken_indices, self.edges.values())
 
     def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
 

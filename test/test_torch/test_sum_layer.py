@@ -121,7 +121,6 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [0., 0.1 * 5,],
                                [0.4 * 6, 0.2 * 6,],
                                [0., 0.,]]).double().log()
-        print(result)
         assert_close(ll, result)
 
     def test_sampling(self):
