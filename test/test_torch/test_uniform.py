@@ -2,13 +2,15 @@ import math
 import unittest
 
 import torch
-from random_events.interval import closed, open
+from random_events.interval import closed, open, SimpleInterval, Bound
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 from torch.testing import assert_close
 
+from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution
 from probabilistic_model.probabilistic_circuit.torch import SumLayer
 from probabilistic_model.probabilistic_circuit.torch.uniform_layer import UniformLayer
+from probabilistic_model.utils import simple_interval_to_open_tensor, timeit
 
 
 class UniformTestCase(unittest.TestCase):
@@ -107,6 +109,67 @@ class UniformTestCase(unittest.TestCase):
         result_ll = torch.tensor([1, 0.5]).log().double()
         assert_close(result_ll, ll)
         self.assertEqual(mode, self.p_x.support_per_node)
+
+
+class CompiledSpeedTestCase(unittest.TestCase):
+    x: Continuous = Continuous("x")
+    number_of_nodes = 1000
+
+    def setUp(self):
+        intervals = [SimpleInterval(0, 1, Bound.OPEN, Bound.OPEN) for _ in range(self.number_of_nodes)]
+        self.nx_uniform_distributions = [UniformDistribution(self.x, interval) for interval in intervals]
+        self.torch_uniform_distributions = UniformLayer(self.x, torch.stack([torch.zeros(self.number_of_nodes), torch.ones(self.number_of_nodes)]).double().T)
+
+    def test_log_likelihood(self):
+        self.assertEqual(len(self.nx_uniform_distributions), self.torch_uniform_distributions.number_of_nodes)
+        samples = torch.rand(10000, 1).double()
+
+        @timeit
+        def time_nx():
+            return [node.log_likelihood(samples) for node in self.nx_uniform_distributions]
+
+        @timeit
+        def time_torch():
+            return self.torch_uniform_distributions.log_likelihood_of_nodes(samples)
+
+        nx_result = time_nx()
+        for i in range(10):
+            time_torch()
+
+        torch_result = self.torch_uniform_distributions.log_likelihood_of_nodes(samples)
+        for tr, nxr in zip(torch_result.T, nx_result):
+            assert_close(tr, torch.tensor(nxr).double())
+
+    def test_sampling(self):
+        samples_per_node = 1000
+        frequencies = torch.full((self.number_of_nodes,), samples_per_node).long()
+
+        @timeit
+        def time_torch():
+            return self.torch_uniform_distributions.sample_from_frequencies(frequencies)
+
+        @timeit
+        def time_nx():
+            return [node.sample(samples_per_node) for node in self.nx_uniform_distributions]
+
+        nx_result = time_nx()
+        for i in range(10):
+            time_torch()
+
+    def test_conditioning(self):
+        event = SimpleEvent({self.x: closed(0.5, 1.5)})
+
+        @timeit
+        def time_torch():
+            return self.torch_uniform_distributions.log_conditional_of_simple_event(event)
+
+        @timeit
+        def time_nx():
+            return [node.log_conditional_of_simple_event(event) for node in self.nx_uniform_distributions]
+
+        nx_result = time_nx()
+        for i in range(10):
+            time_torch()
 
 
 if __name__ == '__main__':

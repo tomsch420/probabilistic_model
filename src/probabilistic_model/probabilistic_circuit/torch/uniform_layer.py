@@ -76,6 +76,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
     def log_mode_of_nodes(self) -> Tuple[List[Event], torch.Tensor]:
         return self.support_per_node, self.log_pdf_value()
 
+    @torch.compile
     def sample_from_frequencies(self, frequencies: torch.Tensor) -> torch.Tensor:
         max_frequency = max(frequencies)
 
