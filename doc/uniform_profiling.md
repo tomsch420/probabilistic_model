@@ -185,4 +185,10 @@ Perhaps https://pytorch.org/docs/stable/cond.html offers a speed up here.
 
 Sampling from the torch layer is way slower than sampling from the networkx distributions. The first reason for that is that sampling the entire uniform layer at once has to use a change of variables like calculation, which involves way more steps than a default call to numpy.
 The second reason might be, that the result of sampling from a layer is a sparse tensor, that has to be carefully constructed.
+
+## Conclusion
+
+As soon as sparse tensors get involved, pytorch seems to be slower than networkx or on par at best.
+The experiments for that I will not provide but you can easily construct a Nyga distribution and compare the speed of the two.
+
 <!-- #endregion -->
