@@ -16,6 +16,7 @@ from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, 
 from probabilistic_model.error import IntractableError
 from probabilistic_model.probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from random_events.utils import SubclassJSONSerializer
+import matplotlib.pyplot as plt
 
 if TYPE_CHECKING:
     from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDistribution
@@ -283,6 +284,39 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         raise NotImplementedError()
 
+    def plot_structure(self):
+        """
+        Plot the structure of the circuit.
+        """
+
+        # create the subgraph with this node as root
+        subgraph = nx.subgraph(self.probabilistic_circuit, list(nx.descendants(self.probabilistic_circuit, self)) +
+                               [self])
+
+        # do a layer-wise BFS
+        layers = list(nx.bfs_layers(subgraph, [self]))
+
+        # calculate the positions of the nodes
+        maximum_layer_width = max([len(layer) for layer in layers])
+        positions = {}
+        for depth, layer in enumerate(layers):
+            number_of_nodes = len(layer)
+            positions_in_layer = np.linspace(0, maximum_layer_width, number_of_nodes, endpoint=False)
+            positions_in_layer += (maximum_layer_width - len(layer)) / (2 * len(layer))
+            for position, node in zip(positions_in_layer, layer):
+                positions[node] = (depth, position)
+
+        # draw the edges
+        alpha_for_edges = [subgraph.get_edge_data(*edge)["weight"] if subgraph.get_edge_data(*edge) else 1.
+                          for edge in subgraph.edges]
+        nx.draw_networkx_edges(subgraph, positions, alpha=alpha_for_edges)
+
+        # draw the nodes and labels
+        nx.draw_networkx_nodes(subgraph, positions)
+        labels = {node: node.representation for node in subgraph.nodes}
+        nx.draw_networkx_labels(subgraph, positions, labels)
+        plt.show()
+
 
 class SumUnit(ProbabilisticCircuitMixin):
 
@@ -335,7 +369,7 @@ class SumUnit(ProbabilisticCircuitMixin):
     @property
     def weights(self) -> np.array:
         """
-        :return: The weights of the subcircuits of this unit.
+        :return: The weights of the subcircuits.
         """
         return np.array([weight for weight, _ in self.weighted_subcircuits])
 
@@ -343,7 +377,7 @@ class SumUnit(ProbabilisticCircuitMixin):
     def log_likelihood(self, events: np.array) -> np.array:
         result = np.zeros(len(events))
         for weight, subcircuit in self.weighted_subcircuits:
-            subcircuit_likelihood = np.exp(subcircuit.log_likelihood(events))
+            subcircuit_likelihood = subcircuit.likelihood(events)
             result += weight * subcircuit_likelihood
         return np.log(result)
 
@@ -391,12 +425,22 @@ class SumUnit(ProbabilisticCircuitMixin):
         """
         Sample from the sum node using the latent variable interpretation.
         """
-        weights, subcircuits = zip(*self.weighted_subcircuits)
-        # sample the latent variable
-        states = np.random.choice(np.arange(len(self.weights)), size=amount, p=weights)
-        _, counts = np.unique(states, return_counts=True)
+        weights, subcircuits = self.weights, self.subcircuits
+
+        # pseudo sample the latent variables by evaluating the events w. r. t. their probabilities (histogram)
+        counts = np.floor(weights * amount).astype(int)
+
+        # if any samples are missing
+        missing_samples = amount - counts.sum()
+        if missing_samples > 0:
+
+            # sample the missing latent states using actual randomness
+            states = np.random.choice(np.arange(len(self.weights)), size=missing_samples, p=weights)
+            unique_values, missing_counts = np.unique(states, return_counts=True)
+            counts[unique_values] += missing_counts
+
         # sample from the children
-        result = self.subcircuits[0].sample(int(counts[0]))
+        result = self.subcircuits[0].sample(counts[0])
         for amount, subcircuit in zip(counts[1:], self.subcircuits[1:]):
             result = np.concatenate((result, subcircuit.sample(amount)))
         return result
@@ -769,6 +813,7 @@ class ProductUnit(ProbabilisticCircuitMixin):
 
             # sample from the subcircuit
             sample_subset = subcircuit.sample(amount)
+            np.random.shuffle(sample_subset)
             rearranged_samples[:, variable_indices_in_events] = sample_subset
 
         return rearranged_samples
@@ -827,7 +872,6 @@ class ProductUnit(ProbabilisticCircuitMixin):
 
     @cache_inference_result
     def simplify(self) -> Self:
-
         # if this has only one child
         if len(self.subcircuits) == 1:
             return self.subcircuits[0].simplify()
@@ -1052,7 +1096,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def is_deterministic(self) -> bool:
         """
-        :return: Rather this circuit is deterministic or not.
+        :return: Whether, this circuit is deterministic or not.
         """
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
 
