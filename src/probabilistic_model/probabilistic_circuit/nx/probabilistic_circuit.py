@@ -343,7 +343,7 @@ class SumUnit(ProbabilisticCircuitMixin):
     def log_likelihood(self, events: np.array) -> np.array:
         result = np.zeros(len(events))
         for weight, subcircuit in self.weighted_subcircuits:
-            subcircuit_likelihood = subcircuit.likelihood(events)
+            subcircuit_likelihood = np.exp(subcircuit.log_likelihood(events))
             result += weight * subcircuit_likelihood
         return np.log(result)
 
