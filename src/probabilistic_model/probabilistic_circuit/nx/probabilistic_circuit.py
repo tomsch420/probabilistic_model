@@ -10,6 +10,7 @@ from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
+from sympy.abc import alpha
 
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, TYPE_CHECKING
 
@@ -315,7 +316,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         nx.draw_networkx_nodes(subgraph, positions)
         labels = {node: node.representation for node in subgraph.nodes}
         nx.draw_networkx_labels(subgraph, positions, labels)
-        plt.show()
+        #  plt.show()
 
 
 class SumUnit(ProbabilisticCircuitMixin):

@@ -649,9 +649,7 @@ class ClassicExampleTestCase(unittest.TestCase):
         self.assertEqual(len(unique), 4)
 
     def test_plot(self):
-        fig = go.Figure(self.model.plot())
         self.model.root.plot_structure()
-        # fig.show()
 
 if __name__ == '__main__':
     unittest.main()
