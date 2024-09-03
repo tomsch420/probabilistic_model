@@ -10,7 +10,7 @@ from torch.testing import assert_close
 from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution
 from probabilistic_model.probabilistic_circuit.torch import SumLayer
 from probabilistic_model.probabilistic_circuit.torch.uniform_layer import UniformLayer
-from probabilistic_model.utils import simple_interval_to_open_tensor, timeit
+from probabilistic_model.probabilistic_circuit.torch.utils import simple_interval_to_open_tensor
 
 
 class UniformTestCase(unittest.TestCase):

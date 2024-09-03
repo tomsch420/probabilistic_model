@@ -12,7 +12,7 @@ from ...distributions.uniform import UniformDistribution
 from .input_layer import ContinuousLayerWithFiniteSupport
 from .pc import AnnotatedLayer
 from ..nx.distributions import UniformDistribution as UniformUnit
-from ...utils import simple_interval_to_open_tensor, create_sparse_tensor_indices_from_row_lengths
+from .utils import simple_interval_to_open_tensor, create_sparse_tensor_indices_from_row_lengths
 
 
 class UniformLayer(ContinuousLayerWithFiniteSupport):

@@ -23,7 +23,7 @@ from ...error import IntractableError
 from ..nx.probabilistic_circuit import ProbabilisticCircuit, \
     ProbabilisticCircuitMixin, SumUnit, ProductUnit
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
-from ...utils import (add_sparse_edges_dense_child_tensor_inplace,
+from .utils import (add_sparse_edges_dense_child_tensor_inplace,
                                        sparse_remove_rows_and_cols_where_all, shrink_index_tensor,
                                        embed_sparse_tensors_in_new_sparse_tensor, create_sparse_tensor_indices_from_row_lengths)
 

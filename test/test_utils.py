@@ -5,10 +5,11 @@ from torch.testing import assert_close
 from probabilistic_model.distributions.distributions import SymbolicDistribution
 import probabilistic_model.probabilistic_circuit
 import probabilistic_model.probabilistic_circuit.nx.distributions
-from probabilistic_model.utils import type_converter, create_sparse_tensor_indices_from_row_lengths
+from probabilistic_model.utils import type_converter
 import torch
-from probabilistic_model.utils import (sparse_dense_mul_inplace, add_sparse_edges_dense_child_tensor_inplace,
-                                       shrink_index_tensor, embed_sparse_tensors_in_new_sparse_tensor)
+from probabilistic_model.probabilistic_circuit.torch.utils import (sparse_dense_mul_inplace, add_sparse_edges_dense_child_tensor_inplace,
+                                       shrink_index_tensor, embed_sparse_tensors_in_new_sparse_tensor,
+                                       create_sparse_tensor_indices_from_row_lengths)
 
 
 class TypeConversionTestCase(unittest.TestCase):

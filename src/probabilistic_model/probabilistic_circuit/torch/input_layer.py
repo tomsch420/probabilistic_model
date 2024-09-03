@@ -14,7 +14,8 @@ from typing_extensions import List, Tuple, Self, Type
 from .pc import InputLayer, AnnotatedLayer, SumLayer
 from ..nx.distributions import DiracDeltaDistribution
 from ...probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuitMixin
-from ...utils import interval_as_array, remove_rows_and_cols_where_all, create_sparse_tensor_indices_from_row_lengths
+from .utils import remove_rows_and_cols_where_all, create_sparse_tensor_indices_from_row_lengths
+from ...utils import interval_as_array
 
 
 class ContinuousLayer(InputLayer, ABC):
