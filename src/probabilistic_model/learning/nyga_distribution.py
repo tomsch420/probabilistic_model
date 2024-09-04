@@ -2,21 +2,18 @@ from __future__ import annotations
 
 import collections
 import dataclasses
-from typing import Optional, List, Deque, Union, Tuple, Dict, Any
+from typing import Optional, List, Deque, Tuple, Dict, Any
 
 import numpy as np
 import plotly.graph_objects as go
-import random_events.product_algebra
-from random_events.interval import closed, closed_open, Interval
+from random_events.interval import closed, closed_open
 from random_events.product_algebra import SimpleEvent
-from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.variable import Continuous
 from sortedcontainers import SortedSet
 from typing_extensions import Self
 
-from ..probabilistic_circuit.distributions import ContinuousDistribution, DiracDeltaDistribution, UniformDistribution
-from ..probabilistic_circuit.probabilistic_circuit import (SumUnit, cache_inference_result,
-                                                           ProbabilisticCircuitMixin)
+from probabilistic_model.probabilistic_circuit.nx.distributions import DiracDeltaDistribution, UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit)
 from ..constants import *
 
 

@@ -5,10 +5,10 @@ from typing_extensions import Tuple, Dict, Iterable, List, Union, Self
 
 from .bayesian_network import BayesianNetworkMixin
 from ..distributions.multinomial import MultinomialDistribution
-from ..probabilistic_circuit.distributions import (SymbolicDistribution as PCSymbolicDistribution)
-from ..probabilistic_circuit.probabilistic_circuit import ProductUnit
-from ..probabilistic_circuit.probabilistic_circuit import (ProbabilisticCircuit,
-                                                           ProbabilisticCircuitMixin, SumUnit)
+from probabilistic_model.probabilistic_circuit.nx.distributions import (SymbolicDistribution as PCSymbolicDistribution)
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit,
+                                                                                ProbabilisticCircuitMixin, SumUnit)
 from ..utils import MissingDict
 
 

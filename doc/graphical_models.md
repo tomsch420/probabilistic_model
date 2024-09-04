@@ -65,8 +65,8 @@ from probabilistic_model.bayesian_network.bayesian_network import *
 from probabilistic_model.bayesian_network.distributions import *
 from random_events.set import *
 from random_events.variable import *
-from probabilistic_model.probabilistic_circuit.distributions import *
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.nx.distributions import *
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from random_events.interval import *
 import networkx as nx
 

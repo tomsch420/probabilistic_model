@@ -39,7 +39,7 @@ import plotly.graph_objects as go
 from random_events.product_algebra import VariableMap, Event, SimpleEvent
 from random_events.variable import Continuous
 
-from probabilistic_model.probabilistic_circuit.distributions import *
+from probabilistic_model.probabilistic_circuit.nx.distributions import *
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_model import ProbabilisticModel
 

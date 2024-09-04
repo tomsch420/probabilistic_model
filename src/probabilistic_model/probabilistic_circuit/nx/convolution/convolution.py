@@ -1,8 +1,8 @@
 from random_events.interval import SimpleInterval
 
-from ..distributions.distributions import UniformDistribution, GaussianDistribution, TruncatedGaussianDistribution
-from ..probabilistic_circuit import ProbabilisticCircuitMixin
-from ..distributions.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import UniformDistribution, GaussianDistribution, TruncatedGaussianDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuitMixin
+from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import DiracDeltaDistribution
 
 
 class Convolution:

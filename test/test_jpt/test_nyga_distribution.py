@@ -4,13 +4,12 @@ import numpy as np
 import plotly.graph_objects as go
 from numpy import testing
 from random_events.interval import closed, closed_open
-from random_events.product_algebra import Event
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.probabilistic_circuit.distributions import DiracDeltaDistribution
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit, SumUnit
+from probabilistic_model.probabilistic_circuit.nx.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit
 from random_events.utils import SubclassJSONSerializer
 
 
@@ -141,7 +140,7 @@ class InductionStepTestCase(unittest.TestCase):
         data = np.random.normal(0, 1, 100).tolist()
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        domain = distribution.support()
+        domain = distribution.support
         self.assertEqual(len(domain.simple_sets), 1)
         self.assertEqual(domain.simple_sets[0][self.variable], closed(min(data), max(data)))
 
@@ -248,16 +247,23 @@ class NygaDistributionTestCase(unittest.TestCase):
 class FittedNygaDistributionTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
     model: NygaDistribution
+    data: np.array
 
     def setUp(self) -> None:
         self.model = NygaDistribution(self.x, min_likelihood_improvement=0.001, min_samples_per_quantile=300)
-        data = np.random.normal(0, 1, 1000).tolist()
+        data = np.random.normal(0, 1, 1000)
         self.model.fit(data)
+        self.data = data
 
     def test_plot(self):
-        self.model.support()
+        self.model.support
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
+
+    def test_likelihood(self):
+        likelihood = self.model.log_likelihood(self.data.reshape(-1, 1))
+        self.assertEqual(likelihood.shape, (1000, ))
+        self.assertGreater(likelihood.min(), -np.inf)
 
 
 if __name__ == '__main__':

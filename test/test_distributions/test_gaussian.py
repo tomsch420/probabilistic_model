@@ -11,7 +11,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.distribution.univariate_support, reals())
 
     def test_probability_of_domain(self):
-        self.assertEqual(self.distribution.probability(self.distribution.support()), 1)
+        self.assertEqual(self.distribution.probability(self.distribution.support), 1)
 
     def test_mode(self):
         mode, likelihood = self.distribution.univariate_log_mode()
@@ -98,7 +98,7 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
     def test_normalization_constant(self):
         normal_distribution = GaussianDistribution(self.x, location=self.distribution.location,
                                                    scale=self.distribution.scale)
-        self.assertAlmostEqual(normal_distribution.probability(self.distribution.support()),
+        self.assertAlmostEqual(normal_distribution.probability(self.distribution.support),
                                self.distribution.normalizing_constant)
 
     def test_cdf(self):

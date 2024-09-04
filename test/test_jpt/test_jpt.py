@@ -27,9 +27,9 @@ from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic, Continuous)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.probabilistic_circuit.distributions.distributions import IntegerDistribution, \
+from probabilistic_model.probabilistic_circuit.nx.distributions import IntegerDistribution, \
     SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProductUnit, \
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit, \
     SumUnit, ProbabilisticCircuit
 from probabilistic_model.utils import MissingDict
 

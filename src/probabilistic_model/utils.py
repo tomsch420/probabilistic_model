@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import time
 import types
 from collections import defaultdict
+from functools import wraps
 
 import numpy as np
 from random_events.interval import SimpleInterval, Interval
@@ -52,3 +54,20 @@ class MissingDict(defaultdict):
 
     def __missing__(self, key):
         return self.default_factory()
+
+
+def timeit(func):
+    """
+    Decorator to measure the time a function takes to execute.
+    """
+
+    @wraps(func)
+    def timeit_wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        print(f'{func.__name__} took {total_time} s')
+        return result
+
+    return timeit_wrapper

@@ -4,11 +4,11 @@ from matplotlib import pyplot as plt
 from random_events.interval import *
 from random_events.variable import Integer, Continuous
 
-from probabilistic_model.probabilistic_circuit.distributions.distributions import (UniformDistribution,
-                                                                                   SymbolicDistribution,
-                                                                                   IntegerDistribution,
-                                                                                   GaussianDistribution)
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.nx.distributions import (UniformDistribution,
+                                                                        SymbolicDistribution,
+                                                                        IntegerDistribution,
+                                                                        GaussianDistribution)
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 
 

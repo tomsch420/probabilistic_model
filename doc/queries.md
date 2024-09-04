@@ -144,7 +144,7 @@ variance the sample variance.
 
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.distributions import GaussianDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import GaussianDistribution
 mean = dataframe["sepal length (cm)"].mean()
 variance = dataframe["sepal length (cm)"].std()
 
@@ -328,7 +328,7 @@ go.Figure(distribution.plot(), distribution.plotly_layout()).show()
 We can see that conditioning a Gaussian on such an event already creates a mode that has two points. Furthermore, modes can be sets of infinite many points, such as shown below.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution
 uniform = UniformDistribution(Continuous("x"), open(-1, 1).simple_sets[0])
 go.Figure(uniform.plot(), uniform.plotly_layout()).show() 
 ```
@@ -405,9 +405,53 @@ $$
 P(E) \approx = \frac{1}{k} \sum_{i=1}^k \mathbb{1}_E(x_i).
 $$
 
-Since Monte Carlo estimates are not constrained by any for of $f$, we can use them to approximate any integral, such as
-$P(x < y)$ or similar complex integrals.
-For further examples on Monte Carlo estimates, 
+For instance, consider a two-dimensional random variable $X = (X_1, X_2)$ with a standard normal distribution 
+$p(x) = \mathcal{N}(x_1 | 0, 1) \cdot \mathcal{N}(x_2 | 0, 1) $.
+
+```{code-cell} ipython3
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
+
+x1 = Continuous("x1")
+x2 = Continuous("x2")
+
+model = ProductUnit()
+p_x1 = GaussianDistribution(x1, 0, 1)
+p_x2 = GaussianDistribution(x2, 0, 1)
+model.add_subcircuit(p_x1)
+model.add_subcircuit(p_x2)
+
+fig = go.Figure(model.plot(), model.plotly_layout())
+fig.show()
+
+samples = model.sample(10000)
+```
+We can now calculate the probability that $x_1 \in (0.5, 1.)
+\land x_2 \in (0.75, 1.) $ not only by using integration but also by a monte carlo estimate.
+
+```{code-cell} ipython3
+event = SimpleEvent({x1: closed(0.25, 1.), x2: closed(0., 1.)}).as_composite_set()
+monte_carlo_probability = sum([event.contains(sample) for sample in samples]) / len(samples)
+
+fig.add_traces(event.plot())
+fig.show()
+
+print("Monte Carlo Probability:", monte_carlo_probability)
+print("Exact Probability:", model.probability(event))
+``` 
+As we can see, the Monte Carlo estimate is a good but rough approximation of the exact probability.
+
+Since Monte Carlo estimates are not constrained by any form of $f$, we can use them to approximate any integral, such as
+$P(x_1 < x_2)$ or similar complex integrals. 
+These integrals are often intractable to solve analytically and can only be calculated by Monte Carlo estimates.
+
+```{code-cell} ipython3
+filtered_samples = [sample for sample in samples if sample[0] < sample[1]]
+monte_carlo_probability = len(filtered_samples) / len(samples)
+print("Monte Carlo Probability:", monte_carlo_probability)
+```
+
+
+For further examples on Monte Carlo estimates,
 I recommend [this Monte Carlo Integration example](https://en.wikipedia.org/wiki/Monte_Carlo_method).
 
 ## Practical Example
@@ -440,8 +484,8 @@ We now construct a gaussian distribution over the free space
 to describe locations and their probabilities to access the fridge.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProductUnit
-from probabilistic_model.probabilistic_circuit.distributions import GaussianDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
+from probabilistic_model.probabilistic_circuit.nx.distributions import GaussianDistribution
 
 
 p_x = GaussianDistribution(x, 5.5, 0.5)

@@ -12,8 +12,8 @@ from random_events.variable import Symbolic, Continuous
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
                                                                 ConditionalProbabilisticCircuit)
-from probabilistic_model.probabilistic_circuit.distributions import SymbolicDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import  SumUnit, ProductUnit
+from probabilistic_model.probabilistic_circuit.nx.distributions import SymbolicDistribution, UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import  SumUnit, ProductUnit
 from probabilistic_model.utils import MissingDict
 
 

@@ -29,6 +29,7 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
     def variables(self) -> Tuple[Variable, ...]:
         return (self.variable, )
 
+    @property
     def support(self) -> Event:
         return SimpleEvent({self.variable: self.univariate_support}).as_composite_set()
 
@@ -103,7 +104,7 @@ class ContinuousDistribution(UnivariateDistribution):
         return (upper_bound_cdf - lower_bound_cdf).sum()
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        event = event & self.support()
+        event = event & self.support
         if event.is_empty():
             return None, -np.inf
 

@@ -12,11 +12,11 @@ from random_events.utils import recursive_subclasses
 from random_events.variable import Continuous
 from typing_extensions import Self, Type, Dict, Any
 
-from probabilistic_model.probabilistic_circuit.distributions import UniformDistribution as PCUniformDistribution
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import (SumUnit as PCSumUnit,
-                                                                             ProbabilisticCircuit as PMProbabilisticCircuit,
-                                                                             ProductUnit as PCProductUnit,
-                                                                             ProbabilisticCircuitMixin)
+from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution as PCUniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit as PCSumUnit,
+                                                                                ProbabilisticCircuit as PMProbabilisticCircuit,
+                                                                                ProductUnit as PCProductUnit,
+                                                                                ProbabilisticCircuitMixin)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[ModuleMixin]:
@@ -32,7 +32,7 @@ StateDictType = Dict[int, Any]
 class ModuleMixin:
     """
     Mixin for JAX modules that are capable of being converted to the original probabilistic circuit module.
-    JAX modules are limited in functionality, as only the log_likelihood method is supported and automatically
+    JAX modules are limited in functionality, as only the log_likelihood_of_nodes method is supported and automatically
     differentiable.
     """
 
@@ -176,7 +176,7 @@ class SumUnit(PCSumUnit, ModuleMixin):
     def log_likelihood(self, x: Array) -> Array:
         result = jnp.zeros(x.shape[:-1])
         for weight, subcircuit in zip(self.weights.T, self.subcircuits):
-            subcircuit_likelihood = jnp.exp(subcircuit.log_likelihood(x))
+            subcircuit_likelihood = jnp.exp(subcircuit.log_likelihood_of_nodes(x))
             result += weight * subcircuit_likelihood
         return jnp.log(result)
 

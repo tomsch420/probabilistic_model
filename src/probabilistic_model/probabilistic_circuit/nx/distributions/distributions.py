@@ -4,23 +4,22 @@ from abc import ABC
 
 import numpy as np
 from random_events.interval import SimpleInterval, Interval
-from random_events.product_algebra import Event, SimpleEvent
-from random_events.variable import Variable
+from random_events.product_algebra import SimpleEvent
 from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Optional, Self
 
-from ...distributions.distributions import (ContinuousDistribution as PMContinuousDistribution,
-                                            DiracDeltaDistribution as PMDiracDeltaDistribution,
-                                            SymbolicDistribution as PMSymbolicDistribution,
-                                            IntegerDistribution as PMIntegerDistribution,
-                                            DiscreteDistribution as PMDiscreteDistribution,
-                                            UnivariateDistribution as PMUnivariateDistribution)
-from ..probabilistic_circuit import (ProbabilisticCircuitMixin, cache_inference_result,
-                                     SumUnit)
-from ...distributions.uniform import UniformDistribution as PMUniformDistribution
-from ...distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
-                                       TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
-from ...utils import MissingDict
+from probabilistic_model.distributions.distributions import (ContinuousDistribution as PMContinuousDistribution,
+                                                             DiracDeltaDistribution as PMDiracDeltaDistribution,
+                                                             SymbolicDistribution as PMSymbolicDistribution,
+                                                             IntegerDistribution as PMIntegerDistribution,
+                                                             DiscreteDistribution as PMDiscreteDistribution,
+                                                             UnivariateDistribution as PMUnivariateDistribution)
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuitMixin, cache_inference_result,
+                                                                                SumUnit)
+from probabilistic_model.distributions.uniform import UniformDistribution as PMUniformDistribution
+from probabilistic_model.distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
+                                                        TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
+from probabilistic_model.utils import MissingDict
 
 
 class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin, ABC):
@@ -46,8 +45,6 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
     def empty_copy(self) -> Self:
         return self.__copy__()
 
-    def support_property(self) -> Event:
-        return self.support()
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin, ABC):
 
@@ -101,7 +98,7 @@ class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, Proba
         variable = sum_unit.variables[0]
         probabilities = MissingDict(float)
 
-        for element in sum_unit.support().simple_sets[0][variable].simple_sets:
+        for element in sum_unit.support.simple_sets[0][variable].simple_sets:
             probability = sum_unit.probability_of_simple_event(SimpleEvent({variable: element}))
             if isinstance(element, SimpleInterval):
                 element = element.lower

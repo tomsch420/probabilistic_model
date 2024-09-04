@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import abc
 
-from random_events.interval import closed
+from random_events.interval import closed, SimpleInterval
 from random_events.product_algebra import *
 from random_events.set import *
 from random_events.variable import *
 
 from .constants import *
-from .error import IntractableError
+from .error import IntractableError, UndefinedOperationError
 
 # Type definitions
 FullEvidenceType = np.array  # [Union[float, int, SetElement]]
@@ -43,13 +43,14 @@ class ProbabilisticModel(abc.ABC):
         return self.__class__.__name__
 
     @property
-    @abc.abstractmethod
+    @abstractmethod
     def variables(self) -> Tuple[Variable, ...]:
         """
         :return: The variables of the model.
         """
         raise NotImplementedError
 
+    @property
     @abstractmethod
     def support(self) -> Event:
         """
@@ -84,14 +85,14 @@ class ProbabilisticModel(abc.ABC):
 
         Check the documentation of `likelihood` for more information.
 
-        :param events: The full evidence event
-        :return: The log-likelihood of the event.
+        :param events: The full evidence event with shape (#events, #variables)
+        :return: The log-likelihood of the event with shape (#events).
         """
         raise NotImplementedError
 
     def cdf(self, events: np.array) -> np.array:
         """
-        Calculate the cumulative distribution function of an array of events.
+        Calculate the cumulative distribution function of an event-array.
 
         The event belongs to the class of full evidence queries.
 
@@ -330,7 +331,7 @@ class ProbabilisticModel(abc.ABC):
         x_and_likelihood = np.concatenate((samples, likelihood.reshape(-1, 1)), axis=1)
         x_values = []
         y_values = []
-        supporting_interval: Interval = self.support().simple_sets[0][self.variables[0]]
+        supporting_interval: Interval = self.support.simple_sets[0][self.variables[0]]
 
         # add pdf trace for non-zero areas
         for simple_interval in supporting_interval.simple_sets:
@@ -346,7 +347,7 @@ class ProbabilisticModel(abc.ABC):
             cdf_y_values = self.cdf(cdf_x_values)
             cdf_trace = [go.Scatter(x=cdf_x_values[:, 0], y=cdf_y_values, mode="lines", legendgroup="CDF",
                                     name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))]
-        except NotImplementedError:
+        except UndefinedOperationError:
             cdf_trace = []
 
         pdf_trace = go.Scatter(x=x_values, y=y_values, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
@@ -389,7 +390,7 @@ class ProbabilisticModel(abc.ABC):
         :param max_of_samples: The maximum value of the samples.
         :return: A list of traces for the support of the model.
         """
-        supporting_interval: Interval = self.support().simple_sets[0][self.variables[0]]
+        supporting_interval: Interval = self.support.simple_sets[0][self.variables[0]]
         complement_of_support = supporting_interval.complement()
         limiting_interval = closed(min_of_samples - min_of_samples * PADDING_FACTOR_FOR_X_AXIS_IN_PLOT,
                                    max_of_samples + max_of_samples * PADDING_FACTOR_FOR_X_AXIS_IN_PLOT)
