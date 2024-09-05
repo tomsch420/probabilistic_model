@@ -17,6 +17,10 @@ from probabilistic_model.probabilistic_circuit.nx.distributions import (Continuo
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 
 import plotly.graph_objects as go
+from probabilistic_model import Monte_Carlo_Estimator
+
+from probabilistic_model.learning.jpt.jpt import JPT, DecomposableProductUnit as JPTLeaf
+from random_events.product_algebra import SimpleInterval
 
 
 class ShowMixin:
@@ -435,7 +439,6 @@ class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
 
 
 class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
-
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
     model: ProbabilisticCircuit
@@ -490,7 +493,6 @@ class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
 
 
 class ComplexInferenceTestCase(unittest.TestCase):
-
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
     model: ProbabilisticCircuit
@@ -650,6 +652,222 @@ class ClassicExampleTestCase(unittest.TestCase):
 
     def test_plot(self):
         self.model.root.plot_structure()
+
+if __name__ == '__main__':
+    unittest.main()
+
+from probabilistic_model.learning.jpt.jpt import JPT, DecomposableProductUnit as JPTLeaf
+from random_events.product_algebra import SimpleInterval
+
+
+class StructuredDecomposabilityTestCase(unittest.TestCase):
+    model = ProbabilisticCircuit()
+    x = Continuous("x")
+    y = Continuous("y")
+    z = Continuous("z")
+
+    sum_unit_1 = SumUnit()
+    model.add_node(sum_unit_1)
+    product_1, product_2, product_3 = ProductUnit(), ProductUnit(), ProductUnit()
+    product_4, product_5, product_6 = ProductUnit(), ProductUnit(), ProductUnit()
+
+    model.add_node(product_1)
+    model.add_node(product_2)
+    model.add_edge(sum_unit_1, product_1, weight=0.5)
+    model.add_edge(sum_unit_1, product_2, weight=0.5)
+
+    sum_unit_2 = SumUnit()
+    sum_unit_3 = SumUnit()
+    product_1.add_subcircuit(sum_unit_2)
+    product_1.add_subcircuit(UniformDistribution(z, SimpleInterval(2, 3)))
+    product_2.add_subcircuit(sum_unit_3)
+    product_2.add_subcircuit(UniformDistribution(z, SimpleInterval(4, 5)))
+
+    sum_unit_2.add_subcircuit(product_3, weight=0.5)
+    sum_unit_2.add_subcircuit(product_4, weight=0.5)
+    sum_unit_3.add_subcircuit(product_5, weight=0.5)
+    sum_unit_3.add_subcircuit(product_6, weight=0.5)
+
+    range1 = SimpleInterval(0, 2)
+    range2 = SimpleInterval(4, 6)
+    for unit in [product_3, product_4, product_5, product_6]:
+        unit.add_subcircuit(UniformDistribution(x, range1))
+        unit.add_subcircuit(UniformDistribution(y, range2))
+
+    def test_is_structured_decomposable(self):
+        assert self.model.is_structured_decomposable()
+
+    def test_structured_decomposable_as_ture(self):
+        model_other = ProbabilisticCircuit()
+        x = Continuous("x")
+        y = Continuous("y")
+        z = Continuous("z")
+
+        sum_unit_1 = SumUnit()
+        model_other.add_node(sum_unit_1)
+        product_1, product_2, product_3 = ProductUnit(), ProductUnit(), ProductUnit()
+        product_4, product_5, product_6 = ProductUnit(), ProductUnit(), ProductUnit()
+
+        model_other.add_node(product_1)
+        model_other.add_node(product_2)
+        model_other.add_edge(sum_unit_1, product_1, weight=0.5)
+        model_other.add_edge(sum_unit_1, product_2, weight=0.5)
+
+        sum_unit_2 = SumUnit()
+        sum_unit_3 = SumUnit()
+        product_1.add_subcircuit(sum_unit_2)
+        product_1.add_subcircuit(UniformDistribution(z, SimpleInterval(7, 19)))
+        product_2.add_subcircuit(sum_unit_3)
+        product_2.add_subcircuit(UniformDistribution(z, SimpleInterval(0, 5)))
+
+        sum_unit_2.add_subcircuit(product_3, weight=0.3)
+        sum_unit_2.add_subcircuit(product_4, weight=0.7)
+        sum_unit_3.add_subcircuit(product_5, weight=0.5)
+        sum_unit_3.add_subcircuit(product_6, weight=0.5)
+
+        range1 = SimpleInterval(0, 5)
+        range2 = SimpleInterval(4, 6)
+        for unit in [product_3, product_4, product_5, product_6]:
+            unit.add_subcircuit(UniformDistribution(x, range1))
+            unit.add_subcircuit(UniformDistribution(y, range2))
+
+        assert self.model.decomposes_as(model_other)
+
+    def test_structured_decomposable_as_false(self):
+        model_other = ProbabilisticCircuit()
+        x = Continuous("z")
+        y = Continuous("y")
+        z = Continuous("x")
+
+        sum_unit_1 = SumUnit()
+        model_other.add_node(sum_unit_1)
+        product_1, product_2, product_3 = ProductUnit(), ProductUnit(), ProductUnit()
+        product_4, product_5, product_6 = ProductUnit(), ProductUnit(), ProductUnit()
+
+        model_other.add_node(product_1)
+        model_other.add_node(product_2)
+        model_other.add_edge(sum_unit_1, product_1, weight=0.5)
+        model_other.add_edge(sum_unit_1, product_2, weight=0.5)
+
+        sum_unit_2 = SumUnit()
+        sum_unit_3 = SumUnit()
+        product_1.add_subcircuit(sum_unit_2)
+        product_1.add_subcircuit(UniformDistribution(z, SimpleInterval(7, 19)))
+        product_2.add_subcircuit(sum_unit_3)
+        product_2.add_subcircuit(UniformDistribution(z, SimpleInterval(0, 5)))
+
+        sum_unit_2.add_subcircuit(product_3, weight=0.3)
+        sum_unit_2.add_subcircuit(product_4, weight=0.7)
+        sum_unit_3.add_subcircuit(product_5, weight=0.5)
+        sum_unit_3.add_subcircuit(product_6, weight=0.5)
+
+        range1 = SimpleInterval(0, 5)
+        range2 = SimpleInterval(4, 6)
+        for unit in [product_3, product_4, product_5, product_6]:
+            unit.add_subcircuit(UniformDistribution(x, range1))
+            unit.add_subcircuit(UniformDistribution(y, range2))
+
+        assert not self.model.decomposes_as(model_other)
+
+
+class ShallowTestCase(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+    sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
+    sum4, sum5 = SumUnit(), SumUnit()
+    prod1, prod2 = ProductUnit(), ProductUnit()
+    model = ProbabilisticCircuit()
+    model.add_node(sum1)
+    model.add_node(prod1)
+    model.add_node(prod2)
+    model.add_edge(sum1, prod1, weight=0.5)
+    model.add_edge(sum1, prod2, weight=0.5)
+    model.add_node(sum2)
+    model.add_node(sum3)
+    model.add_node(sum4)
+    model.add_node(sum5)
+    model.add_edge(prod1, sum2)
+    model.add_edge(prod1, sum4)
+    model.add_edge(prod2, sum3)
+    model.add_edge(prod2, sum5)
+    uni_x1, uni_x2  = UniformDistribution(x, SimpleInterval(0, 1)), UniformDistribution(x, SimpleInterval(1, 2))
+    uni_y1, uni_y2 = UniformDistribution(y, SimpleInterval(0, 1)), UniformDistribution(y, SimpleInterval(1, 2))
+
+    model.add_node(uni_y1)
+    model.add_node(uni_x2)
+    model.add_node(uni_y2)
+    model.add_node(uni_x1)
+
+    model.add_edge(sum2, uni_x1, weight=0.8)
+    model.add_edge(sum2, uni_x2, weight=0.2)
+    model.add_edge(sum3, uni_x1, weight=0.7)
+    model.add_edge(sum3, uni_x2, weight=0.3)
+
+    model.add_edge(sum4, uni_y1, weight=0.5)
+    model.add_edge(sum4, uni_y2, weight=0.5)
+    model.add_edge(sum5, uni_y1, weight=0.1)
+    model.add_edge(sum5, uni_y2, weight=0.9)
+
+    def test_shallow(self):
+        shallow_pc = ShallowProbabilisticCircuit.from_probabilistic_circuit(self.model)
+        self.assertTrue(True)
+
+
+class AreaValidationMetricTestCase(unittest.TestCase):
+
+    x = Continuous("x")
+    y = Continuous("y")
+    standard_circuit = JPTLeaf()
+    standard_circuit.add_subcircuit(UniformDistribution(x, SimpleInterval(0, 1)))
+    standard_circuit.add_subcircuit(UniformDistribution(y, SimpleInterval(0, 1)))
+    standard_circuit = standard_circuit.probabilistic_circuit
+
+    event_1 = SimpleEvent({x: closed(0, .25), y: closed(0, .25)})
+    event_2 = SimpleEvent({x: closed(0.75, 1), y: closed(0.75, 1)})
+
+    circuit_1, _ = standard_circuit.conditional(event_1.as_composite_set().complement())
+    circuit_2, _ = standard_circuit.conditional(event_2.as_composite_set().complement())
+    circuit_3, _ = circuit_2.conditional(event_1.as_composite_set())
+    circuit_4, _ = circuit_1.conditional(event_2.as_composite_set())
+
+    shallow_1 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_1)
+    shallow_2 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_2)
+    shallow_3 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_3)
+    shallow_4 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_4)
+
+
+
+
+
+    def test_jpt_avm(self):
+
+
+        result = self.shallow_1.area_validation_metric(self.shallow_2)
+
+        p_event_by_hand = self.event_2
+        q_event_by_hand = self.event_1
+        self.assertEqual(self.circuit_2.probability(p_event_by_hand.as_composite_set()), 0)
+        self.assertEqual(self.circuit_1.probability(q_event_by_hand.as_composite_set()), 0)
+        result_by_hand = self.circuit_1.probability(p_event_by_hand.as_composite_set()) + self.circuit_2.probability(
+            q_event_by_hand.as_composite_set())
+        self.assertAlmostEqual(result, result_by_hand / 2, 4)
+
+    def test_jpt_avm_same_input(self):
+        result = self.shallow_1.area_validation_metric(self.shallow_1)
+        self.assertEqual(result, 0)
+
+    def test_jpt_avm_disjunct_input(self):
+        result = self.shallow_3.area_validation_metric(self.shallow_4)
+
+        self.assertEqual(result, 1)
+
+    def test_avm_mc(self):
+        mc_esti = Monte_Carlo_Estimator.MonteCarloEstimator(sample_size=1000, model=self.circuit_1)
+        result = mc_esti.area_validation_metric(self.circuit_2)
+        self.assertAlmostEqual(result / 2, 0.13333333333333336, delta=0.1)
+
+
+
 
 if __name__ == '__main__':
     unittest.main()

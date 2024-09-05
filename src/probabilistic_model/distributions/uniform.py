@@ -4,6 +4,9 @@ from .distributions import *
 from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT, EXPECTATION_TRACE_NAME, MODE_TRACE_NAME, MODE_TRACE_COLOR, \
     PDF_TRACE_NAME, CDF_TRACE_NAME, CDF_TRACE_COLOR, PDF_TRACE_COLOR
 
+from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT
+from typing_extensions import List, Dict, Any, Self
+from plotly import graph_objects as go
 
 class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     """
@@ -70,8 +73,16 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
                 and self.variable == other.variable)
 
     @property
+    def label(self):
+        return "rounded=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;html=1;labelBorderColor=default;"
+
+    @property
     def representation(self):
         return f"U({self.variable.name} | {self.interval})"
+
+    @property
+    def image(self):
+        return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval)
@@ -116,3 +127,10 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))
+
+
+
+    def all_union_of_mixture_points_with(self, other: Self):
+        points = SortedSet([self.interval.lower, self.interval.upper, other.interval.lower, other.interval.upper])
+        result = [closed(lower, upper) for lower, upper in zip(points[:-1], points[1:])]
+        return result

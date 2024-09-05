@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import copy
 from abc import abstractmethod
 from typing import Optional
@@ -16,7 +17,6 @@ from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
 from ..utils import MissingDict, interval_as_array
-
 
 class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """
@@ -344,6 +344,7 @@ class DiscreteDistribution(UnivariateDistribution):
         return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
 
 
+
 class SymbolicDistribution(DiscreteDistribution):
     """
     Class for symbolic (categorical) distributions.
@@ -371,6 +372,14 @@ class SymbolicDistribution(DiscreteDistribution):
     @property
     def representation(self):
         return f"Nominal({self.variable.name}, {self.variable.domain.simple_sets[0].all_elements.__name__})"
+    @property
+    def label(self):
+        return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
+
+    @property
+    def image(self):
+        return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
+
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
