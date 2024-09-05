@@ -11,6 +11,7 @@ from typing import Tuple, Iterable, TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
+import random_events
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.variable import Variable, Symbolic
@@ -29,7 +30,7 @@ import os
 import PIL
 
 if TYPE_CHECKING:
-    from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDistribution
+    from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDistribution, SymbolicDistribution
 
 
 def cache_inference_result(func):
@@ -325,7 +326,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         nx.draw_networkx_nodes(subgraph, positions)
         labels = {node: node.representation for node in subgraph.nodes}
         nx.draw_networkx_labels(subgraph, positions, labels)
-        #  plt.show()
+        plt.show()
 
     def draw_io_style(self) -> Dict[str, Any]:
         return {
@@ -364,7 +365,7 @@ class SumUnit(ProbabilisticCircuitMixin):
 
     @property
     def representation(self) -> str:
-        return "⊕" if self.is_deterministic() else "+"
+        return "+"
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
@@ -748,8 +749,8 @@ class ProductUnit(ProbabilisticCircuitMixin):
         return result
 
     @cached_property
-    def support_property(self) -> Event:
-        support = self.subcircuits[0].support()
+    def support(self) -> Event:
+        support = self.subcircuits[0].support
         for subcircuit in self.subcircuits[1:]:
             support &= subcircuit.support
         return support
@@ -1183,8 +1184,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
 
 
-from probabilistic_model.probabilistic_circuit.exporter import draw_io_expoter
-from probabilistic_model.probabilistic_circuit.exporter.draw_io_expoter import DrawIoExporter
+#from probabilistic_model.probabilistic_circuit.exporter import draw_io_expoter
+#from probabilistic_model.probabilistic_circuit.exporter.draw_io_expoter import DrawIoExporter
 class ShallowProbabilisticCircuit(ProbabilisticCircuit):
     @classmethod
     def from_probabilistic_circuit(cls, probabilistic_circuit: ProbabilisticCircuit):
@@ -1279,22 +1280,34 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                 all_mixture_points = own_univariate_unit.all_union_of_mixture_points_with(other_univariate_unit)
                 combination_map[variable] = all_mixture_points
             elif isinstance(variable, random_events.variable.Symbolic):
-                own_univariate_unit: SymbolicDistribution
-                other_univariate_unit: SymbolicDistribution
-                support = own_univariate_unit.support() | other_univariate_unit.support()
+                support = own_univariate_unit.support | other_univariate_unit.support
                 combination_map[variable] = support
+            elif isinstance(variable, random_events.variable.Integer):
+                points = [i.lower for i in own_univariate_unit.support.simple_sets[0][variable] | other_univariate_unit.support.simple_sets[0][variable]]
+                combination_map[variable] = points
             else:
                 raise NotImplementedError("Unknown Node Type")
 
         own_weight = sum(own_node_weights.get(hash(own_pro_unit)))
         other_weight = sum(other_node_weights.get(hash(other_pro_unit)))
-        for combination in itertools.product(
-                *combination_map.values()):
-            full_evidence_state = list(
-                ((element.simple_sets[-1].upper - element.simple_sets[0].lower) / 2) + element.simple_sets[
-                    0].lower if isinstance(element, random_events.interval.Interval) else element
-                for element in combination)
+        for combination in itertools.product(*combination_map.values()):
 
+            full_evidence_state = list()
+            # full_evidence_state = list(
+            #     ((element.simple_sets[-1].upper - element.simple_sets[0].lower) / 2) + element.simple_sets[
+            #         0].lower if isinstance(element, random_events.interval.Interval) else element
+            #     for element in combination)
+            for element in combination:
+                if isinstance(element, random_events.interval.Interval):
+                    full_evidence_state.append(((element.simple_sets[-1].upper - element.simple_sets[0].lower) / 2) + element.simple_sets[0].lower)
+                elif isinstance(element, random_events.variable.Symbolic):
+                    full_evidence_state.append(element)
+                elif isinstance(element, int):
+                    full_evidence_state.append(element)
+                else:
+                    raise ValueError(f"Unknown Node Type {type(element)}")
+
+            print(full_evidence_state)
             likelihood_in_self = self.likelihood(np.array([full_evidence_state])) * own_weight
             likelihood_in_other = other.likelihood(np.array([full_evidence_state])) * other_weight
 
@@ -1331,8 +1344,6 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                 if own_result.is_empty():
                     own_result = own_result_part
                 elif not other_result_part.is_empty():
-                    print(own_result, type(own_result))
-                    print(own_result_part, type(own_result_part))
                     own_result = own_result.union_with(own_result_part)
                 if other_result.is_empty():
                     other_result = other_result_part
@@ -1342,12 +1353,12 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         return own_result, other_result
 
     def area_validation_metric(self, other: Self) -> float:
-
+        print(self.variables)
         p_event, q_event = self.events_of_higher_density_sum(other)
         result = (self.probability(p_event) - other.probability(p_event)
                   + other.probability(q_event) - self.probability(q_event))
 
-        return result/2
+        return abs(result)/2
 
     def remove_node_and_successor_structure(self, node: ProbabilisticCircuitMixin):
         probabilistic_circuit = node.probabilistic_circuit

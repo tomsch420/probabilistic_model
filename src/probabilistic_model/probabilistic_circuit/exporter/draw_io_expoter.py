@@ -1,6 +1,6 @@
 from N2G import drawio_diagram
 
-from probabilistic_model.probabilistic_circuit.probabilistic_circuit import ProbabilisticCircuit
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit
 
 
 class DrawIoExporter:

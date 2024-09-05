@@ -19,6 +19,8 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 import plotly.graph_objects as go
 from probabilistic_model import Monte_Carlo_Estimator
 
+from probabilistic_model.learning.jpt.jpt import JPT, DecomposableProductUnit as JPTLeaf
+from random_events.product_algebra import SimpleInterval
 
 
 class ShowMixin:
@@ -768,6 +770,49 @@ class StructuredDecomposabilityTestCase(unittest.TestCase):
         assert not self.model.decomposes_as(model_other)
 
 
+class ShallowTestCase(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+    sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
+    sum4, sum5 = SumUnit(), SumUnit()
+    prod1, prod2 = ProductUnit(), ProductUnit()
+    model = ProbabilisticCircuit()
+    model.add_node(sum1)
+    model.add_node(prod1)
+    model.add_node(prod2)
+    model.add_edge(sum1, prod1, weight=0.5)
+    model.add_edge(sum1, prod2, weight=0.5)
+    model.add_node(sum2)
+    model.add_node(sum3)
+    model.add_node(sum4)
+    model.add_node(sum5)
+    model.add_edge(prod1, sum2)
+    model.add_edge(prod1, sum4)
+    model.add_edge(prod2, sum3)
+    model.add_edge(prod2, sum5)
+    uni_x1, uni_x2  = UniformDistribution(x, SimpleInterval(0, 1)), UniformDistribution(x, SimpleInterval(1, 2))
+    uni_y1, uni_y2 = UniformDistribution(y, SimpleInterval(0, 1)), UniformDistribution(y, SimpleInterval(1, 2))
+
+    model.add_node(uni_y1)
+    model.add_node(uni_x2)
+    model.add_node(uni_y2)
+    model.add_node(uni_x1)
+
+    model.add_edge(sum2, uni_x1, weight=0.8)
+    model.add_edge(sum2, uni_x2, weight=0.2)
+    model.add_edge(sum3, uni_x1, weight=0.7)
+    model.add_edge(sum3, uni_x2, weight=0.3)
+
+    model.add_edge(sum4, uni_y1, weight=0.5)
+    model.add_edge(sum4, uni_y2, weight=0.5)
+    model.add_edge(sum5, uni_y1, weight=0.1)
+    model.add_edge(sum5, uni_y2, weight=0.9)
+
+    def test_shallow(self):
+        shallow_pc = ShallowProbabilisticCircuit.from_probabilistic_circuit(self.model)
+        self.assertTrue(True)
+
+
 class AreaValidationMetricTestCase(unittest.TestCase):
 
     x = Continuous("x")
@@ -790,7 +835,13 @@ class AreaValidationMetricTestCase(unittest.TestCase):
     shallow_3 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_3)
     shallow_4 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_4)
 
+
+
+
+
     def test_jpt_avm(self):
+
+
         result = self.shallow_1.area_validation_metric(self.shallow_2)
 
         p_event_by_hand = self.event_2
@@ -816,43 +867,7 @@ class AreaValidationMetricTestCase(unittest.TestCase):
         self.assertAlmostEqual(result / 2, 0.13333333333333336, delta=0.1)
 
 
-class ShallowTestCase(unittest.TestCase):
-    x = Continuous("x")
-    y = Continuous("y")
-    z = Continuous("z")
-    sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
-    sum4, sum5 = SumUnit(), SumUnit()
-    prod1, prod2 = ProductUnit(), ProductUnit()
-    model = ProbabilisticCircuit()
-    model.add_node(sum1)
-    model.add_node(prod1)
-    model.add_node(prod2)
-    model.add_edge(sum1, prod1, weight=0.5)
-    model.add_edge(sum1, prod2, weight=0.5)
-    model.add_node(sum2)
-    model.add_node(sum3)
-    model.add_edge(prod1, sum2)
-    model.add_edge(prod1, sum3)
-    model.add_node(sum4)
-    model.add_node(sum5)
-    model.add_edge(prod2, sum4)
-    model.add_edge(prod2, sum5)
-    uni_x1 = UniformDistribution(x, SimpleInterval(0, 1))
-    uni_y1, uni_y2 = UniformDistribution(y, SimpleInterval(0, 1)), UniformDistribution(y, SimpleInterval(0, 1))
-    uni_z1 = UniformDistribution(z, SimpleInterval(0, 1))
-    model.add_node(uni_y1)
-    model.add_node(uni_z1)
-    model.add_edge(sum2, uni_y1, weight=0.8)
-    model.add_edge(sum2, uni_z1, weight=0.2)
-    model.add_edge(sum3, uni_y1, weight=0.7)
-    model.add_edge(sum3, uni_z1, weight=0.3)
-    model.add_node(uni_y2)
-    model.add_node(uni_x1)
-    model.add_edge(sum4, uni_y2, weight=0.5)
-    model.add_edge(sum4, uni_x1, weight=0.5)
-    model.add_edge(sum5, uni_y2, weight=0.1)
-    model.add_edge(sum5, uni_x1, weight=0.9)
 
-    def test_shallow(self):
-        shallow_pc = ShallowProbabilisticCircuit.from_probabilistic_circuit(self.model)
-        self.assertTrue(True)
+
+if __name__ == '__main__':
+    unittest.main()

@@ -343,16 +343,6 @@ class DiscreteDistribution(UnivariateDistribution):
         sample_probabilities = np.array([value for value in self.probabilities.values()])
         return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
 
-    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights):
-        resulting_elements = []
-        if isinstance(other, DiscreteDistribution):
-            own_weight = sum(own_node_weights.get(hash(self)))
-            other_weight = sum(other_node_weights.get(hash(other)))
-            for i in range(len(self.variable.domain.simple_sets)):
-                p_probability = self.weights[i]
-                q_probability = other.weights[i]
-                if p_probability * own_weight > q_probability * other_weight:
-                    resulting_elements.append(self.variable.domain.simple_sets[i])
 
 
 class SymbolicDistribution(DiscreteDistribution):
@@ -381,7 +371,7 @@ class SymbolicDistribution(DiscreteDistribution):
 
     @property
     def representation(self):
-        return f"Nominal{self.variable.name}"
+        return f"Nominal({self.variable.name}, {self.variable.domain.simple_sets[0].all_elements.__name__})"
     @property
     def label(self):
         return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
@@ -390,16 +380,6 @@ class SymbolicDistribution(DiscreteDistribution):
     def image(self):
         return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
 
-    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights):
-        resulting_elements = []
-        if isinstance(other, DiscreteDistribution):
-            own_weight = sum(own_node_weights.get(hash(self)))
-            other_weight = sum(other_node_weights.get(hash(other)))
-            for i in range(len(self.variable.domain.simple_sets)):
-                p_probability = self.weights[i]
-                q_probability = other.weights[i]
-                if p_probability * own_weight > q_probability * other_weight:
-                    resulting_elements.append(self.variable.domain.simple_sets[i])
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
