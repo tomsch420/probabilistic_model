@@ -16,7 +16,7 @@ from probabilistic_model.probabilistic_circuit.nx.distributions.distributions im
                                                                                       SymbolicDistribution,
                                                                                       IntegerDistribution, UnivariateDistribution)
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit,
-                                                                                ProductUnit as PMDecomposableProductUnit)
+                                                                                ProductUnit as PMProductUnit)
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -24,7 +24,7 @@ import plotly.graph_objects as go
 from ...utils import MissingDict
 
 
-class DecomposableProductUnit(PMDecomposableProductUnit):
+class ProductUnit(PMProductUnit):
 
     sample_indices: List[int]
     """
@@ -297,14 +297,14 @@ class JPT(SumUnit):
             right_event = Event() - left_event
         return left_event, right_event
 
-    def create_leaf_node(self, data: np.ndarray) -> DecomposableProductUnit:
+    def create_leaf_node(self, data: np.ndarray) -> ProductUnit:
         """
         Create a fully decomposable product node from a 2D data array.
 
         :param data: The preprocessed data to use for training
         :return: The leaf node.
         """
-        result = DecomposableProductUnit()
+        result = ProductUnit()
         result.total_samples = len(data)
 
         for index, variable in enumerate(self.variables_from_init):
@@ -381,7 +381,7 @@ class JPT(SumUnit):
                                subplot_titles=subplot_titles)
 
         for child_index, child in enumerate(self.subcircuits):
-            child: DecomposableProductUnit
+            child: ProductUnit
 
             for distribution_index, distribution in enumerate(child.subcircuits):
                 distribution: UnivariateDistribution
