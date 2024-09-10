@@ -4,6 +4,11 @@
 format: jb-book
 root: intro
 parts:
+  - caption: Implementation
+    chapters:
+    - file: pc_guide
+    - file: layered_circuit
+    - file: uniform_profiling
   - caption: Theoretical Concepts
     chapters:
     - file: probability_theory
@@ -16,10 +21,7 @@ parts:
     - file: nyga_distribution
     - file: joint_probability_trees
     - file: template_modelling
-  - caption: Implementation
-    chapters:
-    - file: layered_circuit
-    - file: uniform_profiling
+
   - caption: Miscellaneous
     chapters:
     - file: pendulum
