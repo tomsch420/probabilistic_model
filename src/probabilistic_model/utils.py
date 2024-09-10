@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+import inspect
 import time
 import types
 from collections import defaultdict
@@ -71,3 +73,4 @@ def timeit(func):
         return result
 
     return timeit_wrapper
+

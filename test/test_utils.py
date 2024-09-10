@@ -1,5 +1,6 @@
 import unittest
 
+from sympy.core.cache import cached_property
 from torch.testing import assert_close
 
 from probabilistic_model.distributions.distributions import SymbolicDistribution
@@ -63,8 +64,6 @@ class TorchUtilsTestCase(unittest.TestCase):
         indices = create_sparse_tensor_indices_from_row_lengths(row_lengths)
         result = torch.tensor([[0, 0, 1, 1, 1], [0, 1, 0, 1, 2]])
         assert_close(result, indices)
-
-
 
 
 if __name__ == '__main__':

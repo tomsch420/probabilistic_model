@@ -102,15 +102,25 @@ bn.add_node(cpd_success)
 
 # create P(ObjectPosition | Success)
 cpd_object_position = ConditionalProbabilityTable(object_position)
-cpd_object_position.conditional_probability_distributions[int(Success.FAILURE)] = MissingDict(float, {int(ObjectPosition.LEFT): 0.3, int(ObjectPosition.RIGHT): 0.3, int(ObjectPosition.CENTER): 0.4})
-cpd_object_position.conditional_probability_distributions[ int(Success.SUCCESS)] = MissingDict(float, {int(ObjectPosition.LEFT): 0.3, int(ObjectPosition.RIGHT): 0.3, int(ObjectPosition.CENTER): 0.4})
+cpd_object_position.conditional_probability_distributions[int(Success.FAILURE)] = SymbolicDistribution(object_position, 
+                                                                                                       MissingDict(float, {int(ObjectPosition.LEFT): 0.3, 
+                                                                                                                           int(ObjectPosition.RIGHT): 0.3, 
+                                                                                                                           int(ObjectPosition.CENTER): 0.4}))
+cpd_object_position.conditional_probability_distributions[ int(Success.SUCCESS)] = SymbolicDistribution(object_position,
+                                                                                                        MissingDict(float, {int(ObjectPosition.LEFT): 0.3, 
+                                                                                                                            int(ObjectPosition.RIGHT): 0.3, 
+                                                                                                                            int(ObjectPosition.CENTER): 0.4}))
 bn.add_node(cpd_object_position)
 bn.add_edge(cpd_success, cpd_object_position)
 
 # create P(Mood | Success)
 cpd_mood = ConditionalProbabilityTable(mood)
-cpd_mood.conditional_probability_distributions[int(Success.FAILURE)] = MissingDict(float, {int(Mood.HAPPY): 0.2, int(Mood.SAD): 0.8})
-cpd_mood.conditional_probability_distributions[int(Success.SUCCESS)] = MissingDict(float, {int(Mood.HAPPY): 0.9, int(Mood.SAD): 0.1})
+cpd_mood.conditional_probability_distributions[int(Success.FAILURE)] = SymbolicDistribution(mood, 
+                                                                                            MissingDict(float, {int(Mood.HAPPY): 0.2, 
+                                                                                                                int(Mood.SAD): 0.8}))
+cpd_mood.conditional_probability_distributions[int(Success.SUCCESS)] = SymbolicDistribution(mood, 
+                                                                                            MissingDict(float, {int(Mood.HAPPY): 0.9, 
+                                                                                                                int(Mood.SAD): 0.1}))
 bn.add_node(cpd_mood)
 bn.add_edge(cpd_success, cpd_mood)
 
