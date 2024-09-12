@@ -16,6 +16,24 @@ kernelspec:
 (nyga-distribution)=
 # Learning univariate, model-free and deterministic distributions
 
+````{margin}
+## History
+The concept of a similar distribution to the Nyga distribution was first introduced in a paper by 
+Daniel Nyga {cite}`nyga2023joint`.
+Daniels' creation was the so-called quantile distribution. 
+Back in the day, it was not connected to circuits or a maximum likelihood estimation. 
+The idea was to create a distribution that is able to approximate any distribution without any 
+assumptions. 
+Daniel used the mean squared error between the learned quantile function and the 
+[empirical CDF](https://en.wikipedia.org/wiki/Empirical_distribution_function).
+However, this sometimes leads to undesired results, especially with containing jumps in the distribution
+ or completely missing parts of the distribution. 
+Now, with the MLE proof on how to do it properly, we can
+create distributions that overcome these issues. 
+Yet the idea and hence the name lives on.
+
+````
+
 In this tutorial, I go through the line of thinking, math and usage of learning univariate, 
 model-free and deterministic distribution from raw data.
 
@@ -36,7 +54,7 @@ dataset = np.concatenate((np.random.normal(0, 1, size=(1000, 1)), np.random.norm
 dataset
 ```
 
-The idea is to create as many components in a mixture of uniform distributions as is needed 
+The idea is to create as many components in a mixture of uniform distributions as is necessary 
 to achieve a good fit to the data. 
 The fitness of the model is measured by the weighted log likelihood of the data under the model (compare with {prf:ref}`def-mle`).
 The weighted log likelihood is derived from the weighted likelihood. 
@@ -240,6 +258,7 @@ $$
 $$
 which means that the resulting likelihood is 58% higher than the likelihood without a split.
 
+## Practical Example
 
 Finally, if we apply the algorithm to the dataset, we get the following result.
 We can see that it looks very similar to the gaussian mixture we sampled from.
