@@ -12,6 +12,8 @@ import networkx as nx
 import numpy as np
 import torch
 import torch.nn as nn
+import tqdm
+from networkx.classes import number_of_nodes
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.utils import recursive_subclasses
@@ -178,26 +180,30 @@ class Layer(nn.Module, ProbabilisticModel):
         raise NotImplementedError
 
     @staticmethod
-    def from_probabilistic_circuit(pc: ProbabilisticCircuit) -> Layer:
+    def from_probabilistic_circuit(pc: ProbabilisticCircuit, progress_bar: bool = False) -> Layer:
         """
         Convert a probabilistic circuit to a layered circuit.
         The result expresses the same distribution as `pc`.
 
         :param pc: The probabilistic circuit.
+        :param progress_bar: Whether to show a progress bar.
         :return: The layered circuit.
         """
-
-        node_to_depth_map = {node: nx.shortest_path_length(pc, pc.root, node) for node in pc.nodes}
+        # node_to_depth_map = {node: nx.shortest_path_length(pc, pc.root, node) for node in
+        #                      (tqdm.tqdm(pc.nodes, desc="Calculating depth map") if progress_bar else pc.nodes)}
+        node_to_depth_map = {node: len(path) for node, path in nx.single_source_shortest_path(pc, pc.root).items()}
         layer_to_nodes_map = {depth: [node for node, n_depth in node_to_depth_map.items() if depth == n_depth] for depth
                               in set(node_to_depth_map.values())}
         child_layers = []
 
-        for layer_index, nodes in reversed(layer_to_nodes_map.items()):
-            child_layers = Layer.create_layers_from_nodes(nodes, child_layers)
+        for layer_index, nodes in reversed(tqdm.tqdm(layer_to_nodes_map.items(), desc="Creating Layers") if progress_bar
+                                                     else layer_to_nodes_map.items()):
+            child_layers = Layer.create_layers_from_nodes(nodes, child_layers, progress_bar)
         return child_layers[0].layer
 
     @staticmethod
-    def create_layers_from_nodes(nodes: List[ProbabilisticCircuitMixin], child_layers: List[AnnotatedLayer]) \
+    def create_layers_from_nodes(nodes: List[ProbabilisticCircuitMixin], child_layers: List[AnnotatedLayer],
+                                 progress_bar: bool = True) \
             -> List[AnnotatedLayer]:
         """
         Create a layer from a list of nodes.
@@ -214,7 +220,7 @@ class Layer(nn.Module, ProbabilisticModel):
                 nodes_of_current_type_and_scope = [node for node in nodes_of_current_type if
                                                    tuple(node.variables) == scope]
                 layer = layer_type.create_layer_from_nodes_with_same_type_and_scope(nodes_of_current_type_and_scope,
-                                                                                    child_layers)
+                                                                                    child_layers, progress_bar)
                 result.append(layer)
 
         return result
@@ -222,7 +228,8 @@ class Layer(nn.Module, ProbabilisticModel):
     @classmethod
     @abstractmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
-                                                         child_layers: List[AnnotatedLayer]) -> \
+                                                         child_layers: List[AnnotatedLayer],
+                                                         progress_bar: bool = True) -> \
             AnnotatedLayer:
         """
         Create a layer from a list of nodes with the same type and scope.
@@ -562,7 +569,8 @@ class SumLayer(InnerLayer):
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
-                                                         child_layers: List[AnnotatedLayer]) -> \
+                                                         child_layers: List[AnnotatedLayer],
+                                                         progress_bar: bool = True) -> \
             AnnotatedLayer:
 
         result_hash_remap = {hash(node): index for index, node in enumerate(nodes)}
@@ -582,7 +590,8 @@ class SumLayer(InnerLayer):
             values = []
 
             # gather indices and log weights
-            for index, node in enumerate(nodes):
+            for index, node in enumerate(tqdm.tqdm(nodes, desc="Calculating weights for sum node")
+                                         if progress_bar else nodes):
                 for weight, subcircuit in node.weighted_subcircuits:
                     if hash(subcircuit) in child_layer.hash_remap:
                         indices.append((index, child_layer.hash_remap[hash(subcircuit)]))
@@ -1085,7 +1094,8 @@ class ProductLayer(InnerLayer):
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProductUnit],
-                                                         child_layers: List[AnnotatedLayer]) -> \
+                                                         child_layers: List[AnnotatedLayer],
+                                                         progress_bar: bool = True) -> \
             AnnotatedLayer:
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
         number_of_nodes = len(nodes)
@@ -1093,6 +1103,8 @@ class ProductLayer(InnerLayer):
         edge_indices = []
         edge_values = []
 
+        # this progress bar changes the behavior of the loop and i dont know why
+        # progress_bar = tqdm.tqdm(total=number_of_nodes, desc="Assembling Product Layer")
         # for every node in the nodes for this layer
         for node_index, node in enumerate(nodes):
 
@@ -1108,6 +1120,8 @@ class ProductLayer(InnerLayer):
                         # add the edge
                         edge_indices.append([child_layer_index, node_index])
                         edge_values.append(child_layer.hash_remap[hash(subcircuit)])
+            # if progress_bar:
+            #     progress_bar.update(1)
 
         # assemble sparse edge tensor
         edges = torch.sparse_coo_tensor(indices=torch.tensor(edge_indices, dtype=torch.long).T,

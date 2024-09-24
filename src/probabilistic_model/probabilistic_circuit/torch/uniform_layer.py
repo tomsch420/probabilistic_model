@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing_extensions import Tuple, Type, List, Self
+import tqdm
+from typing_extensions import Tuple, Type, List, Self, Optional
 
 from random_events.interval import SimpleInterval, Bound
 
@@ -114,10 +115,16 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UniformUnit],
-                                                         child_layers: List[AnnotatedLayer]) -> \
+                                                         child_layers: List[AnnotatedLayer],
+                                                         progress_bar: bool = True) -> \
             AnnotatedLayer:
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        intervals = torch.stack([simple_interval_to_open_tensor(node.interval) for node in nodes])
+
+
+        intervals = torch.stack([simple_interval_to_open_tensor(node.interval) for node in
+                                 (tqdm.tqdm(nodes, desc=f"Creating uniform layer for variable {nodes[0].variable.name}")
+                                  if progress_bar else nodes)])
+
         result = cls(nodes[0].variable, intervals)
         return AnnotatedLayer(result, nodes, hash_remap)
 
