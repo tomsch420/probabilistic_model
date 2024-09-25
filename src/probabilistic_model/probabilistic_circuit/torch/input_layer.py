@@ -256,7 +256,7 @@ class DiracDeltaLayer(ContinuousLayer):
         center = center.item()
         if order == 0:
             result = torch.ones(self.number_of_nodes)
-        if order == 1:
+        elif order == 1:
             result = self.location - center
         else:
             result = torch.zeros(self.number_of_nodes)
