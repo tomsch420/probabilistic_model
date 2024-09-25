@@ -11,6 +11,7 @@ import numpy as np
 from random_events.interval import SimpleInterval, Interval
 from random_events.utils import recursive_subclasses
 from typing_extensions import Type
+import datetime
 
 
 def simple_interval_as_array(interval: SimpleInterval) -> np.ndarray:
@@ -65,12 +66,13 @@ def timeit(func):
 
     @wraps(func)
     def timeit_wrapper(*args, **kwargs):
-        start_time = time.perf_counter()
+        start_time = time.perf_counter_ns()
         result = func(*args, **kwargs)
-        end_time = time.perf_counter()
+        end_time = time.perf_counter_ns()
+
         total_time = end_time - start_time
-        print(f'{func.__name__} took {total_time} s')
-        return result
+        total_time = datetime.timedelta(microseconds=total_time/1000)
+        return result, total_time
 
     return timeit_wrapper
 

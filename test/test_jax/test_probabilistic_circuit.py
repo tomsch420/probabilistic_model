@@ -7,9 +7,8 @@ import plotly.graph_objects as go
 from jax import random, numpy as jnp
 from random_events.variable import Continuous
 
-from probabilistic_model.learning.jax.probabilistic_circuit import ProbabilisticCircuit
+from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-
 
 @unittest.skip
 class TestJaxUnits(unittest.TestCase):
