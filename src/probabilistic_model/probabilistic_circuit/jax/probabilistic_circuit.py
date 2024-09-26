@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
-from typing_extensions import Tuple, Self
+from typing_extensions import Tuple, Self, List
 
-from .inner_layer import Layer
+from .inner_layer import Layer, NXConverterLayer
 from ..nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
 import jax
 import tqdm
 import networkx as nx
+
 
 class ProbabilisticCircuit:
     """
@@ -42,11 +43,16 @@ class ProbabilisticCircuit:
         :param progress_bar: Whether to show a progress bar.
         :return: The layered circuit.
         """
+
+        # calculate the depth of each node
         node_to_depth_map = {node: len(path) for node, path in nx.single_source_shortest_path(pc, pc.root).items()}
+
+        # group nodes by depth
         layer_to_nodes_map = {depth: [node for node, n_depth in node_to_depth_map.items() if depth == n_depth] for depth
                               in set(node_to_depth_map.values())}
-        child_layers = []
 
+        # create layers from nodes
+        child_layers: List[NXConverterLayer] = []
         for layer_index, nodes in reversed(tqdm.tqdm(layer_to_nodes_map.items(), desc="Creating Layers") if progress_bar
                                                      else layer_to_nodes_map.items()):
             child_layers = Layer.create_layers_from_nodes(nodes, child_layers, progress_bar)

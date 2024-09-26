@@ -1,11 +1,13 @@
 from abc import ABC
+from typing import List
 
 import jax
 from jax import numpy as jnp
 from typing_extensions import Tuple, Type
 
-from .inner_layer import InputLayer
+from .inner_layer import InputLayer, NXConverterLayer
 from ..nx.distributions import DiracDeltaDistribution
+from ..nx.probabilistic_circuit import ProbabilisticCircuitMixin
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -92,3 +94,14 @@ class DiracDeltaLayer(ContinuousLayer):
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
         return DiracDeltaDistribution,
+
+    @classmethod
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[DiracDeltaDistribution],
+                                                         child_layers: List[NXConverterLayer],
+                                                         progress_bar: bool = True) -> \
+            NXConverterLayer:
+        hash_remap = {hash(node): index for index, node in enumerate(nodes)}
+        locations = jnp.array([node.location for node in nodes], dtype=jnp.double)
+        density_caps = jnp.array([node.density_cap for node in nodes], dtype=jnp.double)
+        result = cls(nodes[0].probabilistic_circuit.variables.index(nodes[0].variable), locations, density_caps)
+        return NXConverterLayer(result, nodes, hash_remap)

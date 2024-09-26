@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import inspect
+import math
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from functools import cached_property
@@ -7,10 +11,21 @@ from jaxtyping import Array, Float, Int
 from jax import numpy as jnp
 import equinox as eqx
 from jax.experimental.sparse import BCOO, bcoo_concatenate, bcoo_reduce_sum
+from random_events.utils import recursive_subclasses
+from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict
-from jax.scipy.special import logsumexp
 from .utils import copy_bcoo
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
+import tqdm
+
+
+def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
+    for subclass in recursive_subclasses(Layer):
+        if not inspect.isabstract(subclass):
+            if issubclass(clazz, subclass.nx_classes()):
+                return subclass
+
+    raise TypeError(f"Could not find class for {clazz}")
 
 
 class Layer(eqx.Module, ABC):
@@ -64,6 +79,41 @@ class Layer(eqx.Module, ABC):
         :return: The tuple of matching classes of the layer in the probabilistic_model.probabilistic_circuit.nx package.
         """
         return tuple()
+
+    @staticmethod
+    def create_layers_from_nodes(nodes: List[ProbabilisticCircuitMixin], child_layers: List[NXConverterLayer],
+                                 progress_bar: bool = True) \
+            -> List[NXConverterLayer]:
+        """
+        Create a layer from a list of nodes.
+        """
+        result = []
+
+        unique_types = set(type(node) for node in nodes)
+        for unique_type in unique_types:
+            nodes_of_current_type = [node for node in nodes if isinstance(node, unique_type)]
+            layer_type = inverse_class_of(unique_type)
+            scopes = [tuple(node.variables) for node in nodes_of_current_type]
+            unique_scopes = set(scopes)
+            for scope in unique_scopes:
+                nodes_of_current_type_and_scope = [node for node in nodes_of_current_type if
+                                                   tuple(node.variables) == scope]
+                layer = layer_type.create_layer_from_nodes_with_same_type_and_scope(nodes_of_current_type_and_scope,
+                                                                                    child_layers, progress_bar)
+                result.append(layer)
+
+        return result
+
+    @classmethod
+    @abstractmethod
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
+                                                         child_layers: List[NXConverterLayer],
+                                                         progress_bar: bool = True) -> \
+            NXConverterLayer:
+        """
+        Create a layer from a list of nodes with the same type and scope.
+        """
+        raise NotImplementedError
 
 
 class InnerLayer(Layer, ABC):
@@ -184,6 +234,44 @@ class SumLayer(InnerLayer):
         log_weights = [copy_bcoo(log_weight) for log_weight in self.log_weights]
         return self.__class__(child_layers, log_weights)
 
+    @classmethod
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
+                                                         child_layers: List[NXConverterLayer],
+                                                         progress_bar: bool = True) -> \
+            NXConverterLayer:
+
+        result_hash_remap = {hash(node): index for index, node in enumerate(nodes)}
+        variables = tuple(nodes[0].variables)
+        number_of_nodes = len(nodes)
+
+        # filter the child layers to only contain layers with the same scope as this one
+        filtered_child_layers = [child_layer for child_layer in child_layers if tuple(child_layer.layer.variables) ==
+                                 variables]
+        log_weights = []
+
+        # for every possible child layer
+        for child_layer in filtered_child_layers:
+
+            # initialize indices and values for sparse weight matrix
+            indices = []
+            values = []
+
+            # gather indices and log weights
+            for index, node in enumerate(tqdm.tqdm(nodes, desc="Calculating weights for sum node")
+                                         if progress_bar else nodes):
+                for weight, subcircuit in node.weighted_subcircuits:
+                    if hash(subcircuit) in child_layer.hash_remap:
+                        indices.append((index, child_layer.hash_remap[hash(subcircuit)]))
+                        values.append((math.log(weight)))
+
+            # assemble sparse log weight matrix
+            log_weights.append(BCOO((jnp.array(values), jnp.array(indices)),
+                                    shape=(number_of_nodes,
+                                           child_layer.layer.number_of_nodes)))
+
+        sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
+        return NXConverterLayer(sum_layer, nodes, result_hash_remap)
+
 
 class ProductLayer(InnerLayer):
     """
@@ -256,6 +344,44 @@ class ProductLayer(InnerLayer):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
         edges = copy_bcoo(self.edges)
         return self.__class__(child_layers, edges)
+
+    @classmethod
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
+                                                         child_layers: List[NXConverterLayer],
+                                                         progress_bar: bool = True) -> \
+            NXConverterLayer:
+
+        hash_remap = {hash(node): index for index, node in enumerate(nodes)}
+        number_of_nodes = len(nodes)
+
+        edge_indices = []
+        edge_values = []
+
+        # this progress bar changes the behavior of the loop and i dont know why
+        # progress_bar = tqdm.tqdm(total=number_of_nodes, desc="Assembling Product Layer")
+        # for every node in the nodes for this layer
+        for node_index, node in enumerate(nodes):
+
+            # for every child layer
+            for child_layer_index, child_layer in enumerate(child_layers):
+
+                cl_variables = SortedSet(child_layer.layer.variables)
+
+                # for every subcircuit
+                for subcircuit_index, subcircuit in enumerate(node.subcircuits):
+                    # if the scopes are compatible
+                    if cl_variables == subcircuit.variables:
+                        # add the edge
+                        edge_indices.append([child_layer_index, node_index])
+                        edge_values.append(child_layer.hash_remap[hash(subcircuit)])
+            # if progress_bar:
+            #     progress_bar.update(1)
+
+        # assemble sparse edge tensor
+        edges = (BCOO((jnp.array(edge_values), jnp.array(edge_indices)), shape=(len(child_layers), number_of_nodes)).
+                 sort_indices().sum_duplicates(remove_zeros=False))
+        layer = cls([cl.layer for cl in child_layers], edges)
+        return NXConverterLayer(layer, nodes, hash_remap)
 
 @dataclass
 class NXConverterLayer:
