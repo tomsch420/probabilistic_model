@@ -6,7 +6,6 @@ from typing_extensions import Type, Tuple
 from .inner_layer import NXConverterLayer
 from .input_layer import ContinuousLayerWithFiniteSupport
 from ..nx.distributions import UniformDistribution
-from ..nx.probabilistic_circuit import ProbabilisticCircuitMixin
 from .utils import simple_interval_to_open_array
 import tqdm
 
@@ -45,7 +44,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
 
         variable = nodes[0].variable
 
-        intervals = jnp.hstack([simple_interval_to_open_array(node.interval) for node in
+        intervals = jnp.vstack([simple_interval_to_open_array(node.interval) for node in
                                  (tqdm.tqdm(nodes, desc=f"Creating uniform layer for variable {variable.name}")
                                   if progress_bar else nodes)])
 

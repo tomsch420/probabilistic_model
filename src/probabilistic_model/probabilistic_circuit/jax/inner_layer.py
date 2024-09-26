@@ -161,7 +161,7 @@ class InputLayer(Layer, ABC):
 class SumLayer(InnerLayer):
 
     log_weights: List[BCOO]
-    child_layers: List[Layer]
+    child_layers: Union[List[[ProductLayer]], List[InputLayer]]
 
     def __init__(self, child_layers: List[Layer], log_weights: List[BCOO]):
         super().__init__(child_layers)
@@ -241,12 +241,13 @@ class SumLayer(InnerLayer):
             NXConverterLayer:
 
         result_hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        variables = tuple(nodes[0].variables)
+        variables = jnp.array([nodes[0].probabilistic_circuit.variables.index(variable) for variable in nodes[0].variables])
+
         number_of_nodes = len(nodes)
 
         # filter the child layers to only contain layers with the same scope as this one
-        filtered_child_layers = [child_layer for child_layer in child_layers if tuple(child_layer.layer.variables) ==
-                                 variables]
+        filtered_child_layers = [child_layer for child_layer in child_layers if (child_layer.layer.variables ==
+                                 variables).all()]
         log_weights = []
 
         # for every possible child layer
@@ -364,8 +365,7 @@ class ProductLayer(InnerLayer):
 
             # for every child layer
             for child_layer_index, child_layer in enumerate(child_layers):
-
-                cl_variables = SortedSet(child_layer.layer.variables)
+                cl_variables = SortedSet([node.probabilistic_circuit.variables[index] for index in child_layer.layer.variables])
 
                 # for every subcircuit
                 for subcircuit_index, subcircuit in enumerate(node.subcircuits):

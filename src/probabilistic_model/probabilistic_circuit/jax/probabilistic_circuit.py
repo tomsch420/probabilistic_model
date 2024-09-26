@@ -30,7 +30,7 @@ class ProbabilisticCircuit:
         self.variables = variables
         self.root = root
 
-    def log_likelihood_(self, x: jax.Array) -> jax.Array:
+    def log_likelihood(self, x: jax.Array) -> jax.Array:
         return self.root.log_likelihood_of_nodes(x)[:, 0]
 
     @classmethod
@@ -50,11 +50,13 @@ class ProbabilisticCircuit:
         # group nodes by depth
         layer_to_nodes_map = {depth: [node for node, n_depth in node_to_depth_map.items() if depth == n_depth] for depth
                               in set(node_to_depth_map.values())}
+        reversed_layers_to_nodes_map = dict(reversed(layer_to_nodes_map.items()))
 
         # create layers from nodes
         child_layers: List[NXConverterLayer] = []
-        for layer_index, nodes in reversed(tqdm.tqdm(layer_to_nodes_map.items(), desc="Creating Layers") if progress_bar
-                                                     else layer_to_nodes_map.items()):
+        for layer_index, nodes in (tqdm.tqdm(reversed_layers_to_nodes_map.items(), desc="Creating Layers") if progress_bar
+                                                     else reversed_layers_to_nodes_map.items()):
+
             child_layers = Layer.create_layers_from_nodes(nodes, child_layers, progress_bar)
         root = child_layers[0].layer
 

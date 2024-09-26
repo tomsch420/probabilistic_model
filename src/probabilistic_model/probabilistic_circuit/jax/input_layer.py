@@ -7,7 +7,6 @@ from typing_extensions import Tuple, Type
 
 from .inner_layer import InputLayer, NXConverterLayer
 from ..nx.distributions import DiracDeltaDistribution
-from ..nx.probabilistic_circuit import ProbabilisticCircuitMixin
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -101,7 +100,7 @@ class DiracDeltaLayer(ContinuousLayer):
                                                          progress_bar: bool = True) -> \
             NXConverterLayer:
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        locations = jnp.array([node.location for node in nodes], dtype=jnp.double)
-        density_caps = jnp.array([node.density_cap for node in nodes], dtype=jnp.double)
+        locations = jnp.array([node.location for node in nodes], dtype=jnp.float32)
+        density_caps = jnp.array([node.density_cap for node in nodes], dtype=jnp.float32)
         result = cls(nodes[0].probabilistic_circuit.variables.index(nodes[0].variable), locations, density_caps)
         return NXConverterLayer(result, nodes, hash_remap)
