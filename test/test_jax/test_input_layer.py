@@ -1,17 +1,18 @@
-import unittest
-from probabilistic_model.probabilistic_circuit.jax.distributions import DiracDeltaLayer
-import jax.numpy as jnp
 import math
+import unittest
+
+import jax.numpy as jnp
+
+from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
 
 
 class DiracDeltaLayerTestCase(unittest.TestCase):
-
-    layer = DiracDeltaLayer(location=jnp.array([0., 1.]), density_cap=jnp.array([1., 2.]))
+    layer = DiracDeltaLayer(0, location=jnp.array([0., 1.]), density_cap=jnp.array([1., 2.]))
 
     def test_likelihood(self):
         data = jnp.array([0, 1, 2]).reshape(-1, 1)
         ll = self.layer.log_likelihood_of_nodes(data)
-        self.assertEqual(ll.shape, ((len(data), self.layer.number_of_nodes)))
+        self.assertEqual(ll.shape, (len(data), self.layer.number_of_nodes))
         result = [[0, -jnp.inf],
                   [-jnp.inf, math.log(2)],
                   [-jnp.inf, -jnp.inf]]

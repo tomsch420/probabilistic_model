@@ -3,17 +3,17 @@ import unittest
 from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
 import jax.numpy as jnp
-from probabilistic_model.probabilistic_circuit.jax.distributions import DiracDeltaLayer
-from probabilistic_model.probabilistic_circuit.jax.pc import SumLayer
+from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
+from probabilistic_model.probabilistic_circuit.jax.inner_layer import SumLayer
 
 
 class DiracSumUnitTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
 
-    p1_x = DiracDeltaLayer(jnp.array([0., 1.]), jnp.array([1, 2]))
-    p2_x = DiracDeltaLayer(jnp.array([2.]), jnp.array([3]))
-    p3_x = DiracDeltaLayer(jnp.array([3, 4, 5]), jnp.array([4, 5, 6]))
-    p4_x = DiracDeltaLayer(jnp.array([6.]), jnp.array([1]))
+    p1_x = DiracDeltaLayer(0, jnp.array([0., 1.]), jnp.array([1, 2]))
+    p2_x = DiracDeltaLayer(0,jnp.array([2.]), jnp.array([3]))
+    p3_x = DiracDeltaLayer(0, jnp.array([3, 4, 5]), jnp.array([4, 5, 6]))
+    p4_x = DiracDeltaLayer(0, jnp.array([6.]), jnp.array([1]))
     sum_layer: SumLayer
 
     @classmethod
