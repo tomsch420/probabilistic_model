@@ -1,8 +1,9 @@
 import unittest
 
-from matplotlib import pyplot as plt
+from igraph.drawing.plotly.vertex import plotly
 from random_events.interval import closed, open, closed_open
 from random_events.variable import Integer, Continuous
+from sympy.diffgeom import metric_to_Christoffel_2nd
 from typing_extensions import Union
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 from probabilistic_model.probabilistic_circuit.nx.convolution.convolution import (UniformDistributionConvolution,
@@ -19,8 +20,6 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 import plotly.graph_objects as go
 from probabilistic_model import Monte_Carlo_Estimator
 
-from probabilistic_model.learning.jpt.jpt import JPT, DecomposableProductUnit as JPTLeaf
-from random_events.product_algebra import SimpleInterval
 
 
 class ShowMixin:
@@ -656,8 +655,9 @@ class ClassicExampleTestCase(unittest.TestCase):
 if __name__ == '__main__':
     unittest.main()
 
-from probabilistic_model.learning.jpt.jpt import JPT, DecomposableProductUnit as JPTLeaf
-from random_events.product_algebra import SimpleInterval
+from probabilistic_model.learning.jpt.jpt import JPT, ProductUnit as JPTLeaf
+from random_events.interval import SimpleInterval
+
 
 
 class StructuredDecomposabilityTestCase(unittest.TestCase):
@@ -813,6 +813,7 @@ class ShallowTestCase(unittest.TestCase):
         self.assertTrue(True)
 
 
+
 class AreaValidationMetricTestCase(unittest.TestCase):
 
     x = Continuous("x")
@@ -864,10 +865,210 @@ class AreaValidationMetricTestCase(unittest.TestCase):
     def test_avm_mc(self):
         mc_esti = Monte_Carlo_Estimator.MonteCarloEstimator(sample_size=1000, model=self.circuit_1)
         result = mc_esti.area_validation_metric(self.circuit_2)
-        self.assertAlmostEqual(result / 2, 0.13333333333333336, delta=0.1)
+        self.assertAlmostEqual(result/2, 0.13333333333333336, delta=0.1)
+
+    def test_avm_diff_mc(self):
+        # go.Figure(self.circuit_1.plot()).show()
+        # go.Figure(self.circuit_2.plot()).show()
+        # go.Figure(self.shallow_3.plot()).show()
+        # go.Figure(self.shallow_4.plot()).show()
 
 
 
+        mc_esti = Monte_Carlo_Estimator.MonteCarloEstimator(sample_size=10000, model=self.circuit_1)
+        amv_result = self.shallow_1.area_validation_metric(self.shallow_2)
+        mc_resutl1 = mc_esti.l1_metric_but_with_uniform_measure(self.circuit_2)
+        mc_resutl2 = mc_esti.area_validation_metric2(self.circuit_2)
+        print(f"real: {amv_result}, l1: {mc_resutl1}, mc2: {mc_resutl2}")
+        self.assertTrue(True)
+
+    def test_temp(self):
+        # print(self.shallow_1.events_of_higher_density_sum(self.shallow_2))
+        # print(self.shallow_1.events_of_higher_density_cool(self.shallow_2))
+        # print("-"*80)
+        #
+        ep = self.shallow_1.events_of_higher_density_sum_swag(self.shallow_2)
+        # go.Figure(ep.plot()).show()
+
+        l1 = self.shallow_1.l1_swag(self.shallow_2)
+        l1o = self.shallow_2.l1_swag(self.shallow_1)
+        mc_esti = Monte_Carlo_Estimator.MonteCarloEstimator(sample_size=10000, model=self.circuit_1)
+        mc = mc_esti.l1_metric_but_with_uniform_measure(self.circuit_2)
+        mc2 = mc_esti.l1(self.circuit_2)
+        print(f"l1: {l1}, l2: {l1o} mc: {mc}, mc2: {mc2}")
+        # mc_esti = Monte_Carlo_Estimator.MonteCarloEstimator(sample_size=10000, model=self.circuit_1)
+        # l1 = self.shallow_1.l1_cool(self.shallow_2)
+        # mc = mc_esti.l1_metric_but_with_uniform_measure(self.circuit_2)
+        # avm = self.shallow_1.area_validation_metric(self.shallow_2)
+        # print("avm: {}, l1: {}, mc: {}".format(avm, l1, mc))
+        # print("-"*80)
+        # mc_esti = Monte_Carlo_Estimator.MonteCarloEstimator(sample_size=10000, model=self.circuit_1)
+        # l1 = self.shallow_1.l1_cool(self.shallow_4)
+        # mc = mc_esti.l1_metric_but_with_uniform_measure(self.circuit_4)
+        # avm = self.shallow_1.area_validation_metric(self.shallow_4)
+        #
+        # print("avm: {}, l1: {}, mc: {}".format(avm, l1, mc))
+
+class testingClass(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+    sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
+    sum4, sum5 = SumUnit(), SumUnit()
+    prod1, prod2 = ProductUnit(), ProductUnit()
+    model = ProbabilisticCircuit()
+    model.add_node(sum1)
+    model.add_node(prod1)
+    model.add_node(prod2)
+    model.add_edge(sum1, prod1, weight=0.5)
+    model.add_edge(sum1, prod2, weight=0.5)
+    model.add_node(sum2)
+    model.add_node(sum3)
+    model.add_node(sum4)
+    model.add_node(sum5)
+    model.add_edge(prod1, sum2)
+    model.add_edge(prod1, sum4)
+    model.add_edge(prod2, sum3)
+    model.add_edge(prod2, sum5)
+    uni_x1, uni_x2 = UniformDistribution(x, SimpleInterval(0, 1)), UniformDistribution(x, SimpleInterval(1, 2))
+    uni_y1, uni_y2 = UniformDistribution(y, SimpleInterval(0, 1)), UniformDistribution(y, SimpleInterval(1, 2))
+
+    model.add_node(uni_y1)
+    model.add_node(uni_x2)
+    model.add_node(uni_y2)
+    model.add_node(uni_x1)
+
+    model.add_edge(sum2, uni_x1, weight=0.8)
+    model.add_edge(sum2, uni_x2, weight=0.2)
+    model.add_edge(sum3, uni_x1, weight=0.7)
+    model.add_edge(sum3, uni_x2, weight=0.3)
+
+    model.add_edge(sum4, uni_y1, weight=0.5)
+    model.add_edge(sum4, uni_y2, weight=0.5)
+    model.add_edge(sum5, uni_y1, weight=0.1)
+    model.add_edge(sum5, uni_y2, weight=0.9)
+
+
+    sum21, sum22, sum23 = SumUnit(), SumUnit(), SumUnit()
+    sum24, sum25 = SumUnit(), SumUnit()
+    prod21, prod22 = ProductUnit(), ProductUnit()
+    model2 = ProbabilisticCircuit()
+    model2.add_node(sum21)
+    model2.add_node(prod21)
+    model2.add_node(prod22)
+    model2.add_edge(sum21, prod21, weight=0.5)
+    model2.add_edge(sum21, prod22, weight=0.5)
+    model2.add_node(sum22)
+    model2.add_node(sum23)
+    model2.add_node(sum24)
+    model2.add_node(sum25)
+    model2.add_edge(prod21, sum22)
+    model2.add_edge(prod21, sum24)
+    model2.add_edge(prod22, sum23)
+    model2.add_edge(prod22, sum25)
+    uni_x21, uni_x22 = UniformDistribution(x, SimpleInterval(1.5, 2.5)), UniformDistribution(x, SimpleInterval(1.5, 2.5))
+    uni_y21, uni_y22 = UniformDistribution(y, SimpleInterval(1.5, 2.5)), UniformDistribution(y, SimpleInterval(1.5, 2.5))
+
+    model2.add_node(uni_y21)
+    model2.add_node(uni_x22)
+    model2.add_node(uni_y22)
+    model2.add_node(uni_x21)
+
+    model2.add_edge(sum22, uni_x21, weight=0.8)
+    model2.add_edge(sum22, uni_x22, weight=0.2)
+    model2.add_edge(sum23, uni_x21, weight=0.7)
+    model2.add_edge(sum23, uni_x22, weight=0.3)
+
+    model2.add_edge(sum24, uni_y21, weight=0.5)
+    model2.add_edge(sum24, uni_y22, weight=0.5)
+    model2.add_edge(sum25, uni_y21, weight=0.1)
+    model2.add_edge(sum25, uni_y22, weight=0.9)
+
+
+    #------------------BIG---------------------
+
+    x = Continuous("x")
+    y = Continuous("y")
+    sum31, sum32, sum33 = SumUnit(), SumUnit(), SumUnit()
+    sum34, sum35 = SumUnit(), SumUnit()
+    prod31, prod32 = ProductUnit(), ProductUnit()
+    model3 = ProbabilisticCircuit()
+    model3.add_node(sum31)
+    model3.add_node(prod31)
+    model3.add_node(prod32)
+    model3.add_edge(sum31, prod31, weight=0.5)
+    model3.add_edge(sum31, prod32, weight=0.5)
+    model3.add_node(sum32)
+    model3.add_node(sum33)
+    model3.add_node(sum34)
+    model3.add_node(sum35)
+    model3.add_edge(prod31, sum32)
+    model3.add_edge(prod31, sum34)
+    model3.add_edge(prod32, sum33)
+    model3.add_edge(prod32, sum35)
+    uni_x31, uni_x32 = UniformDistribution(x, SimpleInterval(0, 1)), UniformDistribution(x, SimpleInterval(1, 2))
+    uni_y31, uni_y32 = UniformDistribution(y, SimpleInterval(0, 1)), UniformDistribution(y, SimpleInterval(1, 2))
+
+    model3.add_node(uni_y31)
+    model3.add_node(uni_x32)
+    model3.add_node(uni_y32)
+    model3.add_node(uni_x31)
+
+    model3.add_edge(sum32, uni_x31, weight=0.8)
+    model3.add_edge(sum32, uni_x32, weight=0.2)
+    model3.add_edge(sum33, uni_x31, weight=0.7)
+    model3.add_edge(sum33, uni_x32, weight=0.3)
+
+    model3.add_edge(sum34, uni_y31, weight=0.5)
+    model3.add_edge(sum34, uni_y32, weight=0.5)
+    model3.add_edge(sum35, uni_y31, weight=0.1)
+    model3.add_edge(sum35, uni_y32, weight=0.9)
+
+    sum42, sum43 = SumUnit(), SumUnit()
+    sum44, sum45 = SumUnit(), SumUnit()
+    prod41, prod42 = ProductUnit(), ProductUnit()
+
+    model3.add_node(prod41)
+    model3.add_node(prod42)
+    model3.add_edge(sum31, prod41, weight=0.5)
+    model3.add_edge(sum31, prod42, weight=0.5)
+    model3.add_node(sum42)
+    model3.add_node(sum43)
+    model3.add_node(sum44)
+    model3.add_node(sum45)
+    model3.add_edge(prod41, sum42)
+    model3.add_edge(prod41, sum44)
+    model3.add_edge(prod42, sum43)
+    model3.add_edge(prod42, sum45)
+    uni_x41, uni_x42 = UniformDistribution(x, SimpleInterval(3, 4)), UniformDistribution(x,SimpleInterval(4, 5))
+    uni_y41, uni_y42 = UniformDistribution(y, SimpleInterval(3, 4)), UniformDistribution(y, SimpleInterval(4, 5))
+
+    model3.add_node(uni_y41)
+    model3.add_node(uni_x42)
+    model3.add_node(uni_y42)
+    model3.add_node(uni_x41)
+
+    model3.add_edge(sum42, uni_x41, weight=0.8)
+    model3.add_edge(sum42, uni_x42, weight=0.2)
+    model3.add_edge(sum43, uni_x41, weight=0.7)
+    model3.add_edge(sum43, uni_x42, weight=0.3)
+
+    model3.add_edge(sum44, uni_y41, weight=0.5)
+    model3.add_edge(sum44, uni_y42, weight=0.5)
+    model3.add_edge(sum45, uni_y41, weight=0.1)
+    model3.add_edge(sum45, uni_y42, weight=0.9)
+
+    def test(self):
+        mc = Monte_Carlo_Estimator.MonteCarloEstimator(self.model, 100000)
+        mc2 = Monte_Carlo_Estimator.MonteCarloEstimator(self.model2, 100000)
+        mc3 = Monte_Carlo_Estimator.MonteCarloEstimator(self.model3, 100000)
+        shallow = ShallowProbabilisticCircuit.from_probabilistic_circuit(self.model)
+        shallow2 = ShallowProbabilisticCircuit.from_probabilistic_circuit(self.model2)
+        shallow3 = ShallowProbabilisticCircuit.from_probabilistic_circuit(self.model3)
+
+        avm_13 = shallow.area_validation_metric(shallow3)
+        l1_13 = shallow.l1_cool(shallow3)
+        mc_13 = mc.area_validation_metric2(shallow3)
+        print(f"avm_13: {avm_13}, l1_13: {l1_13}, mc_13: {mc_13}")
 
 if __name__ == '__main__':
     unittest.main()

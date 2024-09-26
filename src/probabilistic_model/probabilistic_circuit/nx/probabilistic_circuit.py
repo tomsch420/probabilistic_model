@@ -12,13 +12,17 @@ from typing import Tuple, Iterable, TYPE_CHECKING
 import networkx as nx
 import numpy as np
 import random_events
+from pygments.lexer import default
+from random_events.interval import Interval
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
 from sympy.abc import alpha
-
+from sympy.solvers.diophantine.diophantine import Univariate
+import plotly.graph_objects as go
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, TYPE_CHECKING
+import tqdm
 
 from probabilistic_model.error import IntractableError
 from probabilistic_model.probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
@@ -30,7 +34,7 @@ import os
 import PIL
 
 if TYPE_CHECKING:
-    from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDistribution, SymbolicDistribution
+    from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDistribution, SymbolicDistribution, DiscreteDistribution
 
 
 def cache_inference_result(func):
@@ -1182,6 +1186,23 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                         to_visit_nodes.put(succ)
         return node_weights
 
+    def replace_discrete_distribution_with_deterministic_sum(self):
+        from probabilistic_model.probabilistic_circuit.nx.distributions import DiscreteDistribution
+        old_leafs = self.leaves
+        for leaf in old_leafs:
+            if isinstance(leaf, DiscreteDistribution):
+                leaf: DiscreteDistribution
+                sum_leaf = leaf.as_deterministic_sum()
+                old_predecessors = list(self.predecessors(leaf))
+                for predecessor in old_predecessors:
+                    weight = self.get_edge_data(predecessor, leaf).get("weight", -1)
+                    if weight == -1:
+                        predecessor.add_subcircuit(sum_leaf)
+                    else:
+                        predecessor.add_subcircuit(sum_leaf, weight=weight)
+                    self.remove_edge(predecessor, leaf)
+                self.remove_node(leaf)
+
 
 
 #from probabilistic_model.probabilistic_circuit.exporter import draw_io_expoter
@@ -1189,6 +1210,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 class ShallowProbabilisticCircuit(ProbabilisticCircuit):
     @classmethod
     def from_probabilistic_circuit(cls, probabilistic_circuit: ProbabilisticCircuit):
+
         # diagram = DrawIoExporter(probabilistic_circuit).export()
         # diagram.dump_file("test.drawio")
         result = cls()
@@ -1268,7 +1290,39 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         else:
             raise TypeError(f"{type(node)} is not supported")
 
-    def events_of_higher_density_product(self, other: Self, own_pro_unit, other_pro_unit, own_node_weights, other_node_weights):
+    def events_of_higher_density_product_swag(self, other: Self, own_pro_unit, other_pro_unit, tolerance: float = 10e-8):
+        """
+        Construct E_p of a product unit in a shallow context.
+        """
+        supp_own = own_pro_unit.support
+        supp_other = other_pro_unit.support
+        intersection: Event = (supp_own & supp_other)
+        if intersection.is_empty():
+            return Event()
+
+        center = np.array([assignment.simple_sets[0].center() if isinstance(assignment, Interval)
+                                 else assignment.simple_sets[0] for variable, assignment in intersection.simple_sets[0].items()]).reshape(1, -1)
+        likelihood_own = self.likelihood(center)
+        likelihood_other = other.likelihood(center)
+        diff = likelihood_own - likelihood_other
+
+        if diff > tolerance:
+            return intersection
+        else:
+            return Event()
+
+    def events_of_higher_density_sum_swag(self, other: Self, tolerance: float = 10e-8):
+
+        progress_bar = tqdm.tqdm(total=len(self.root.subcircuits) * len(other.root.subcircuits))
+        result = self.support - other.support
+        for own_prod, other_prod in itertools.product(self.root.subcircuits, other.root.subcircuits):
+            result |= self.events_of_higher_density_product_swag(other, own_prod, other_prod, tolerance)
+            progress_bar.update()
+        return result
+
+
+    def events_of_higher_density_product(self, other: Self, own_pro_unit, other_pro_unit, own_node_weights, other_node_weights,
+                                         progress_bar: tqdm.tqdm):
         own_result = Event()
         other_result = Event()
         combination_map = {}
@@ -1278,6 +1332,9 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
             variable = own_univariate_unit.variables[0]
             if isinstance(variable, random_events.variable.Continuous):
                 all_mixture_points = own_univariate_unit.all_union_of_mixture_points_with(other_univariate_unit)
+                #print(all_mixture_points)
+                # go.Figure(own_univariate_unit.plot()).show()
+                # go.Figure(other_univariate_unit.plot()).show()
                 combination_map[variable] = all_mixture_points
             elif isinstance(variable, random_events.variable.Symbolic):
                 support = own_univariate_unit.support | other_univariate_unit.support
@@ -1287,11 +1344,12 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                 combination_map[variable] = points
             else:
                 raise NotImplementedError("Unknown Node Type")
+            progress_bar.update()
 
         own_weight = sum(own_node_weights.get(hash(own_pro_unit)))
         other_weight = sum(other_node_weights.get(hash(other_pro_unit)))
-        for combination in itertools.product(*combination_map.values()):
-
+        #for combination in itertools.product(*combination_map.values()):
+        for combination in itertools.product(*[v for _, v in sorted(combination_map.items())]):
             full_evidence_state = list()
             # full_evidence_state = list(
             #     ((element.simple_sets[-1].upper - element.simple_sets[0].lower) / 2) + element.simple_sets[
@@ -1307,29 +1365,38 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                 else:
                     raise ValueError(f"Unknown Node Type {type(element)}")
 
-            print(full_evidence_state)
-            likelihood_in_self = self.likelihood(np.array([full_evidence_state])) * own_weight
-            likelihood_in_other = other.likelihood(np.array([full_evidence_state])) * other_weight
+            likelihood_in_self = np.round(self.likelihood(np.array([full_evidence_state])),5)
+            # likelihood_in_self = np.round(self.likelihood(np.array([full_evidence_state])) * own_weight, 4)
+            likelihood_in_other = np.round(other.likelihood(np.array([full_evidence_state])),5)
+            # likelihood_in_other = np.round(other.likelihood(np.array([full_evidence_state])) * other_weight, 4)
 
+            event_dic = {}
+            for variable, value in zip(self.variables, combination):
+                value = random_events.interval.singleton(value) if isinstance(value, int) else value
+                event_dic.update({variable: value})
+            #print(event_dic)
             if likelihood_in_self > likelihood_in_other:
-                if not own_result:
-                    own_result = Event({variable: value for variable, value in zip(self.variables, combination)})
-                else:
-
-                    own_result = own_result.union_with(SimpleEvent({variable: value for variable, value in
-                                                                    zip(self.variables,
-                                                                        combination)}).as_composite_set())
+                # if not own_result:
+                #     own_result = Event({variable: value for variable, value in zip(self.variables, combination)})
+                # else:
+                #
+                #     own_result = own_result.union_with(SimpleEvent({variable: value for variable, value in
+                #                                                     zip(self.variables,
+                #                                                         combination)}).as_composite_set())
+                own_result |= SimpleEvent(event_dic).as_composite_set()
             elif likelihood_in_other > likelihood_in_self:
-                if not other_result:
-                    other_result = Event({variable: value for variable, value in zip(other.variables, combination)})
-                else:
-                    other_result = other_result.union_with(SimpleEvent({variable: value for variable, value in
-                                                                        zip(other.variables,
-                                                                            combination)}).as_composite_set())
-
+                # if not other_result:
+                #     other_result = Event({variable: value for variable, value in zip(other.variables, combination)})
+                # else:
+                #     other_result = other_result.union_with(SimpleEvent({variable: value for variable, value in
+                #                                                         zip(other.variables,
+                #                                                             combination)}).as_composite_set())
+                other_result |= SimpleEvent(event_dic).as_composite_set()
         return own_result, other_result
 
     def events_of_higher_density_sum(self, other: Self,):
+        progress_bar = tqdm.tqdm(total=len(self.root.subcircuits) * len(other.root.subcircuits) * len(self.variables))
+
         own_node_weights = self.root.probabilistic_circuit.nodes_weights()
         other_node_weights = other.root.probabilistic_circuit.nodes_weights()
         own_result = Event()
@@ -1340,25 +1407,106 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                 other_pro_unit: ProductUnit
                 own_result_part, other_result_part = self.events_of_higher_density_product(other ,own_pro_unit, other_pro_unit,
                                                                                            own_node_weights,
-                                                                                        other_node_weights)
-                if own_result.is_empty():
-                    own_result = own_result_part
-                elif not other_result_part.is_empty():
-                    own_result = own_result.union_with(own_result_part)
-                if other_result.is_empty():
-                    other_result = other_result_part
-                elif not other_result_part.is_empty():
-                    other_result = other_result.union_with(other_result_part)
-
+                                                                                        other_node_weights, progress_bar)
+                own_result |= own_result_part
+                other_result |= other_result_part
+                # if own_result.is_empty():
+                #     own_result = own_result_part
+                # elif not other_result_part.is_empty():
+                #     own_result = own_result.union_with(own_result_part)
+                # if other_result.is_empty():
+                #     other_result = other_result_part
+                # elif not other_result_part.is_empty():
+                #     other_result = other_result.union_with(other_result_part)
         return own_result, other_result
 
-    def area_validation_metric(self, other: Self) -> float:
-        print(self.variables)
-        p_event, q_event = self.events_of_higher_density_sum(other)
+    def events_of_higher_density_cool(self, other: Self):
+        points_dict = {}
+        own_result = Event()
+        other_result = Event()
+        for own_pro_unit in self.root.subcircuits:
+            own_pro_unit: ProductUnit
+            for other_pro_unit in other.root.subcircuits:
+                other_pro_unit: ProductUnit
+                for own_univariate_unit in own_pro_unit.subcircuits:
+                    other_univariate_unit = [s for s in other_pro_unit.subcircuits if s.variables == own_univariate_unit.variables][0]
+                    variable = own_univariate_unit.variables[0]
+                    if isinstance(variable, random_events.variable.Continuous):
+                        all_mixture_points = own_univariate_unit.all_union_of_mixture_points_with(other_univariate_unit)
+                        var_value = points_dict.get(variable, [])
+                        var_value.extend(all_mixture_points)
+                        points_dict[variable] = var_value
+                    elif isinstance(variable, random_events.variable.Symbolic):
+                        support = own_univariate_unit.support | other_univariate_unit.support
+                        var_value = points_dict.get(variable, [])
+                        var_value.extend(support)
+                        points_dict[variable] = var_value
+                    elif isinstance(variable, random_events.variable.Integer):
+                        points = [i.lower for i in own_univariate_unit.support.simple_sets[0][variable] |
+                                  other_univariate_unit.support.simple_sets[0][variable]]
+                        var_value = points_dict.get(variable, [])
+                        var_value.extend(points)
+                        points_dict[variable] = var_value
+                    else:
+                        raise NotImplementedError("Unknown Node Type")
+        for variable, value in points_dict.items():
+            points_dict[variable] = list(set(value))
+        for combination in itertools.product(*[v for _, v in sorted(points_dict.items())]):
+            full_evidence_state = list()
+            for element in combination:
+                if isinstance(element, random_events.interval.Interval):
+                    full_evidence_state.append(((element.simple_sets[-1].upper - element.simple_sets[0].lower) / 2) + element.simple_sets[0].lower)
+                elif isinstance(element, random_events.variable.Symbolic):
+                    full_evidence_state.append(element)
+                elif isinstance(element, int):
+                    full_evidence_state.append(element)
+                else:
+                    raise ValueError(f"Unknown Node Type {type(element)}")
+
+            likelihood_in_self = np.round(self.likelihood(np.array([full_evidence_state])), 4)
+            # likelihood_in_self = np.round(self.likelihood(np.array([full_evidence_state])) * own_weight, 4)
+            likelihood_in_other = np.round(other.likelihood(np.array([full_evidence_state])), 4)
+            # likelihood_in_other = np.round(other.likelihood(np.array([full_evidence_state])) * other_weight, 4)
+            event_dic = {}
+            for variable, value in zip(self.variables, combination):
+                value = random_events.interval.singleton(value) if isinstance(value, int) else value
+                event_dic.update({variable: value})
+            if likelihood_in_self > likelihood_in_other:
+                own_result |= SimpleEvent(event_dic).as_composite_set()
+            elif likelihood_in_other > likelihood_in_self:
+                other_result |= SimpleEvent(event_dic).as_composite_set()
+        return own_result, other_result
+
+    def l1_cool(self, other: Self)-> float:
+        p_event, q_event = self.events_of_higher_density_cool(other)
+        # p_event, q_event = self.event_of_higher_density_cool(other)
+        print("l1",p_event, q_event)
+        go.Figure(p_event.plot()).show()
+        go.Figure(q_event.plot()).show()
         result = (self.probability(p_event) - other.probability(p_event)
                   + other.probability(q_event) - self.probability(q_event))
 
-        return abs(result)/2
+        return result
+
+    def l1_swag(self, other: Self, tolerance: float = 10e-8)-> float:
+        e = self.events_of_higher_density_sum_swag(other, tolerance)
+        #go.Figure(e.plot()).show()
+        p_e = self.probability(e)
+        q_e = other.probability(e)
+        
+        return 2*(p_e - q_e)
+
+    def area_validation_metric(self, other: Self) -> float:
+
+        p_event, q_event = self.events_of_higher_density_sum(other)
+        # p_event, q_event = self.event_of_higher_density_cool(other)
+        print("avm",p_event, q_event)
+        go.Figure(p_event.plot()).show()
+        go.Figure(q_event.plot()).show()
+        result = (self.probability(p_event) - other.probability(p_event)
+                  + other.probability(q_event) - self.probability(q_event))
+
+        return result
 
     def remove_node_and_successor_structure(self, node: ProbabilisticCircuitMixin):
         probabilistic_circuit = node.probabilistic_circuit
