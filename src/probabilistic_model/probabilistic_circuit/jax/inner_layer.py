@@ -285,7 +285,7 @@ class ProductLayer(InnerLayer):
     units with the same scope.
     """
 
-    edges: Int[BCOO, "len(child_layers), number_of_nodes"]
+    edges: Int[BCOO, "len(child_layers), number_of_nodes"] = eqx.field(static=True)
     """
     The edges consist of a sparse matrix containing integers.
     The first dimension describes the edges for each child layer.

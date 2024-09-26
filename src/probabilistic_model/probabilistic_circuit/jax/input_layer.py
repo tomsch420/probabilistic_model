@@ -7,6 +7,7 @@ from typing_extensions import Tuple, Type
 
 from .inner_layer import InputLayer, NXConverterLayer
 from ..nx.distributions import DiracDeltaDistribution
+import equinox as eqx
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -20,7 +21,7 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
     Abstract class for continuous univariate input units with finite support.
     """
 
-    interval: jax.Array
+    interval: jax.Array = eqx.field(static=True)
     """
     The interval of the distribution as a array of shape (num_nodes, 2).
     The first column contains the lower bounds and the second column the upper bounds.

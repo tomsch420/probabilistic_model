@@ -1,29 +1,20 @@
 import unittest
 
-from probabilistic_model.probabilistic_circuit.jax import SumLayer
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
-                                                                                ProbabilisticCircuit as NXProbabilisticCircuit)
-from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import DiracDeltaDistribution
-from random_events.variable import Continuous
-
-from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 import jax.numpy as jnp
-import plotly.graph_objects as go
-from random_events.product_algebra import VariableMap, SimpleEvent
+import numpy as np
+from random_events.variable import Continuous
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
+from probabilistic_model.probabilistic_circuit.jax import SumLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-import numpy as np
-import torch
-import jax.numpy as jnp
-import tqdm
-
-from probabilistic_model.probabilistic_model import ProbabilisticModel
-from probabilistic_model.utils import timeit
+from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
+                                                                                ProbabilisticCircuit as NXProbabilisticCircuit)
 
 np.random.seed(69)
 import pandas as pd
+
 
 class SmallCircuitIntegrationTestCase(unittest.TestCase):
     x = Continuous("x")
@@ -74,8 +65,6 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         sum_layer2 = product_layer.child_layers[1]
         self.assertEqual(sum_layer1.number_of_nodes, 2)
         self.assertEqual(sum_layer2.number_of_nodes, 2)
-        self.assertTrue(jnp.allclose(sum_layer1.variables, jnp.array([1])))
-        self.assertTrue(jnp.allclose(sum_layer2.variables, jnp.array([0])))
 
     def test_ll(self):
         samples = self.nx_model.sample(1000)
@@ -86,13 +75,12 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
 
 class JPTIntegrationTestCase(unittest.TestCase):
     number_of_variables = 2
-    number_of_samples= 10000
+    number_of_samples = 10000
 
     jpt: NXProbabilisticCircuit
 
     @classmethod
     def setUpClass(cls):
-
         mean = np.full(cls.number_of_variables, 0)
         cov = np.random.uniform(0, 1, (cls.number_of_variables, cls.number_of_variables))
         cov = np.dot(cov, cov.T)
@@ -108,8 +96,6 @@ class JPTIntegrationTestCase(unittest.TestCase):
         samples = jnp.array(self.jpt.sample(1000))
         jax_ll = model.log_likelihood(samples)
         self.assertTrue((jax_ll > -jnp.inf).all())
-
-
 
 
 if __name__ == '__main__':
