@@ -33,7 +33,7 @@ from .utils import (add_sparse_edges_dense_child_tensor_inplace,
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
     for subclass in recursive_subclasses(Layer):
         if not inspect.isabstract(subclass):
-            if issubclass(clazz, subclass.nx_classes()):
+            if issubclass(clazz, subclass.original_class()):
                 return subclass
 
     raise TypeError(f"Could not find class for {clazz}")
