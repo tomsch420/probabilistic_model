@@ -1,7 +1,10 @@
 import unittest
 
+import jax
+import equinox as eqx
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.jpt.jpt import JPT
@@ -13,8 +16,6 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (
                                                                                 ProbabilisticCircuit as NXProbabilisticCircuit)
 
 np.random.seed(69)
-import pandas as pd
-
 
 class SmallCircuitIntegrationTestCase(unittest.TestCase):
     x = Continuous("x")
@@ -73,9 +74,10 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         self.assertTrue(jnp.allclose(nx_ll, jax_ll))
 
     def test_trainable_parameters(self):
-        params = self.jax_model.trainable_parameters
-        self.assertEqual(len(params), 3)
-
+        params, _ = eqx.partition(self.jax_model.root, eqx.is_inexact_array)
+        flattened_params, _ = jax.tree_util.tree_flatten(params)
+        number_of_parameters = sum([len(p) for p in flattened_params])
+        self.assertEqual(number_of_parameters, 10)
 
 class JPTIntegrationTestCase(unittest.TestCase):
     number_of_variables = 2

@@ -60,13 +60,6 @@ class Layer(eqx.Module, ABC):
         """
         raise NotImplementedError
 
-    @property
-    def trainable_parameters(self) -> List[jax.Array]:
-        """
-        :return: The trainable parameters of the layer.
-        """
-        return []
-
     def all_layers(self) -> List[Layer]:
         """
         :return: A list of all layers in the circuit.
@@ -167,7 +160,7 @@ class InputLayer(Layer, ABC):
     calculation works without bottleneck statements like if/else or loops.
     """
 
-    _variables: jnp.array
+    _variables: jnp.array = eqx.field(static=True)
     """
     The variable indices of the layer.
     """
@@ -202,10 +195,6 @@ class SumLayer(InnerLayer):
     def variables(self) -> jax.Array:
         return self.child_layers[0].variables
 
-    @property
-    def trainable_parameters(self) -> List[BCOO]:
-        return self.log_weights
-
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
         return SumUnit,
@@ -235,7 +224,6 @@ class SumLayer(InnerLayer):
         result = result.sum(1).todense()
         return jnp.log(result)
 
-    @jax.jit
     def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
         result = jnp.zeros((len(x), self.number_of_nodes))
 
@@ -312,7 +300,7 @@ class ProductLayer(InnerLayer):
     units with the same scope.
     """
 
-    edges: Int[BCOO, "len(child_layers), number_of_nodes"]
+    edges: Int[BCOO, "len(child_layers), number_of_nodes"] = eqx.field(static=True)
     """
     The edges consist of a sparse matrix containing integers.
     The first dimension describes the edges for each child layer.
@@ -340,10 +328,6 @@ class ProductLayer(InnerLayer):
              f"but was {self.edges.shape}.")
 
     @property
-    def trainable_parameters(self) -> List[jax.Array]:
-        return []
-
-    @property
     def number_of_nodes(self) -> int:
         return self.edges.shape[1]
 
@@ -355,7 +339,6 @@ class ProductLayer(InnerLayer):
     def variables(self) -> jax.Array:
         return jnp.unique(jnp.concatenate([layer.variables for layer in self.child_layers])).sort()
 
-    @jax.jit
     def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
         result = jnp.zeros((len(x), self.number_of_nodes))
 
