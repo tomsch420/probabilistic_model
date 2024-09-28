@@ -21,7 +21,7 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
     Abstract class for continuous univariate input units with finite support.
     """
 
-    interval: jax.Array = eqx.field(static=True)
+    interval: jax.Array
     """
     The interval of the distribution as a array of shape (num_nodes, 2).
     The first column contains the lower bounds and the second column the upper bounds.

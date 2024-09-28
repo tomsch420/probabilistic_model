@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import collections
+
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Self, List
@@ -61,3 +63,10 @@ class ProbabilisticCircuit:
         root = child_layers[0].layer
 
         return cls(pc.variables, root)
+
+    @property
+    def trainable_parameters(self):
+        parameters = []
+        for layer in self.root.all_layers():
+            parameters.extend(layer.trainable_parameters)
+        return parameters

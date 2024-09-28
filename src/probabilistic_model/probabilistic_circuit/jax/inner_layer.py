@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import cached_property
 
 import jax
+from jax.typing import ArrayLike
 from jaxtyping import Array, Float, Int
 from jax import numpy as jnp
 import equinox as eqx
@@ -58,6 +59,19 @@ class Layer(eqx.Module, ABC):
         :return: The number of nodes in the layer.
         """
         raise NotImplementedError
+
+    @property
+    def trainable_parameters(self) -> List[jax.Array]:
+        """
+        :return: The trainable parameters of the layer.
+        """
+        return []
+
+    def all_layers(self) -> List[Layer]:
+        """
+        :return: A list of all layers in the circuit.
+        """
+        return [self]
 
     @property
     @abstractmethod
@@ -135,6 +149,15 @@ class InnerLayer(Layer, ABC):
     def variables(self) -> jax.Array:
         raise NotImplementedError
 
+    def all_layers(self) -> List[Layer]:
+        """
+        :return: A list of all layers in the circuit.
+        """
+        result = [self]
+        for child_layer in self.child_layers:
+            result.extend(child_layer.all_layers())
+        return result
+
 
 class InputLayer(Layer, ABC):
     """
@@ -178,6 +201,10 @@ class SumLayer(InnerLayer):
     @cached_property
     def variables(self) -> jax.Array:
         return self.child_layers[0].variables
+
+    @property
+    def trainable_parameters(self) -> List[BCOO]:
+        return self.log_weights
 
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
@@ -285,7 +312,7 @@ class ProductLayer(InnerLayer):
     units with the same scope.
     """
 
-    edges: Int[BCOO, "len(child_layers), number_of_nodes"] = eqx.field(static=True)
+    edges: Int[BCOO, "len(child_layers), number_of_nodes"]
     """
     The edges consist of a sparse matrix containing integers.
     The first dimension describes the edges for each child layer.
@@ -311,6 +338,10 @@ class ProductLayer(InnerLayer):
         assert self.edges.shape == (len(self.child_layers), self.number_of_nodes), \
             (f"The shape of the edges must be {(len(self.child_layers), self.number_of_nodes)} "
              f"but was {self.edges.shape}.")
+
+    @property
+    def trainable_parameters(self) -> List[jax.Array]:
+        return []
 
     @property
     def number_of_nodes(self) -> int:

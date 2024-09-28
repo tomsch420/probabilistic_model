@@ -72,6 +72,10 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         jax_ll = self.jax_model.log_likelihood(samples)
         self.assertTrue(jnp.allclose(nx_ll, jax_ll))
 
+    def test_trainable_parameters(self):
+        params = self.jax_model.trainable_parameters
+        self.assertEqual(len(params), 3)
+
 
 class JPTIntegrationTestCase(unittest.TestCase):
     number_of_variables = 2
