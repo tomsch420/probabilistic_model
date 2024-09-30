@@ -1,6 +1,5 @@
 import unittest
 
-from matplotlib import pyplot as plt
 from random_events.interval import closed, open, closed_open
 from random_events.variable import Integer, Continuous
 from typing_extensions import Union

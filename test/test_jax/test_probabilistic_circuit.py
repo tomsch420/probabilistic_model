@@ -4,12 +4,15 @@ import jax
 import equinox as eqx
 import jax.numpy as jnp
 import numpy as np
+import optax
 import pandas as pd
+import tqdm
+from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
-from probabilistic_model.probabilistic_circuit.jax import SumLayer
+from probabilistic_model.probabilistic_circuit.jax import SumLayer, UniformLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import DiracDeltaDistribution
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
@@ -102,6 +105,43 @@ class JPTIntegrationTestCase(unittest.TestCase):
         samples = jnp.array(self.jpt.sample(1000))
         jax_ll = model.log_likelihood(samples)
         self.assertTrue((jax_ll > -jnp.inf).all())
+
+
+class LearningTestCase(unittest.TestCase):
+
+    data = np.vstack((np.random.uniform(0, 1, (100, 1)),
+                      np.random.uniform(2, 3, (200, 1))))
+    uniform_layer = UniformLayer(0, jnp.array([[-0.01, 1.01],
+                                                       [1.99, 3.01]]))
+    sum_layer = SumLayer([uniform_layer], [BCOO((jnp.array([0., 0.]),
+                                                 jnp.array([[0, 0], [0, 1]])),
+                                                shape=(1, 2))])
+    sum_layer.validate()
+
+    def test_learning(self):
+
+        @eqx.filter_jit
+        def loss(p, s, x):
+            model = eqx.combine(p, s)
+            ll = model.log_likelihood_of_nodes(x)
+            return -jnp.mean(ll)
+        params, static = eqx.partition(self.sum_layer, eqx.is_inexact_array)
+
+        optim = optax.adamw(0.01)
+        opt_state = optim.init(eqx.filter(self.sum_layer, eqx.is_inexact_array))
+
+        for i in tqdm.trange(100):
+            loss_value, grads = eqx.filter_value_and_grad(loss)(params, static, self.data)
+            updates, opt_state = optim.update(grads, opt_state, params)
+            params = eqx.apply_updates(params, updates)
+
+        model = eqx.combine(params, static)
+
+        weights = jnp.exp(model.log_weights[0].data)
+        weights /= jnp.sum(weights)
+        self.assertAlmostEqual(weights[0], 1 / 3, delta=0.01)
+        self.assertAlmostEqual(weights[1], 2 / 3, delta=0.01)
+
 
 
 if __name__ == '__main__':
