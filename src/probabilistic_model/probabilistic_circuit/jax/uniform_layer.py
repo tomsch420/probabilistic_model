@@ -1,5 +1,6 @@
 from typing import List
 
+import jax
 from jax import numpy as jnp
 from typing_extensions import Type, Tuple
 
@@ -32,8 +33,11 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         """
         return -jnp.log(self.upper - self.lower)
 
-    def log_likelihood_of_nodes(self, x: jnp.array) -> jnp.array:
+    def log_likelihood_of_nodes_single(self, x: jnp.array) -> jnp.array:
         return jnp.where(self.included_condition(x), self.log_pdf_value(), -jnp.inf)
+
+    def log_likelihood_of_nodes(self, x: jnp.array) -> jnp.array:
+        return jax.vmap(self.log_likelihood_of_nodes_single)(x)
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UniformDistribution],
