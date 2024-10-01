@@ -123,7 +123,7 @@ class LearningTestCase(unittest.TestCase):
         @eqx.filter_jit
         def loss(p, s, x):
             model = eqx.combine(p, s)
-            ll = model.log_likelihood_of_nodes(x)
+            ll = model.log_likelihood_of_nodes_single(x)
             return -jnp.mean(ll)
         params, static = eqx.partition(self.sum_layer, eqx.is_inexact_array)
 

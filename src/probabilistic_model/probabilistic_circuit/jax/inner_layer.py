@@ -37,7 +37,7 @@ class Layer(eqx.Module, ABC):
     """
 
     @abstractmethod
-    def log_likelihood_of_nodes(self, x: jnp.array) -> jnp.array:
+    def log_likelihood_of_nodes_single(self, x: jnp.array) -> jnp.array:
         """
         Calculate the log-likelihood of the distribution.
 
@@ -46,6 +46,9 @@ class Layer(eqx.Module, ABC):
             The shape of the result is (#samples, #nodes).
         """
         raise NotImplementedError
+
+    def log_likelihood_of_nodes(self, x: jnp.array) -> jnp.array:
+        return jax.vmap(self.log_likelihood_of_nodes_single)(x)
 
     def validate(self):
         """
@@ -241,12 +244,12 @@ class SumLayer(InnerLayer):
         result = result.sum(1).todense()
         return jnp.log(result)
 
-    def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
-        result = jnp.zeros((len(x), self.number_of_nodes))
+    def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
+        result = jnp.zeros(self.number_of_nodes)
 
         for log_weights, child_layer in self.log_weighted_child_layers:
             # get the log likelihoods of the child nodes
-            ll = child_layer.log_likelihood_of_nodes(x)
+            ll = child_layer.log_likelihood_of_nodes_single(x)
             # assert ll.shape == (len(x), child_layer.number_of_nodes)
 
             # weight the log likelihood of the child nodes by the weight for each node of this layer
@@ -356,21 +359,24 @@ class ProductLayer(InnerLayer):
     def variables(self) -> jax.Array:
         return jnp.unique(jnp.concatenate([layer.variables for layer in self.child_layers])).sort()
 
-    def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
-        result = jnp.zeros((len(x), self.number_of_nodes))
+    def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
+        result = jnp.zeros(self.number_of_nodes)
 
         for edges, layer in zip(self.edges, self.child_layers):
+
             # calculate the log likelihood over the columns of the child layer
-            ll = layer.log_likelihood_of_nodes(x[:, layer.variables])  # shape: (#x, #child_nodes)
+            ll = layer.log_likelihood_of_nodes_single(x[layer.variables])  # shape: #child_nodes
 
             # gather the ll at the indices of the nodes that are required for the edges
-            ll = ll[:, edges.data]  # shape: (#x, #len(edges.values()))
-            # assert ll.shape == (len(x), len(edges.values()))
+            ll = ll[edges.data]  # shape: #len(edges.values())
 
             # add the gathered values to the result where the edges define the indices
-            result = result.at[:, edges.indices[:, 0]].add(ll)
+            result = result.at[edges.indices[:, 0]].add(ll)
 
         return result
+
+    def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
+        return jax.vmap(self.log_likelihood_of_nodes_single)(x)
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
