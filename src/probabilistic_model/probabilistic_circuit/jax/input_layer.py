@@ -88,6 +88,9 @@ class DiracDeltaLayer(ContinuousLayer):
         return len(self.location)
 
     def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
+        return jax.vmap(self.log_likelihood_of_nodes_single)(x)
+
+    def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
         return jnp.where(x == self.location, jnp.log(self.density_cap), -jnp.inf)
 
     @classmethod

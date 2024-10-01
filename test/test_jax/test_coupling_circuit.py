@@ -3,12 +3,19 @@ import unittest
 import jax
 import numpy as np
 
+from probabilistic_model.learning.jpt.jpt import JPT
+from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
 from probabilistic_model.probabilistic_circuit.jax import UniformLayer, SumLayer
-from probabilistic_model.probabilistic_circuit.jax.coupling_circuit import Conditioner, CouplingCircuit
+from probabilistic_model.probabilistic_circuit.jax.coupling_circuit import Conditioner, CouplingCircuit, \
+    LinearConditioner
 
 import equinox as eqx
 import jax.numpy as jnp
 from jax.experimental.sparse import BCOO
+import pandas as pd
+
+from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
+
 
 class TrivialConditioner(Conditioner):
 
@@ -68,6 +75,47 @@ class CouplingCircuitTestCase(unittest.TestCase):
         # check that if the probability of the first uniform is higher than also,
         # the probability of the sample is higher
         self.assertEqual(p1[0] > p2[0], r1[0] > r2[0])
+
+    def test_parameter_count(self):
+        self.assertEqual(self.cc.circuit.number_of_trainable_parameters, 2)
+
+    def test_create_circuit(self):
+        cc = CouplingCircuit(LinearConditioner(1, 2), jnp.array([0]), self.sum_layer, jnp.array([0]))
+        params = cc.conditioner.generate_parameters(jnp.array([0.1])).reshape(1, -1)
+        cc.create_circuit_from_parameters(params)
+
+class CouplingCircuit4DTestCase(unittest.TestCase):
+
+    number_of_variables = 4
+    number_of_samples = 1000
+    cc: CouplingCircuit
+    data: jax.Array
+
+    @classmethod
+    def setUpClass(cls):
+        mean = np.full(cls.number_of_variables, 0)
+        cov = np.random.uniform(0, 1, (cls.number_of_variables, cls.number_of_variables))
+        cov = np.dot(cov, cov.T)
+        samples = np.random.multivariate_normal(mean, cov, cls.number_of_samples)
+        df = pd.DataFrame(samples, columns=[f"x_{i}" for i in range(cls.number_of_variables)])
+        variables = infer_variables_from_dataframe(df, min_samples_per_quantile=100)
+        jpt = JPT(variables, min_samples_leaf=0.2)
+        jpt.fit(df)
+        jpt = jpt.probabilistic_circuit.marginal(variables[:cls.number_of_variables // 2])
+        circuit = ProbabilisticCircuit.from_nx(jpt, False)
+        conditioner = LinearConditioner(cls.number_of_variables // 2, circuit.root.number_of_trainable_parameters)
+        cls.cc = CouplingCircuit(conditioner, jnp.array(list(range(cls.number_of_variables // 2))),
+                             circuit.root, jnp.array(list(range(cls.number_of_variables // 2, cls.number_of_variables))))
+        cls.cc.validate()
+        cls.data = jnp.array(df)
+
+
+    def test_create_circuit(self):
+        params, static = eqx.partition(self.cc, eqx.is_inexact_array)
+        p = self.cc.conditioner.generate_parameters(self.data[0][self.cc.conditioner_columns])
+        c = self.cc.create_circuit_from_parameters(p)
+        self.cc.conditional_log_likelihood(self.data)
+
 
 if __name__ == '__main__':
     unittest.main()

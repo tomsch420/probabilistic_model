@@ -9,12 +9,12 @@ from functools import cached_property
 import jax
 from jax.typing import ArrayLike
 from jaxtyping import Array, Float, Int
-from jax import numpy as jnp
+from jax import numpy as jnp, tree_flatten
 import equinox as eqx
 from jax.experimental.sparse import BCOO, bcoo_concatenate, bcoo_reduce_sum
 from random_events.utils import recursive_subclasses
 from sortedcontainers import SortedSet
-from typing_extensions import List, Iterator, Tuple, Union, Type, Dict
+from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any
 from .utils import copy_bcoo
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
 import tqdm
@@ -121,6 +121,23 @@ class Layer(eqx.Module, ABC):
         Create a layer from a list of nodes with the same type and scope.
         """
         raise NotImplementedError
+
+    def partition(self) -> Tuple[Any, Any]:
+        """
+        Partition the layer into the parameters and the static structure.
+        :return: A tuple containing the parameters and the static structure as pytrees.
+        """
+        return eqx.partition(self, eqx.is_inexact_array)
+
+    @property
+    def number_of_trainable_parameters(self):
+        """
+        :return: The trainable parameters of the layer and all child layers.
+        """
+        parameters, _ = self.partition()
+        flattened_parameters, _ = tree_flatten(parameters)
+        number_of_parameters = sum([len(p) for p in flattened_parameters])
+        return number_of_parameters
 
 
 class InnerLayer(Layer, ABC):
@@ -396,6 +413,7 @@ class ProductLayer(InnerLayer):
                  sort_indices().sum_duplicates(remove_zeros=False))
         layer = cls([cl.layer for cl in child_layers], edges)
         return NXConverterLayer(layer, nodes, hash_remap)
+
 
 @dataclass
 class NXConverterLayer:

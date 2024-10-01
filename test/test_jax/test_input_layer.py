@@ -2,7 +2,7 @@ import math
 import unittest
 
 import jax.numpy as jnp
-
+import jax
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
 
 
