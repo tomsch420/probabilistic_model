@@ -6,12 +6,21 @@ from jax.tree_util import tree_flatten, tree_unflatten
 import equinox as eqx
 
 from .probabilistic_circuit import Layer
-import jax.numpy as jnp
+
 
 class Conditioner:
+    """
+    Interface for a conditioner that generates parameters for a circuit.
+    """
 
     @abstractmethod
-    def generate_parameters(self, x) -> jax.Array:
+    def generate_parameters(self, x: jax.Array) -> jax.Array:
+        """
+        Generate parameters for a circuit given an input.
+
+        :param x: The input to the conditioner.
+        :return: The parameters for the circuit.
+        """
         raise NotImplementedError
 
     @property
@@ -108,6 +117,9 @@ class CouplingCircuit(eqx.Module):
         return self.vectorized_conditional_log_likelihood_single(x)
 
     def validate(self):
+        """
+        Check if the output of the conditioner matches the parametrization of the circuit.
+        """
         self.circuit.validate()
         params, _ = self.partition_circuit()
         flattened_params = tree_flatten(params)[0]

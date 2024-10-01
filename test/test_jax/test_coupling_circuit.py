@@ -56,7 +56,18 @@ class CouplingCircuitTestCase(unittest.TestCase):
     def test_vmap(self):
         cc = CouplingCircuit(LessTrivialConditioner(), jnp.array([0]), self.sum_layer, jnp.array([0]))
         r = cc.conditional_log_likelihood(self.data)
-        print(r.shape)
+
+        p1 = jnp.exp(cc.conditioner.generate_parameters(self.data[0]))
+        p1 /= jnp.sum(p1)
+        p2 = jnp.exp(cc.conditioner.generate_parameters(self.data[1]))
+        p2 /= jnp.sum(p2)
+
+        r1 = r[0, 0]
+        r2 = r[1, 0]
+
+        # check that if the probability of the first uniform is higher than also,
+        # the probability of the sample is higher
+        self.assertEqual(p1[0] > p2[0], r1[0] > r2[0])
 
 if __name__ == '__main__':
     unittest.main()
