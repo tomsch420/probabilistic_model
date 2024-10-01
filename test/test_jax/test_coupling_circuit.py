@@ -63,25 +63,23 @@ class CouplingCircuitTestCase(unittest.TestCase):
     def test_vmap(self):
         cc = CouplingCircuit(LessTrivialConditioner(), jnp.array([0]), self.sum_layer, jnp.array([0]))
         r = cc.conditional_log_likelihood(self.data)
-
         p1 = jnp.exp(cc.conditioner.generate_parameters(self.data[0]))
         p1 /= jnp.sum(p1)
         p2 = jnp.exp(cc.conditioner.generate_parameters(self.data[1]))
         p2 /= jnp.sum(p2)
-
-        r1 = r[0, 0]
-        r2 = r[1, 0]
+        r1 = r[0]
+        r2 = r[1]
 
         # check that if the probability of the first uniform is higher than also,
         # the probability of the sample is higher
-        self.assertEqual(p1[0] > p2[0], r1[0] > r2[0])
+        self.assertEqual(p1[0] > p2[0], r1 > r2)
 
     def test_parameter_count(self):
         self.assertEqual(self.cc.circuit.number_of_trainable_parameters, 2)
 
     def test_create_circuit(self):
         cc = CouplingCircuit(LinearConditioner(1, 2), jnp.array([0]), self.sum_layer, jnp.array([0]))
-        params = cc.conditioner.generate_parameters(jnp.array([0.1])).reshape(1, -1)
+        params = cc.conditioner.generate_parameters(jnp.array([0.1]))
         cc.create_circuit_from_parameters(params)
 
 class CouplingCircuit4DTestCase(unittest.TestCase):
@@ -109,11 +107,7 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
         cls.cc.validate()
         cls.data = jnp.array(df)
 
-
-    def test_create_circuit(self):
-        params, static = eqx.partition(self.cc, eqx.is_inexact_array)
-        p = self.cc.conditioner.generate_parameters(self.data[0][self.cc.conditioner_columns])
-        c = self.cc.create_circuit_from_parameters(p)
+    def test_cll(self):
         self.cc.conditional_log_likelihood(self.data)
 
 

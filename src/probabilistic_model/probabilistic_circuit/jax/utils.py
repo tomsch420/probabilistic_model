@@ -4,7 +4,7 @@ from random_events.interval import SimpleInterval, Bound
 
 
 def copy_bcoo(x: BCOO) -> BCOO:
-    return BCOO((x.data, x.indices), shape=x.shape, indices_sorted=x.indices_sorted,
+    return BCOO((x.data.copy(), x.indices.copy()), shape=x.shape, indices_sorted=x.indices_sorted,
                 unique_indices=x.unique_indices)
 
 def simple_interval_to_open_array(interval: SimpleInterval) -> jnp.array:

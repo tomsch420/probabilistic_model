@@ -119,30 +119,19 @@ class CouplingCircuit(eqx.Module):
         circuit = eqx.combine(params, static)
         return circuit
 
-    def _conditional_log_likelihood_single(self, x, conditioner, create_circuit_from_parameters):
+    def conditional_log_likelihood_single(self, x):
         """
         Calculate the conditional log likelihood of a single data point.
 
         :param x: The datapoint
-        :param conditioner: The conditioner to use
-        :param create_circuit_from_parameters: The function to create a circuit from parameters
         :return: The conditional log likelihood of the data point
         """
-        params = conditioner.generate_parameters(x[self.conditioner_columns]).reshape(1, -1)
-        circuit = create_circuit_from_parameters(params)
-        return circuit.log_likelihood_of_nodes(x[self.circuit_columns])
-
-    def vectorized_conditional_log_likelihood_single(self, x):
-        """
-        Calculate the conditional log likelihood of data points as batched.
-        :param x: The data points
-        :return: The conditional log likelihoods
-        """
-        return (jax.vmap(self._conditional_log_likelihood_single, in_axes=(0, None, None))
-                (x, self.conditioner, self.create_circuit_from_parameters))
+        params = self.conditioner.generate_parameters(x[self.conditioner_columns])
+        circuit = self.create_circuit_from_parameters(params)
+        return circuit.log_likelihood_of_nodes_single(x[self.circuit_columns])
 
     def conditional_log_likelihood(self, x):
-        return self.vectorized_conditional_log_likelihood_single(x)
+        return jax.vmap(self.conditional_log_likelihood_single)(x)
 
     def validate(self):
         """
