@@ -45,7 +45,7 @@ class CouplingCircuit(eqx.Module):
     The conditioner that generates the parameters for the circuit.
     """
 
-    circuit: Layer
+    circuit: Layer = eqx.field(static=True)
     """
     The circuit to generate the parameters for.
     """

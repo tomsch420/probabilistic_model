@@ -2,6 +2,8 @@ import unittest
 
 import jax
 import numpy as np
+from equinox import tree_flatten_one_level
+from jax import tree_flatten, tree_map
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
@@ -103,8 +105,8 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
         cov = np.dot(cov, cov.T)
         samples = np.random.multivariate_normal(mean, cov, cls.number_of_samples)
         df = pd.DataFrame(samples, columns=[f"x_{i}" for i in range(cls.number_of_variables)])
-        variables = infer_variables_from_dataframe(df, min_samples_per_quantile=100)
-        jpt = JPT(variables, min_samples_leaf=0.2)
+        variables = infer_variables_from_dataframe(df, min_samples_per_quantile=30)
+        jpt = JPT(variables, min_samples_leaf=0.1)
         jpt.fit(df)
         cls.non_marginalized_jpt = jpt.probabilistic_circuit
         cls.jpt = jpt.probabilistic_circuit.marginal(variables[cls.number_of_variables // 2:])
@@ -117,19 +119,36 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
 
     def test_learning(self):
 
+        @eqx.filter_jit
         def loss(model, x):
             cll = model.conditional_log_likelihood(x)
             return -jnp.mean(cll)
 
-        def loss2(p, s, x):
-            model = eqx.combine(p, s)
-            ll = model.conditional_log_likelihood(x)
-            return -jnp.mean(ll)
-
         nll = loss(self.cc, self.data)
+        ll_og = self.jpt.log_likelihood(self.data[:, self.cc.circuit_columns])
+        print(-ll_og.mean())
 
-        value, grads = eqx.filter_value_and_grad(loss)(self.cc, self.data)
+        optim = optax.adamw(0.01)
+        opt_state = optim.init(eqx.filter(self.cc, eqx.is_inexact_array))
 
+        model = self.cc
+        pbar = tqdm.trange(10)
+
+        losses = []
+
+        for i in pbar:
+            loss_value, grads = eqx.filter_value_and_grad(loss)(model, self.data)
+
+            grads = tree_map(lambda x: jnp.nan_to_num(x), grads)
+
+            updates, opt_state = optim.update(grads, opt_state, model)
+            model = eqx.apply_updates(model, updates)
+            pbar.set_postfix({"loss": loss_value})
+            losses.append(loss_value)
+        self.assertLess(loss_value, nll)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(y=losses))
+        fig.show()
 
 
 if __name__ == '__main__':
