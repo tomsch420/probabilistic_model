@@ -13,6 +13,10 @@ import equinox as eqx
 import jax.numpy as jnp
 from jax.experimental.sparse import BCOO
 import pandas as pd
+import optax
+import plotly.graph_objects as go
+import tqdm
+
 
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 
@@ -20,7 +24,7 @@ from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import 
 class TrivialConditioner(Conditioner):
 
     def generate_parameters(self, x):
-         return jnp.log(jnp.array([[0.2, 0.8]]).repeat(x.shape[0], 0))
+         return jnp.log(jnp.array([0.2, 0.8]).repeat(x.shape[0], 0))
 
     @property
     def output_length(self):
@@ -88,9 +92,12 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
     number_of_samples = 1000
     cc: CouplingCircuit
     data: jax.Array
+    jpt: ProbabilisticCircuit
+    non_marginalized_jpt: ProbabilisticCircuit
 
     @classmethod
     def setUpClass(cls):
+        np.random.seed(69)
         mean = np.full(cls.number_of_variables, 0)
         cov = np.random.uniform(0, 1, (cls.number_of_variables, cls.number_of_variables))
         cov = np.dot(cov, cov.T)
@@ -99,16 +106,30 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
         variables = infer_variables_from_dataframe(df, min_samples_per_quantile=100)
         jpt = JPT(variables, min_samples_leaf=0.2)
         jpt.fit(df)
-        jpt = jpt.probabilistic_circuit.marginal(variables[:cls.number_of_variables // 2])
-        circuit = ProbabilisticCircuit.from_nx(jpt, False)
+        cls.non_marginalized_jpt = jpt.probabilistic_circuit
+        cls.jpt = jpt.probabilistic_circuit.marginal(variables[cls.number_of_variables // 2:])
+        circuit = ProbabilisticCircuit.from_nx(cls.jpt, False)
         conditioner = LinearConditioner(cls.number_of_variables // 2, circuit.root.number_of_trainable_parameters)
         cls.cc = CouplingCircuit(conditioner, jnp.array(list(range(cls.number_of_variables // 2))),
                              circuit.root, jnp.array(list(range(cls.number_of_variables // 2, cls.number_of_variables))))
         cls.cc.validate()
         cls.data = jnp.array(df)
 
-    def test_cll(self):
-        self.cc.conditional_log_likelihood(self.data)
+    def test_learning(self):
+
+        def loss(model, x):
+            cll = model.conditional_log_likelihood(x)
+            return -jnp.mean(cll)
+
+        def loss2(p, s, x):
+            model = eqx.combine(p, s)
+            ll = model.conditional_log_likelihood(x)
+            return -jnp.mean(ll)
+
+        nll = loss(self.cc, self.data)
+
+        value, grads = eqx.filter_value_and_grad(loss)(self.cc, self.data)
+
 
 
 if __name__ == '__main__':

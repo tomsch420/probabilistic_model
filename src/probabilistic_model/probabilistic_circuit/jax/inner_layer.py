@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import math
 from abc import abstractmethod, ABC
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property
 
@@ -11,7 +12,7 @@ from jax.typing import ArrayLike
 from jaxtyping import Array, Float, Int
 from jax import numpy as jnp, tree_flatten
 import equinox as eqx
-from jax.experimental.sparse import BCOO, bcoo_concatenate, bcoo_reduce_sum
+from jax.experimental.sparse import BCOO, bcoo_concatenate, bcoo_reduce_sum, bcoo_multiply_dense
 from random_events.utils import recursive_subclasses
 from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any
@@ -68,6 +69,12 @@ class Layer(eqx.Module, ABC):
         :return: A list of all layers in the circuit.
         """
         return [self]
+
+    def all_layers_with_depth(self, depth: int = 0) -> List[Tuple[int, Layer]]:
+        """
+        :return: A list of tuples of all layers in the circuit with their depth.
+        """
+        return [(depth, self)]
 
     @property
     @abstractmethod
@@ -142,7 +149,6 @@ class Layer(eqx.Module, ABC):
         number_of_parameters = sum([len(p) for p in flattened_parameters])
         return number_of_parameters
 
-
 class InnerLayer(Layer, ABC):
     """
     Abstract Base Class for inner layers
@@ -169,6 +175,15 @@ class InnerLayer(Layer, ABC):
         result = [self]
         for child_layer in self.child_layers:
             result.extend(child_layer.all_layers())
+        return result
+
+    def all_layers_with_depth(self, depth: int = 0) -> List[Tuple[int, Layer]]:
+        """
+        :return: A list of tuples of all layers in the circuit with their depth.
+        """
+        result = [(depth, self)]
+        for child_layer in self.child_layers:
+            result.extend(child_layer.all_layers_with_depth(depth + 1))
         return result
 
 
@@ -244,20 +259,32 @@ class SumLayer(InnerLayer):
         result = result.sum(1).todense()
         return jnp.log(result)
 
+    @property
+    def normalized_weights(self):
+        """
+        :return: The normalized weights of the child layers for each node.
+        """
+        result = self.concatenated_log_weights
+        z = self.log_normalization_constants
+        result.data = jnp.exp(result.data - z[result.indices[:, 0]])
+        return result
+
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
         result = jnp.zeros(self.number_of_nodes)
 
         for log_weights, child_layer in self.log_weighted_child_layers:
             # get the log likelihoods of the child nodes
-            ll = child_layer.log_likelihood_of_nodes_single(x)
-            # assert ll.shape == (len(x), child_layer.number_of_nodes)
+            child_layer_likelihood = jnp.exp(child_layer.log_likelihood_of_nodes_single(x))
 
             # weight the log likelihood of the child nodes by the weight for each node of this layer
             cloned_log_weights = copy_bcoo(log_weights)  # clone the weights
             cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent weights
-            ll = jnp.exp(ll)  # calculate the exponential of the child log likelihoods
-            #  calculate the weighted sum in layer
-            ll = ll @ cloned_log_weights.T
+
+            # multiply the weights with the child layer likelihood
+            cloned_log_weights.data *= child_layer_likelihood[cloned_log_weights.indices[:, 1]]
+
+            # sum the weights for each node
+            ll = cloned_log_weights.sum(1).todense()
 
             # sum the child layer result
             result += ll
@@ -363,7 +390,6 @@ class ProductLayer(InnerLayer):
         result = jnp.zeros(self.number_of_nodes)
 
         for edges, layer in zip(self.edges, self.child_layers):
-
             # calculate the log likelihood over the columns of the child layer
             ll = layer.log_likelihood_of_nodes_single(x[layer.variables])  # shape: #child_nodes
 

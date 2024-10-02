@@ -39,8 +39,16 @@ class DiracSumUnitTestCase(unittest.TestCase):
         result = jnp.log(jnp.array([2, 2]))
         self.assertTrue(jnp.allclose(log_normalization_constants, result))
 
+    def test_normalized_weights(self):
+        normalized_weights = self.sum_layer.normalized_weights.todense()
+        result = jnp.array([[0, 0.1, 0.2, 0.3, 0, 0.4, 0],
+                            [0.4, 0, 0.3, 0., 0.1, 0.2, 0]])
+        self.assertTrue(jnp.allclose(normalized_weights, result))
+
     def test_ll(self):
         data = jnp.array([0., 1., 2., 3., 4., 5., 6.]).reshape(-1, 1)
+        # l = self.sum_layer.log_likelihood_of_nodes_single(data[0])
+
         ll = self.sum_layer.log_likelihood_of_nodes(data)
         result = jnp.log(jnp.array([[0., 0.4,],
                                [0.1 * 2, 0.,],

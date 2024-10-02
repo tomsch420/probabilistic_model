@@ -6,7 +6,7 @@ from jax.tree_util import tree_flatten, tree_unflatten
 
 import equinox as eqx
 from typing_extensions import Tuple, List
-
+import jax.numpy as jnp
 from .probabilistic_circuit import Layer
 
 

@@ -82,6 +82,7 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         number_of_parameters = sum([len(p) for p in flattened_params])
         self.assertEqual(number_of_parameters, 10)
 
+
 class JPTIntegrationTestCase(unittest.TestCase):
     number_of_variables = 2
     number_of_samples = 10000
@@ -121,21 +122,17 @@ class LearningTestCase(unittest.TestCase):
     def test_learning(self):
 
         @eqx.filter_jit
-        def loss(p, s, x):
-            model = eqx.combine(p, s)
-            ll = model.log_likelihood_of_nodes_single(x)
+        def loss(model, x):
+            ll = model.log_likelihood_of_nodes(x)
             return -jnp.mean(ll)
-        params, static = eqx.partition(self.sum_layer, eqx.is_inexact_array)
 
         optim = optax.adamw(0.01)
         opt_state = optim.init(eqx.filter(self.sum_layer, eqx.is_inexact_array))
-
+        model = self.sum_layer
         for i in tqdm.trange(100):
-            loss_value, grads = eqx.filter_value_and_grad(loss)(params, static, self.data)
-            updates, opt_state = optim.update(grads, opt_state, params)
-            params = eqx.apply_updates(params, updates)
-
-        model = eqx.combine(params, static)
+            loss_value, grads = eqx.filter_value_and_grad(loss)(model, self.data)
+            updates, opt_state = optim.update(grads, opt_state, model)
+            model = eqx.apply_updates(model, updates)
 
         weights = jnp.exp(model.log_weights[0].data)
         weights /= jnp.sum(weights)
