@@ -1,6 +1,7 @@
 import math
 import unittest
 
+import jax
 import jax.numpy as jnp
 from random_events.interval import SimpleInterval, Bound
 
@@ -10,6 +11,7 @@ from probabilistic_model.probabilistic_circuit.jax.uniform_layer import UniformL
 
 class UniformLayerTestCaste(unittest.TestCase):
     p_x = UniformLayer(0, jnp.array([[0, 1], [1, 3]]))
+    key = jax.random.PRNGKey(69)
 
     def test_log_likelihood(self):
         data = jnp.array([0.5, 1.5, 4]).reshape(-1, 1)
@@ -33,7 +35,7 @@ class UniformLayerTestCaste(unittest.TestCase):
         self.assertTrue(jnp.allclose(ll, result))
 
     def test_sampling(self):
-        samples = self.p_x.sample_from_frequencies(jnp.array([20, 10]))
+        samples = self.p_x.sample_from_frequencies(jnp.array([20, 10]), self.key)
         self.assertEqual(samples.shape, (2, 20, 1))
         samples = samples.values()
         self.assertEqual(samples.shape, (30, 1))
