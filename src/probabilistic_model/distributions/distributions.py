@@ -178,7 +178,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
 
     @property
     def univariate_support(self) -> Interval:
-        return copy.deepcopy(self.interval).as_composite_set()
+        return self.interval.__deepcopy__().as_composite_set()
 
     def left_included_condition(self, x: np.array) -> np.array:
         """

@@ -4,6 +4,7 @@ from random_events.variable import Continuous, Integer, Symbolic
 from .probabilistic_circuit import ProductUnit, SumUnit, ProbabilisticCircuit
 from ...utils import MissingDict
 from .distributions import UniformDistribution, SymbolicDistribution, IntegerDistribution
+import plotly.graph_objects as go
 
 
 def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
@@ -19,7 +20,6 @@ def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
 
     # create a uniform measure for the bounding box
     uniform_model = uniform_measure_of_simple_event(bounding_box)
-
     # condition the uniform measure on the event
     uniform_model, _ = uniform_model.conditional(event)
 

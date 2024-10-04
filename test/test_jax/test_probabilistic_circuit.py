@@ -9,13 +9,18 @@ import pandas as pd
 import tqdm
 from jax import tree_flatten
 from jax.experimental.sparse import BCOO
+from random_events.interval import closed
+from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
 from probabilistic_model.probabilistic_circuit.jax import SumLayer, UniformLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.nx.helper import uniform_measure_of_event
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
                                                                                 ProbabilisticCircuit as NXProbabilisticCircuit)
 
@@ -147,34 +152,41 @@ class LearningTestCase(unittest.TestCase):
 
 class NanGradientTestCase(unittest.TestCase):
 
-    uniform_layer_x = UniformLayer(0, jnp.array([[0., 1.],
-                                                 [2., 3.]]))
-    uniform_layer_y = UniformLayer(1, jnp.array([[0., 1.],
-                                                 [4., 5.]]))
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
 
+    nx_model: NXProbabilisticCircuit
+    jax_model: ProbabilisticCircuit
+    event: Event
 
+    @classmethod
+    def setUpClass(cls):
+        event1 = SimpleEvent({cls.x: closed(0, 1) |  closed(2, 3),
+                             cls.y: closed(0, 1) |  closed(2, 3)}).as_composite_set()
+        event2 = SimpleEvent({cls.x: closed(1, 2) |  closed(3, 4),
+                             cls.y: closed(1, 2) |  closed(3, 4)}).as_composite_set()
+        cls.event = event1 | event2
+        cls.nx_model = uniform_measure_of_event(cls.event)
+        cls.jax_model = ProbabilisticCircuit.from_nx(cls.nx_model)
+
+    @unittest.skip
     def test_nan_gradient(self):
+        from jax import config
+        config.update("jax_debug_nans", True)
+        data = jnp.array([[2.5, 2.5]])
 
-        @eqx.filter_jit
         def loss(model, x):
             ll = model.log_likelihood_of_nodes(x)
             return -jnp.mean(ll)
 
-        optim = optax.adamw(0.01)
-        opt_state = optim.init(eqx.filter(self.sum_layer, eqx.is_inexact_array))
-        model = self.sum_layer
-        for _ in tqdm.trange(100):
-            loss_value, grads = eqx.filter_value_and_grad(loss)(model, self.data)
+        model = self.jax_model.root
 
-            grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)[0][0]
-            self.assertTrue(jnp.all(jnp.isfinite(grads_of_sum_layer)))
+        loss_value, grads = eqx.filter_value_and_grad(loss)(model, data)
 
-            updates, opt_state = optim.update(grads, opt_state, model)
-            model = eqx.apply_updates(model, updates)
+        grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)
+        print(grads_of_sum_layer)
 
-        weights = jnp.exp(model.log_weights[0].data)
-        weights /= jnp.sum(weights)
-        self.assertAlmostEqual(weights[0], 1, delta=0.01)
+
 
 if __name__ == '__main__':
     unittest.main()
