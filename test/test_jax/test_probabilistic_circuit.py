@@ -169,7 +169,6 @@ class NanGradientTestCase(unittest.TestCase):
         cls.nx_model = uniform_measure_of_event(cls.event)
         cls.jax_model = ProbabilisticCircuit.from_nx(cls.nx_model)
 
-    @unittest.skip
     def test_nan_gradient(self):
         from jax import config
         config.update("jax_debug_nans", True)

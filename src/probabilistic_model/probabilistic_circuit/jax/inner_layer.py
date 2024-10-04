@@ -274,14 +274,14 @@ class SumLayer(InnerLayer):
 
         for log_weights, child_layer in self.log_weighted_child_layers:
             # get the log likelihoods of the child nodes
-            child_layer_likelihood = jnp.exp(child_layer.log_likelihood_of_nodes_single(x))
+            child_layer_log_likelihood = child_layer.log_likelihood_of_nodes_single(x)
 
             # weight the log likelihood of the child nodes by the weight for each node of this layer
             cloned_log_weights = copy_bcoo(log_weights)  # clone the weights
-            cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent weights
 
             # multiply the weights with the child layer likelihood
-            cloned_log_weights.data *= child_layer_likelihood[cloned_log_weights.indices[:, 1]]
+            cloned_log_weights.data += child_layer_log_likelihood[cloned_log_weights.indices[:, 1]]
+            cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent weights
 
             # sum the weights for each node
             ll = cloned_log_weights.sum(1).todense()
