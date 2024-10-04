@@ -31,3 +31,17 @@ class UniformLayerTestCaste(unittest.TestCase):
         ll = jnp.exp(p_x.log_likelihood_of_nodes(data))
         result = jnp.array([[0, 0, 1, 1], [0, 1, 0, 1]])
         self.assertTrue(jnp.allclose(ll, result))
+
+    def test_sampling(self):
+        samples = self.p_x.sample_from_frequencies(jnp.array([20, 10]))
+        self.assertEqual(samples.shape, (2, 20, 1))
+        samples = samples.values()
+        self.assertEqual(samples.shape, (30, 1))
+        samples_n0 = samples[:20]
+        samples_n1 = samples[20:30]
+
+        l_n0 = self.p_x.log_likelihood_of_nodes(samples_n0)[:, 0]
+        l_n1 = self.p_x.log_likelihood_of_nodes(samples_n1)[:, 1]
+
+        self.assertTrue(all(l_n0 > -jnp.inf))
+        self.assertTrue(all(l_n1 > -jnp.inf))

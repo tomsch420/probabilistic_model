@@ -2,6 +2,7 @@ from typing import List
 
 import jax
 from jax import numpy as jnp
+from jax.experimental.sparse import BCOO
 from typing_extensions import Type, Tuple
 
 from .inner_layer import NXConverterLayer
@@ -55,6 +56,41 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         result = cls(nodes[0].probabilistic_circuit.variables.index(variable), intervals)
         return NXConverterLayer(result, nodes, hash_remap)
 
+    def sample_from_frequencies(self, frequencies: jax.Array):
+        max_frequency = max(frequencies)
+
+        # create indices for the sparse result
+        indices = create_sparse_tensor_indices_from_row_lengths(frequencies)
+
+        # sample from U(0,1)
+        standard_uniform_samples = jax.random.uniform(indices.shape[1])
+
+        # calculate range for each node
+        range_per_sample = (self.upper - self.lower).repeat(frequencies)
+
+        # calculate the right shift for each node
+        right_shift_per_sample = self.lower.repeat(frequencies)
+
+        # apply the transformation to the desired intervals
+        samples = standard_uniform_samples * range_per_sample + right_shift_per_sample
+        samples = samples.reshape(-1, 1)
+
+        result = BCOO((samples, indices), shape=(self.number_of_nodes, max_frequency, 1), indices_sorted=True,
+                      unique_indices=True)
+        return result
+
 
     def __deepcopy__(self):
         return self.__class__(self.variables[0].item(), self.interval.copy())
+
+
+def create_sparse_tensor_indices_from_row_lengths(row_lengths: jax.Array) -> jax.Array:
+    """
+    Create the indices for a sparse tensor from the row lengths.
+    :param row_lengths: The row lengths.
+    :return: The indices for the sparse tensor.
+    """
+    row_lengths = row_lengths.astype(int)
+    row_indices = jnp.repeat(jnp.arange(row_lengths.shape[0]), row_lengths)
+    column_indices = jnp.arange(row_lengths.sum())
+    return jnp.stack([row_indices, column_indices], axis=0)
