@@ -149,6 +149,9 @@ class Layer(eqx.Module, ABC):
         number_of_parameters = sum([len(p) for p in flattened_parameters])
         return number_of_parameters
 
+    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
+        raise NotImplementedError
+
 class InnerLayer(Layer, ABC):
     """
     Abstract Base Class for inner layers

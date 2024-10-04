@@ -18,6 +18,12 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
                   [-jnp.inf, -jnp.inf]]
         assert jnp.allclose(ll, jnp.array(result))
 
+    def test_sample(self):
+        s = self.layer.sample_from_frequencies(jnp.array([10, 5]), jax.random.PRNGKey(69))
+        self.assertEqual(s.data.shape, (15, 1))
+        self.assertTrue(jnp.all(s.data[:10] == 0.))
+        self.assertTrue(jnp.all(s.data[10:] == 1.))
+
 
 if __name__ == '__main__':
     unittest.main()

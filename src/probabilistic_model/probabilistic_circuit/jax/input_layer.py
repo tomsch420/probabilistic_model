@@ -3,11 +3,15 @@ from typing import List
 
 import jax
 from jax import numpy as jnp
+from jax.experimental.sparse import BCOO
 from typing_extensions import Tuple, Type
 
+from . import create_sparse_array_indices_from_row_lengths
 from .inner_layer import InputLayer, NXConverterLayer
 from ..nx.distributions import DiracDeltaDistribution
 import equinox as eqx
+
+from ..torch import create_sparse_tensor_indices_from_row_lengths
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -107,3 +111,11 @@ class DiracDeltaLayer(ContinuousLayer):
         density_caps = jnp.array([node.density_cap for node in nodes], dtype=jnp.float32)
         result = cls(nodes[0].probabilistic_circuit.variables.index(nodes[0].variable), locations, density_caps)
         return NXConverterLayer(result, nodes, hash_remap)
+
+    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
+        max_frequency = jnp.max(frequencies)
+        result_indices = create_sparse_array_indices_from_row_lengths(frequencies)
+        values = self.location.repeat(frequencies).reshape(-1, 1)
+        result = BCOO((values, result_indices), shape=(self.number_of_nodes, max_frequency, 1),
+                      indices_sorted=True, unique_indices=True)
+        return result
