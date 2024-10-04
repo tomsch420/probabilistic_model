@@ -125,7 +125,7 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
             return -jnp.mean(cll)
 
         nll = loss(self.cc, self.data)
-        ll_og = self.jpt.log_likelihood(self.data[:, self.cc.circuit_columns])
+        ll_og = self.cc.circuit.log_likelihood_of_nodes(self.data[:, self.cc.circuit_columns])
         print(-ll_og.mean())
 
         optim = optax.adamw(0.01)
@@ -148,7 +148,7 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
         self.assertLess(loss_value, nll)
         fig = go.Figure()
         fig.add_trace(go.Scatter(y=losses))
-        fig.show()
+        # fig.show()
 
 
 if __name__ == '__main__':

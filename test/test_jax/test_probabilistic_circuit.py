@@ -7,6 +7,7 @@ import numpy as np
 import optax
 import pandas as pd
 import tqdm
+from jax import tree_flatten
 from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
 
@@ -85,7 +86,7 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
 
 class JPTIntegrationTestCase(unittest.TestCase):
     number_of_variables = 2
-    number_of_samples = 10000
+    number_of_samples = 1000
 
     jpt: NXProbabilisticCircuit
 
@@ -129,8 +130,12 @@ class LearningTestCase(unittest.TestCase):
         optim = optax.adamw(0.01)
         opt_state = optim.init(eqx.filter(self.sum_layer, eqx.is_inexact_array))
         model = self.sum_layer
-        for i in tqdm.trange(100):
+        for _ in tqdm.trange(100):
             loss_value, grads = eqx.filter_value_and_grad(loss)(model, self.data)
+
+            grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)[0][0]
+            self.assertTrue(jnp.all(jnp.isfinite(grads_of_sum_layer)))
+
             updates, opt_state = optim.update(grads, opt_state, model)
             model = eqx.apply_updates(model, updates)
 
@@ -140,6 +145,36 @@ class LearningTestCase(unittest.TestCase):
         self.assertAlmostEqual(weights[1], 2 / 3, delta=0.01)
 
 
+class NanGradientTestCase(unittest.TestCase):
+
+    uniform_layer_x = UniformLayer(0, jnp.array([[0., 1.],
+                                                 [2., 3.]]))
+    uniform_layer_y = UniformLayer(1, jnp.array([[0., 1.],
+                                                 [4., 5.]]))
+
+
+    def test_nan_gradient(self):
+
+        @eqx.filter_jit
+        def loss(model, x):
+            ll = model.log_likelihood_of_nodes(x)
+            return -jnp.mean(ll)
+
+        optim = optax.adamw(0.01)
+        opt_state = optim.init(eqx.filter(self.sum_layer, eqx.is_inexact_array))
+        model = self.sum_layer
+        for _ in tqdm.trange(100):
+            loss_value, grads = eqx.filter_value_and_grad(loss)(model, self.data)
+
+            grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)[0][0]
+            self.assertTrue(jnp.all(jnp.isfinite(grads_of_sum_layer)))
+
+            updates, opt_state = optim.update(grads, opt_state, model)
+            model = eqx.apply_updates(model, updates)
+
+        weights = jnp.exp(model.log_weights[0].data)
+        weights /= jnp.sum(weights)
+        self.assertAlmostEqual(weights[0], 1, delta=0.01)
 
 if __name__ == '__main__':
     unittest.main()

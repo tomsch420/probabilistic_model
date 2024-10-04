@@ -28,7 +28,7 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
     The intervals are treated as open intervals (>/< comparator).
     """
 
-    def __init__(self, variable: int, interval):
+    def __init__(self, variable: int, interval: jax.Array):
         super().__init__(variable)
         self.interval = interval
 

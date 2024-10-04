@@ -421,8 +421,7 @@ class ProductLayer(InnerLayer):
         edge_indices = []
         edge_values = []
 
-        # this progress bar changes the behavior of the loop and i dont know why
-        # progress_bar = tqdm.tqdm(total=number_of_nodes, desc="Assembling Product Layer")
+        progress_bar = tqdm.tqdm(total=number_of_nodes, desc="Assembling Product Layer")
         # for every node in the nodes for this layer
         for node_index, node in enumerate(nodes):
 
@@ -437,8 +436,8 @@ class ProductLayer(InnerLayer):
                         # add the edge
                         edge_indices.append([child_layer_index, node_index])
                         edge_values.append(child_layer.hash_remap[hash(subcircuit)])
-            # if progress_bar:
-            #     progress_bar.update(1)
+            if progress_bar:
+                progress_bar.update(1)
 
         # assemble sparse edge tensor
         edges = (BCOO((jnp.array(edge_values), jnp.array(edge_indices)), shape=(len(child_layers), number_of_nodes)).
