@@ -16,6 +16,8 @@ from jax.experimental.sparse import BCOO, bcoo_concatenate, bcoo_reduce_sum, bco
 from random_events.utils import recursive_subclasses
 from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any
+
+from . import create_sparse_array_indices_from_row_lengths
 from .utils import copy_bcoo
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
 import tqdm
@@ -403,6 +405,52 @@ class ProductLayer(InnerLayer):
             result = result.at[edges.indices[:, 0]].add(ll)
 
         return result
+
+    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
+        raise NotImplementedError
+        max_frequency = jnp.max(frequencies)
+
+        # create a list of empty tensors for the samples of each variable
+        samples = []
+
+        for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
+            squeezed_edge_indices = edges.indices[:, 0]
+            # count the number of samples for each child node
+            frequencies_for_child_layer = jnp.zeros((child_layer.number_of_nodes,), dtype=jnp.int32)  # shape (#child_nodes)
+            frequencies_for_child_layer = (frequencies_for_child_layer.at[edges.data].add(
+                frequencies[squeezed_edge_indices]))
+
+            if jnp.all(frequencies_for_child_layer == 0):
+                continue
+
+            # the creation of the frequencies for the child layer is wrong
+            print("frequencies_for_child_layer", frequencies_for_child_layer)
+            # sample the child layer shape (#child_nodes, #max_frequency_of_child_layer, #variables_of_child_layer)
+            samples_from_child_layer = child_layer.sample_from_frequencies(frequencies_for_child_layer, key)
+
+            # calculate the requested number of samples for each node in this layer
+            frequencies_of_this_layer = jnp.zeros((self.number_of_nodes,), dtype=jnp.int32)
+            frequencies_of_this_layer = frequencies_of_this_layer.at[squeezed_edge_indices].add(frequencies)
+
+            # assemble a sparse matrix that resembles the current sample block
+            indices = create_sparse_array_indices_from_row_lengths(frequencies_of_this_layer)
+            print(frequencies_of_this_layer)
+            print(indices)
+            print(samples_from_child_layer.data.shape)
+            samples_of_node_block = BCOO((samples_from_child_layer.data, indices),
+                                         shape=(self.number_of_nodes, max_frequency,
+                                                len(child_layer.variables)))
+            samples.append(samples_of_node_block)
+
+        # assemble the result
+        result_indices = create_sparse_array_indices_from_row_lengths(frequencies)
+        print([s.shape for s in samples])
+        result_values = jnp.concatenate(samples, axis=-1)
+        result = BCOO((result_values, result_indices), shape=(self.number_of_nodes, max_frequency,
+                                                              len(self.variables)), indices_sorted=True,
+                      unique_indices=True)
+        return result
+
 
     def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
         return jax.vmap(self.log_likelihood_of_nodes_single)(x)
