@@ -57,23 +57,24 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         return NXConverterLayer(result, nodes, hash_remap)
 
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
-        max_frequency = max(frequencies)
+        max_frequency = jnp.max(frequencies)
 
         # create indices for the sparse result
         indices = create_sparse_array_indices_from_row_lengths(frequencies)
+        # indices = jnp.concatenate([indices, jnp.zeros((indices.shape[0], 1), dtype=jnp.int32)], axis=1)
+        # print(indices)
 
         # sample from U(0,1)
-        standard_uniform_samples = jax.random.uniform(key, shape=(indices.shape[1], 1))
+        standard_uniform_samples = jax.random.uniform(key, shape=(indices.shape[0], 1))
 
         # calculate range for each node
-        range_per_sample = (self.upper - self.lower).repeat(frequencies)
+        range_per_sample = (self.upper - self.lower).repeat(frequencies).reshape(-1, 1)
 
         # calculate the right shift for each node
-        right_shift_per_sample = self.lower.repeat(frequencies)
+        right_shift_per_sample = self.lower.repeat(frequencies).reshape(-1, 1)
 
         # apply the transformation to the desired intervals
         samples = standard_uniform_samples * range_per_sample + right_shift_per_sample
-        samples = samples.reshape(-1, 1)
 
         result = BCOO((samples, indices), shape=(self.number_of_nodes, max_frequency, 1), indices_sorted=True,
                       unique_indices=True)

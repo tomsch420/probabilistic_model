@@ -22,8 +22,7 @@ class BCOOTestCase(unittest.TestCase):
     def test_create_sparse_array_indices_from_row_lengths(self):
         row_lengths = jnp.array([2, 3])
         indices = create_sparse_array_indices_from_row_lengths(row_lengths)
-        print(indices)
-        result = jnp.array([[0, 0, 1, 1, 1], [0, 1, 0, 1, 2]]).T
+        result = jnp.array([[0,0],[0,1],[1, 0],[1, 1],[1, 2]])
         self.assertTrue(jnp.allclose(indices, result))
 
 

@@ -7,6 +7,7 @@ from random_events.interval import SimpleInterval, Bound
 
 from probabilistic_model.probabilistic_circuit.jax import simple_interval_to_open_array
 from probabilistic_model.probabilistic_circuit.jax.uniform_layer import UniformLayer
+import equinox as eqx
 
 
 class UniformLayerTestCaste(unittest.TestCase):
@@ -35,9 +36,10 @@ class UniformLayerTestCaste(unittest.TestCase):
         self.assertTrue(jnp.allclose(ll, result))
 
     def test_sampling(self):
+
         samples = self.p_x.sample_from_frequencies(jnp.array([20, 10]), self.key)
         self.assertEqual(samples.shape, (2, 20, 1))
-        samples = samples.values()
+        samples = samples.data
         self.assertEqual(samples.shape, (30, 1))
         samples_n0 = samples[:20]
         samples_n1 = samples[20:30]
