@@ -288,7 +288,7 @@ class SumLayer(InnerLayer):
 
             # sum the child layer result
             result += ll
-        # print(jnp.where(result > 0, jnp.log(result) - self.log_normalization_constants, -jnp.inf))
+
         return jnp.where(result > 0, jnp.log(result) - self.log_normalization_constants, -jnp.inf)
 
     def __deepcopy__(self):

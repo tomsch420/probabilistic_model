@@ -170,10 +170,12 @@ class NanGradientTestCase(unittest.TestCase):
         cls.jax_model = ProbabilisticCircuit.from_nx(cls.nx_model)
 
     def test_nan_gradient(self):
-        from jax import config
-        config.update("jax_debug_nans", True)
+        """
+        This is the entry point for debugging nans.
+        """
         data = jnp.array([[2.5, 2.5]])
 
+        @eqx.filter_jit
         def loss(model, x):
             ll = model.log_likelihood_of_nodes(x)
             return -jnp.mean(ll)
@@ -182,8 +184,8 @@ class NanGradientTestCase(unittest.TestCase):
 
         loss_value, grads = eqx.filter_value_and_grad(loss)(model, data)
 
-        grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)
-        print(grads_of_sum_layer)
+        grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)[0][0]
+        self.assertFalse(jnp.all(jnp.isfinite(grads_of_sum_layer)))
 
 
 
