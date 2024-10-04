@@ -306,6 +306,7 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
+
         self.assertGreater(len(mode.simple_sets), 0)
 
 

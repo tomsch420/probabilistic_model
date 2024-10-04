@@ -352,8 +352,10 @@ class SymbolicDistribution(DiscreteDistribution):
     variable: Symbolic
 
     def univariate_log_mode(self) -> Tuple[Set, float]:
+        clazz = self.variable.domain_type()
         max_likelihood = max(self.probabilities.values())
-        mode = Set(*(key for key, value in self.probabilities.items() if value == max_likelihood))
+        mode = Set(*(clazz(key) for key, value in self.probabilities.items() if value == max_likelihood))
+
         return mode, np.log(max_likelihood)
 
     def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
