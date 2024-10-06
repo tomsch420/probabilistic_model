@@ -15,6 +15,7 @@ import equinox as eqx
 from jax.experimental.sparse import BCOO, bcoo_concatenate, bcoo_reduce_sum, bcoo_multiply_dense
 from random_events.utils import recursive_subclasses
 from sortedcontainers import SortedSet
+from torch.onnx.symbolic_opset9 import unsqueeze
 from triton.language import dtype
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional
 
@@ -339,6 +340,43 @@ class SumLayer(InnerLayer):
             result += ll
 
         return jnp.where(result > 0, jnp.log(result) - self.log_normalization_constants, -jnp.inf)
+
+
+    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
+        # calculate the probabilities for the latent variable interpretation of this layer
+        catted_weights = self.normalized_weights
+
+        unsqueezed_frequencies = frequencies.reshape(-1, 1)
+        # pseudo sample the latent variables by evaluating the events w. r. t. their probabilities (histogram)
+        # TODO this may produce wrong results if the frequencies are not rounding to the desired number of samples
+        node_to_child_frequency_map = (catted_weights * unsqueezed_frequencies)
+        node_to_child_frequency_map.data = jnp.round(node_to_child_frequency_map.data).astype(jnp.int32)
+
+        # offset for shifting through the frequencies of the node_to_child_frequency_map
+        prev_column_index = 0
+
+        all_samples = []
+
+        for child_layer in self.child_layers:
+            current_frequency_block = node_to_child_frequency_map[:, prev_column_index:prev_column_index + child_layer.number_of_nodes]
+            samples = self.sample_from_frequency_block(current_frequency_block, child_layer, key)
+
+            if samples is not None:
+                all_samples.append(samples)
+
+            # shift the offset
+            prev_column_index += child_layer.number_of_nodes
+
+        # concatenate the samples
+        catted_samples = bcoo_concatenate(all_samples, dimension=1).sort_indices()
+
+        # build result
+        new_indices = create_sparse_array_indices_from_row_lengths(frequencies)
+        result = BCOO((catted_samples.data, new_indices),
+                    shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
+                      indices_sorted=True, unique_indices=True)
+
+        return result
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]

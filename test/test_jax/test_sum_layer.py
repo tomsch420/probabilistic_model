@@ -3,8 +3,11 @@ import unittest
 from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
 import jax.numpy as jnp
+
+from probabilistic_model.probabilistic_circuit.jax import in_bound_elements_from_sparse_slice
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import SumLayer
+import jax
 
 
 class DiracSumUnitTestCase(unittest.TestCase):
@@ -12,7 +15,7 @@ class DiracSumUnitTestCase(unittest.TestCase):
 
     p1_x = DiracDeltaLayer(0, jnp.array([0., 1.]), jnp.array([1, 2]))
     p2_x = DiracDeltaLayer(0,jnp.array([2.]), jnp.array([3]))
-    p3_x = DiracDeltaLayer(0, jnp.array([3, 4, 5]), jnp.array([4, 5, 6]))
+    p3_x = DiracDeltaLayer(0, jnp.array([3., 4., 5.]), jnp.array([4, 5, 6]))
     p4_x = DiracDeltaLayer(0, jnp.array([6.]), jnp.array([1]))
     sum_layer: SumLayer
 
@@ -58,3 +61,12 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [0.4 * 6, 0.2 * 6,],
                                [0., 0.,]]))
         assert jnp.allclose(ll, result)
+
+    def test_sampling(self):
+        frequencies = jnp.array([10, 5])
+        samples = self.sum_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(0))
+        for index, sample_row in enumerate(samples):
+            _, sample_row = in_bound_elements_from_sparse_slice(sample_row)
+            self.assertEqual(len(sample_row), frequencies[index])
+            likelihood = self.sum_layer.log_likelihood_of_nodes(sample_row)
+            self.assertTrue(all(likelihood[:, index] > -jnp.inf))
