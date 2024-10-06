@@ -49,3 +49,10 @@ class UniformLayerTestCaste(unittest.TestCase):
 
         self.assertTrue(all(l_n0 > -jnp.inf))
         self.assertTrue(all(l_n1 > -jnp.inf))
+
+    def test_cdf(self):
+        data = jnp.array([0.5, 1.5, 4]).reshape(-1, 1)
+        cdf = self.p_x.cdf_of_nodes(data)
+        self.assertEqual(cdf.shape, (3, 2))
+        result = jnp.array([[0.5, 0], [1, 0.25], [1, 1]])
+        self.assertTrue(jnp.allclose(cdf, result))

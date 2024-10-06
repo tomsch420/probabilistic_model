@@ -80,6 +80,12 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
                       unique_indices=True)
         return result
 
+    def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
+        return jnp.clip((x - self.lower) / (self.upper - self.lower), 0, 1)
+
+    def cdf_of_nodes(self, x: jnp.array) -> jnp.array:
+        return jax.vmap(self.cdf_of_nodes_single)(x)
+
 
     def __deepcopy__(self):
         return self.__class__(self.variables[0].item(), self.interval.copy())
