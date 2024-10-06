@@ -1,5 +1,6 @@
 import unittest
 
+import equinox
 import jax
 from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
@@ -44,6 +45,7 @@ class DiracProductTestCase(unittest.TestCase):
 
     def test_sample_from_frequencies(self):
         frequencies = jnp.array([5, 3])
+
         samples = self.product_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(69))
 
         samples_n0 = samples[0].todense()
@@ -54,6 +56,9 @@ class DiracProductTestCase(unittest.TestCase):
         self.assertTrue(jnp.all(samples_n1[3:] == 0))
         self.assertTrue(jnp.all(samples_n0 == jnp.array([0, 5 ,6])))
         self.assertTrue(jnp.all(samples_n1[:3] == jnp.array([2, 4 ,6])))
+
+        # s = equinox.filter_jit(self.product_layer.sample_from_frequencies)
+        # s(frequencies, jax.random.PRNGKey(69))
 
 
 if __name__ == '__main__':

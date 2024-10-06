@@ -433,7 +433,11 @@ class ProductLayer(InnerLayer):
 
     @cached_property
     def variables(self) -> jax.Array:
-        return jnp.unique(jnp.concatenate([layer.variables for layer in self.child_layers])).sort()
+        child_layer_variables = jnp.concatenate([child_layer.variables for child_layer in self.child_layers])
+        max_size = child_layer_variables.shape[0]
+        unique_values = jnp.unique(child_layer_variables, size=max_size, fill_value=-1)
+        unique_values = unique_values[unique_values >= 0]
+        return unique_values.sort()
 
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
         result = jnp.zeros(self.number_of_nodes)
