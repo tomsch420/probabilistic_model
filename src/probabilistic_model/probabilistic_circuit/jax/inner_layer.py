@@ -16,7 +16,7 @@ from jax.experimental.sparse import BCOO, bcoo_concatenate, bcoo_reduce_sum, bco
 from random_events.utils import recursive_subclasses
 from sortedcontainers import SortedSet
 from triton.language import dtype
-from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any
+from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional
 
 from . import create_sparse_array_indices_from_row_lengths, embed_sparse_array_in_nan_array
 from .utils import copy_bcoo, in_bound_elements_from_sparse_slice
@@ -191,6 +191,49 @@ class InnerLayer(Layer, ABC):
         for child_layer in self.child_layers:
             result.extend(child_layer.all_layers_with_depth(depth + 1))
         return result
+
+    def sample_from_frequency_block(self, frequency_block: BCOO, child_layer: Layer,
+                                    key: jax.random.PRNGKey) -> Optional[BCOO]:
+        """
+        Get the samples from the frequency-block of the child layer.
+
+        :param frequency_block: A parse tensor that maps the nodes of this layer to the frequencies of the
+        child layer nodes. An element at position (i, j) describes that node i of this layer request
+        frequency_block[i, j] many samples from the child node j.
+        :param child_layer: The child layer to sample from.
+        :param key: The random key to use for sampling.
+        :return: The samples for this layer.
+        The result is a sparse matrix with shape (#nodes, max(frequency_block.sum(1)), #childer_layer.variables).
+        The result is None if no samples are requested.
+        """
+
+        # calculate the total number of samples requested for each node of the child layer
+        frequencies_for_child_nodes = frequency_block.sum(0).todense()
+
+        if all(frequencies_for_child_nodes == 0):
+            return None
+
+        # calculate total samples requested for each node of this layer
+        frequencies = frequency_block.sum(1).todense()
+
+        # calculate the row (node) in this layer the samples in samples_from_child_layer.values() belong to.
+        # the node_ownership should contain the node index in this layer for each sample
+        # Example: [1, 1, 0] means that the first two samples belong to node 1 and the last sample belongs to node 0.
+        transposed_frequency_block = frequency_block.T.sort_indices()
+        node_ownership = jnp.repeat(transposed_frequency_block.indices[:, 1], transposed_frequency_block.data)
+        # sample the child layer
+        samples_from_child_layer = child_layer.sample_from_frequencies(frequencies_for_child_nodes, key)
+
+        # arg-sort the node ownership to get the indices of the samples in the correct order
+        arg_sorted_indices = jnp.argsort(node_ownership)
+
+        # reorder the samples from the child layer
+        samples_from_child_layer = samples_from_child_layer.data[arg_sorted_indices]
+
+        samples_of_block = BCOO((samples_from_child_layer, create_sparse_array_indices_from_row_lengths(frequencies)),
+                                shape=(self.number_of_nodes, jnp.max(frequencies), len(child_layer.variables)),
+                                indices_sorted=True, unique_indices=True)
+        return samples_of_block
 
 
 class InputLayer(Layer, ABC):
@@ -408,69 +451,35 @@ class ProductLayer(InnerLayer):
         return result
 
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
-        for edges, child_layer in zip(self.edges, self.child_layers):
 
+        concatenated_samples_per_variable = [jnp.full((0, 1), jnp.nan) for _ in self.variables]
+
+        for edges, child_layer in zip(self.edges, self.child_layers):
             edge_indices, edge_data = in_bound_elements_from_sparse_slice(edges)
 
-            # create frequency array for the child layer of shape #nodes, #child nodes
-            # each element n at position [i,j] states that node i in this layer wants n samples from node j in
-            # the child layer
+            # create a frequency array for the child layer of shape #nodes, #child nodes
             frequencies_for_child_layer = BCOO((frequencies[edge_indices], jnp.array([edge_indices, edge_data]).T),
                                                shape=(self.number_of_nodes, child_layer.number_of_nodes),
                                                indices_sorted=True, unique_indices=True)
 
+            # sample from the child layer
+            current_samples = self.sample_from_frequency_block(frequencies_for_child_layer, child_layer, key)
 
-
-
-
-    def sample_from_frequencies2(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
-        max_frequency = jnp.max(frequencies)
-        sum_of_frequencies = jnp.sum(frequencies)
-
-        # create a that holds the flattened samples for all nodes
-        flat_samples = jnp.full((sum_of_frequencies, len(self.variables)), jnp.nan)
-
-        # calculate the slices of each node in flat samples
-        cumsum_of_frequencies = (jnp.cumsum(jnp.concatenate((jnp.array([0]), frequencies))))
-        flat_slices_of_child_layers = jnp.vstack((cumsum_of_frequencies[:-1],
-                                                  cumsum_of_frequencies[1:])).T
-
-        all_samples = []
-
-        for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
-
-            # remove ot of bound elements from edges
-            edge_indices = edges.indices[:, 0]
-            in_bound_elements = edge_indices < edges.nse
-            edge_indices = edge_indices[in_bound_elements]
-            edge_data = edges.data[in_bound_elements]
-
-            # count the number of samples for each child node
-            frequencies_for_child_layer = jnp.zeros((child_layer.number_of_nodes,), dtype=jnp.int32)  # shape (#child_nodes)
-            frequencies_for_child_layer = (frequencies_for_child_layer.at[edge_data].add(
-                frequencies[edge_indices]))
-
-            if jnp.all(frequencies_for_child_layer == 0):
+            if current_samples is None:
                 continue
 
-            frequencies_of_this_layer = jnp.zeros(self.number_of_nodes, dtype=jnp.int32)
-            frequencies_of_this_layer = frequencies_of_this_layer.at[edge_indices].set(frequencies[edge_indices])
-            print(frequencies_of_this_layer)
-
-            samples_from_child_layer = child_layer.sample_from_frequencies(frequencies_for_child_layer, key)
-            print(edge_indices)
-            node_ownership = edge_indices.repeat(frequencies_of_this_layer[edge_indices])
-            print(node_ownership)
-            print("-" * 80)
+            # write samples in the correct columns for the result
+            for column in child_layer.variables:
+                concatenated_samples_per_variable[column] = (
+                    jnp.concatenate((concatenated_samples_per_variable[column], current_samples.data[:, (column,)])))
 
         # assemble the result
         result_indices = create_sparse_array_indices_from_row_lengths(frequencies)
-        print(flat_samples)
+        result_values = jnp.concatenate(concatenated_samples_per_variable, axis=-1)
 
-
-        result = BCOO((result_values, result_indices), shape=(self.number_of_nodes, max_frequency,
-                                                              len(self.variables)), indices_sorted=True,
-                      unique_indices=True)
+        result = BCOO((result_values, result_indices),
+                      shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
+                      indices_sorted=True, unique_indices=True)
         return result
 
 

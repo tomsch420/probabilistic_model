@@ -46,14 +46,12 @@ class DiracProductTestCase(unittest.TestCase):
         frequencies = jnp.array([5, 3])
         samples = self.product_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(69))
 
-        print(embed_sparse_array_in_nan_array(samples))
-
         samples_n0 = samples[0].todense()
         samples_n1 = samples[1].todense()
 
         self.assertEqual(samples_n0.shape, (5, 3))
         self.assertEqual(samples_n1.shape, (5, 3))
-        self.assertEqual(len(samples[1].data), 3)
+        self.assertTrue(jnp.all(samples_n1[3:] == 0))
         self.assertTrue(jnp.all(samples_n0 == jnp.array([0, 5 ,6])))
         self.assertTrue(jnp.all(samples_n1[:3] == jnp.array([2, 4 ,6])))
 
