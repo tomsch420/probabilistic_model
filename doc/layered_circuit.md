@@ -36,7 +36,7 @@ from random_events.variable import Continuous
 import networkx as nx
 from probabilistic_model.probabilistic_circuit.torch.pc import Layer, SumLayer, ProductLayer
 from probabilistic_model.probabilistic_circuit.torch.input_layer import DiracDeltaLayer
-from probabilistic_model.utils import embed_sparse_tensor_in_nan_tensor
+from probabilistic_model.probabilistic_circuit.torch.utils import embed_sparse_tensor_in_nan_tensor
 import plotly.graph_objects as go
 
 x = Continuous("x")

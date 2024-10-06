@@ -20,7 +20,7 @@ class FromNygaDistributionTestCase(unittest.TestCase):
     nyga_distribution.fit(data)
 
     def test_from_pc(self):
-        model = Layer.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit).eval()
+        model = Layer.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit, ).eval()
         self.assertIsInstance(model, SumLayer)
         self.assertEqual(model.number_of_nodes, 1)
         self.assertEqual(len(model.log_weights), 1)
@@ -64,7 +64,7 @@ class FromJPTTestCase(unittest.TestCase):
         self.model.fit(self.data)  # fig = go.Figure(self.model.plot())  # fig.show()
 
     def test_from_pc(self):
-        lc = Layer.from_probabilistic_circuit(self.model.probabilistic_circuit).eval()
+        lc = Layer.from_probabilistic_circuit(self.model.probabilistic_circuit, False).eval()
 
         tensor_data = torch.tensor(self.data.values)
         lc.log_likelihood_of_nodes(tensor_data[:10])

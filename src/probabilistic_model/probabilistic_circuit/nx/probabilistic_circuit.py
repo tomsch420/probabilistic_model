@@ -45,11 +45,12 @@ def cache_inference_result(func):
     def wrapper(*args, **kwargs):
 
         self: ProbabilisticCircuitMixin = args[0]
-        if not self.cache_result:
-            return func(*args, **kwargs)
-        if self.result_of_current_query is None:
-            self.result_of_current_query = func(*args, **kwargs)
-        return self.result_of_current_query
+        return func(*args, **kwargs)
+        # if not self.cache_result:
+        #     return func(*args, **kwargs)
+        # if self.result_of_current_query is None:
+        #     self.result_of_current_query = func(*args, **kwargs)
+        # return self.result_of_current_query
 
     return wrapper
 
@@ -251,7 +252,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return result, np.log(total_probability)
 
     @abstractmethod
-    @cache_inference_result
+    # @cache_inference_result
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
         """
         Construct the conditional circuit from a simple event.
@@ -822,7 +823,7 @@ class ProductUnit(ProbabilisticCircuitMixin):
 
         return mode, log_likelihood
 
-    @cache_inference_result
+    # @cache_inference_result
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
         # initialize probability
         log_probability = 0.
@@ -1018,7 +1019,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def log_mode(self) -> Tuple[Event, float]:
         return self.root.log_mode()
 
-    @graph_inference_caching_wrapper
+    # @graph_inference_caching_wrapper
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         conditional, log_probability = self.root.log_conditional(event)
         if conditional is None:

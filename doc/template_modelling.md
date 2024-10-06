@@ -148,7 +148,7 @@ Looking at the structure, we can see that the size of the circuit grew only line
 while being a tractable, full joint distribution over the sequence. Wow!
 
 ```{code-cell} ipython3
-show_structure(expanded_model.probabilistic_circuit)
+expanded_model.plot_structure()
 ```
 
 Scaling this idea to more timesteps yields a fast and efficient markov chain with linear many parameters and linear inference time. 

@@ -34,11 +34,11 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
     def __hash__(self):
         return ProbabilisticCircuitMixin.__hash__(self)
 
-    @cache_inference_result
+    # @cache_inference_result
     def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
         return super().log_conditional(event.as_composite_set())
 
-    @cache_inference_result
+    # @cache_inference_result
     def simplify(self) -> Self:
         return self.__copy__()
 

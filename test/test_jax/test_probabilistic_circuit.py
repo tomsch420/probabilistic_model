@@ -1,82 +1,193 @@
 import unittest
 
-import flax.linen
 import jax
+import equinox as eqx
+import jax.numpy as jnp
 import numpy as np
-import plotly.graph_objects as go
-from jax import random, numpy as jnp
+import optax
+import pandas as pd
+import tqdm
+from jax import tree_flatten
+from jax.experimental.sparse import BCOO
+from random_events.interval import closed
+from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 
-from probabilistic_model.learning.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.learning.nyga_distribution import NygaDistribution
+from probabilistic_model.learning.jpt.jpt import JPT
+from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
+from probabilistic_model.probabilistic_circuit.jax import SumLayer, UniformLayer
+from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
+from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.nx.helper import uniform_measure_of_event
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
+                                                                                ProbabilisticCircuit as NXProbabilisticCircuit)
 
+np.random.seed(69)
 
-@unittest.skip
-class TestJaxUnits(unittest.TestCase):
-    x: Continuous = Continuous("x")
-    y: Continuous = Continuous("y")
-    np.random.seed(69)
-    data: np.ndarray = np.random.multivariate_normal(np.array([0, 0]), np.array([[1, .5], [.5, 1]]), size=(1000))
-    nyga_distribution: NygaDistribution
+class SmallCircuitIntegrationTestCase(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+
+    nx_model = SumUnit()
+    jax_model: ProbabilisticCircuit
+    nx_model: NXProbabilisticCircuit
 
     @classmethod
-    def setUp(cls) -> None:
-        cls.nyga_distribution = NygaDistribution(cls.y, 50)
-        cls.nyga_distribution.fit(cls.data[:, 1])
+    def setUpClass(cls):
+        sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
+        sum4, sum5 = SumUnit(), SumUnit()
+        prod1, prod2 = ProductUnit(), ProductUnit()
 
-    def show(self):
-        fig = go.Figure(self.nyga_distribution.plot(), self.nyga_distribution.plotly_layout())
-        fig.show()
+        sum1.add_subcircuit(prod1, 0.5)
+        sum1.add_subcircuit(prod2, 0.5)
+        prod1.add_subcircuit(sum2)
+        prod1.add_subcircuit(sum4)
+        prod2.add_subcircuit(sum3)
+        prod2.add_subcircuit(sum5)
 
-    def test_from_probabilistic_circuit(self):
-        probabilistic_circuit = ProbabilisticCircuit.from_probabilistic_circuit(
-            self.nyga_distribution.probabilistic_circuit)
-        self.assertIsInstance(probabilistic_circuit, ProbabilisticCircuit)
-        self.assertEqual(len(probabilistic_circuit.nodes), len(self.nyga_distribution.probabilistic_circuit.nodes))
-        self.assertEqual(len(probabilistic_circuit.edges), len(self.nyga_distribution.probabilistic_circuit.edges))
+        d_x1, d_x2 = DiracDeltaDistribution(cls.x, 0, 1), DiracDeltaDistribution(cls.x, 1, 2)
+        d_y1, d_y2 = DiracDeltaDistribution(cls.y, 2, 3), DiracDeltaDistribution(cls.y, 3, 4)
 
-    def test_likelihood(self):
-        probabilistic_circuit = ProbabilisticCircuit.from_probabilistic_circuit(
-            self.nyga_distribution.probabilistic_circuit)
-        log_likelihood = probabilistic_circuit.log_likelihood(jnp.array(self.data[:, (1,)]))
-        self.assertTrue(jnp.allclose(log_likelihood, self.nyga_distribution.log_likelihood(self.data[:, (1,)])))
+        sum2.add_subcircuit(d_x1, 0.8)
+        sum2.add_subcircuit(d_x2, 0.2)
+        sum3.add_subcircuit(d_x1, 0.7)
+        sum3.add_subcircuit(d_x2, 0.3)
 
-    def test_coupling_circuit(self):
-        features = jnp.array(self.data[:, (0,)])
-        targets = jnp.array(self.data[:, (1,)])
+        sum4.add_subcircuit(d_y1, 0.5)
+        sum4.add_subcircuit(d_y2, 0.5)
+        sum5.add_subcircuit(d_y1, 0.1)
+        sum5.add_subcircuit(d_y2, 0.9)
 
-        pc = ProbabilisticCircuit.from_probabilistic_circuit(self.nyga_distribution.probabilistic_circuit)
+        cls.nx_model = sum1.probabilistic_circuit
+        cls.jax_model = ProbabilisticCircuit.from_nx(cls.nx_model)
 
-        coupling_model = flax.linen.Dense(pc.number_of_parameters)
-        coupling_params = coupling_model.init(random.PRNGKey(0), features)
+    def test_creation(self):
+        self.assertEqual(self.jax_model.variables, self.nx_model.variables)
+        self.assertIsInstance(self.jax_model.root, SumLayer)
+        self.assertEqual(self.jax_model.root.number_of_nodes, 1)
+        self.assertEqual(len(self.jax_model.root.child_layers), 1)
+        product_layer = self.jax_model.root.child_layers[0]
+        self.assertEqual(product_layer.number_of_nodes, 2)
+        self.assertEqual(len(product_layer.child_layers), 2)
+        sum_layer1 = product_layer.child_layers[0]
+        sum_layer2 = product_layer.child_layers[1]
+        self.assertEqual(sum_layer1.number_of_nodes, 2)
+        self.assertEqual(sum_layer2.number_of_nodes, 2)
 
-        def loss(params, x, y):
-            pc_params = coupling_model.apply(params, x)
-            pc.set_parameters(pc_params)
-            a_nll = -pc.log_likelihood(y).mean()
-            return a_nll
+    def test_ll(self):
+        samples = self.nx_model.sample(1000)
+        nx_ll = self.nx_model.log_likelihood(samples)
+        jax_ll = self.jax_model.log_likelihood(samples)
+        self.assertTrue(jnp.allclose(nx_ll, jax_ll))
 
-        LEARNING_RATE = 0.05
+    def test_trainable_parameters(self):
+        params, _ = eqx.partition(self.jax_model.root, eqx.is_inexact_array)
+        flattened_params, _ = jax.tree_util.tree_flatten(params)
+        number_of_parameters = sum([len(p) for p in flattened_params])
+        self.assertEqual(number_of_parameters, 10)
 
-        @jax.jit
-        def update(params, x: jnp.ndarray, y: jnp.ndarray):
-            """Performs one SGD update step on params using the given data."""
-            grad = jax.grad(loss)(params, x, y)
 
-            new_params = jax.tree_map(
-                lambda param, g: param - g * LEARNING_RATE, params, grad)
+class JPTIntegrationTestCase(unittest.TestCase):
+    number_of_variables = 2
+    number_of_samples = 1000
 
-            return new_params
+    jpt: NXProbabilisticCircuit
 
-        loss_values = []
+    @classmethod
+    def setUpClass(cls):
+        mean = np.full(cls.number_of_variables, 0)
+        cov = np.random.uniform(0, 1, (cls.number_of_variables, cls.number_of_variables))
+        cov = np.dot(cov, cov.T)
+        samples = np.random.multivariate_normal(mean, cov, cls.number_of_samples)
+        df = pd.DataFrame(samples, columns=[f"x_{i}" for i in range(cls.number_of_variables)])
+        variables = infer_variables_from_dataframe(df, min_samples_per_quantile=100)
+        jpt = JPT(variables, min_samples_leaf=0.1)
+        jpt.fit(df)
+        cls.jpt = jpt.probabilistic_circuit
 
-        # Fit regression
-        for _ in range(2):
-            coupling_params = update(coupling_params, features, targets)
-            loss_values.append(loss(coupling_params, features, targets))
-        #
-        # import plotly.express as px
-        # fig = px.line(y=loss_values)
-        # fig.update_layout(title="Coupling Circuit Learning Curve", xaxis_title="Epochs",
-        #                   yaxis_title="Average Negative Log Likelihood")
-        # fig.show()
+    def test_from_jpt(self):
+        model = ProbabilisticCircuit.from_nx(self.jpt, False)
+        samples = jnp.array(self.jpt.sample(1000))
+        jax_ll = model.log_likelihood(samples)
+        self.assertTrue((jax_ll > -jnp.inf).all())
+
+
+class LearningTestCase(unittest.TestCase):
+
+    data = np.vstack((np.random.uniform(0, 1, (100, 1)),
+                      np.random.uniform(2, 3, (200, 1))))
+    uniform_layer = UniformLayer(0, jnp.array([[-0.01, 1.01],
+                                                       [1.99, 3.01]]))
+    sum_layer = SumLayer([uniform_layer], [BCOO((jnp.array([0., 0.]),
+                                                 jnp.array([[0, 0], [0, 1]])),
+                                                shape=(1, 2))])
+    sum_layer.validate()
+
+    def test_learning(self):
+
+        @eqx.filter_jit
+        def loss(model, x):
+            ll = model.log_likelihood_of_nodes(x)
+            return -jnp.mean(ll)
+
+        optim = optax.adamw(0.01)
+        opt_state = optim.init(eqx.filter(self.sum_layer, eqx.is_inexact_array))
+        model = self.sum_layer
+        for _ in tqdm.trange(100):
+            loss_value, grads = eqx.filter_value_and_grad(loss)(model, self.data)
+
+            grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)[0][0]
+            self.assertTrue(jnp.all(jnp.isfinite(grads_of_sum_layer)))
+
+            updates, opt_state = optim.update(grads, opt_state, model)
+            model = eqx.apply_updates(model, updates)
+
+        weights = jnp.exp(model.log_weights[0].data)
+        weights /= jnp.sum(weights)
+        self.assertAlmostEqual(weights[0], 1 / 3, delta=0.01)
+        self.assertAlmostEqual(weights[1], 2 / 3, delta=0.01)
+
+
+class NanGradientTestCase(unittest.TestCase):
+
+    x: Continuous = Continuous("x")
+    y: Continuous = Continuous("y")
+
+    nx_model: NXProbabilisticCircuit
+    jax_model: ProbabilisticCircuit
+    event: Event
+
+    @classmethod
+    def setUpClass(cls):
+        event1 = SimpleEvent({cls.x: closed(0, 1) |  closed(2, 3),
+                             cls.y: closed(0, 1) |  closed(2, 3)}).as_composite_set()
+        event2 = SimpleEvent({cls.x: closed(1, 2) |  closed(3, 4),
+                             cls.y: closed(1, 2) |  closed(3, 4)}).as_composite_set()
+        cls.event = event1 | event2
+        cls.nx_model = uniform_measure_of_event(cls.event)
+        cls.jax_model = ProbabilisticCircuit.from_nx(cls.nx_model)
+
+    def test_nan_gradient(self):
+        """
+        This is the entry point for debugging nans.
+        """
+        data = jnp.array([[2.5, 2.5]])
+
+        @eqx.filter_jit
+        def loss(model, x):
+            ll = model.log_likelihood_of_nodes(x)
+            return -jnp.mean(ll)
+
+        model = self.jax_model.root
+
+        loss_value, grads = eqx.filter_value_and_grad(loss)(model, data)
+
+        grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)[0][0]
+        self.assertFalse(jnp.all(jnp.isfinite(grads_of_sum_layer)))
+
+
+
+if __name__ == '__main__':
+    unittest.main()

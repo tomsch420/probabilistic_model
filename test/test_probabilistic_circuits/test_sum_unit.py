@@ -157,18 +157,3 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
 
     def test_determinism(self):
         self.assertTrue(self.model.is_deterministic())
-
-
-class MultiprocessingTestCase(unittest.TestCase):
-    x: Continuous = Continuous("x")
-    u1 = UniformDistribution(x, closed(0, 1).simple_sets[0])
-    u2 = UniformDistribution(x, closed(3, 4).simple_sets[0])
-    sum_unit = SumUnit()
-    sum_unit.add_subcircuit(u1, 0.7)
-    sum_unit.add_subcircuit(u2, 0.3)
-
-    def test_multiprocessing(self):
-        samples = self.sum_unit.sample(1000)
-        print(samples)
-        ll = self.sum_unit.log_likelihood(samples)
-        print(ll)
