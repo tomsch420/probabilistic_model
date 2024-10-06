@@ -19,6 +19,12 @@ class ContinuousLayer(InputLayer, ABC):
     Abstract base class for continuous univariate input units.
     """
 
+    def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
+        raise NotImplementedError
+
+    def cdf_of_nodes(self, x: jnp.array) -> jnp.array:
+        return jax.vmap(self.cdf_of_nodes_single)(x)
+
 
 class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
     """
@@ -119,3 +125,6 @@ class DiracDeltaLayer(ContinuousLayer):
         result = BCOO((values, result_indices), shape=(self.number_of_nodes, max_frequency, 1),
                       indices_sorted=True, unique_indices=True)
         return result
+
+    def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
+        return jnp.where(x < self.location, 0., 1.)

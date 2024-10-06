@@ -24,6 +24,12 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         self.assertTrue(jnp.all(s.data[:10] == 0.))
         self.assertTrue(jnp.all(s.data[10:] == 1.))
 
+    def test_cdf(self):
+        data = jnp.array([-1, 0, 1, 2], dtype=jnp.float32).reshape(-1, 1)
+        cdf = self.layer.cdf_of_nodes(data)
+        result = jnp.array([[0, 0], [1, 0], [1, 1], [1, 1]], dtype=jnp.float32)
+        self.assertTrue(jnp.allclose(cdf, result))
+
 
 if __name__ == '__main__':
     unittest.main()
