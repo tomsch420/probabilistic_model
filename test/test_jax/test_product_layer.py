@@ -4,6 +4,8 @@ import jax
 from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
 import jax.numpy as jnp
+
+from probabilistic_model.probabilistic_circuit.jax import embed_sparse_array_in_nan_array
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import ProductLayer
 
@@ -14,13 +16,19 @@ class DiracProductTestCase(unittest.TestCase):
     p2_x = DiracDeltaLayer(0, jnp.array([2., 3.]), jnp.array([1, 1]))
     p_y = DiracDeltaLayer(1, jnp.array([4., 5.]), jnp.array([1, 1]))
     p_z = DiracDeltaLayer(2, jnp.array([6.]), jnp.array([1]))
+    product_layer: ProductLayer
 
-    indices = jnp.array([[1, 2, 3, 3, 0, 0],
-                            [0, 1, 0, 1, 0, 1]]).T
-    values = jnp.array([0, 0, 1, 0, 0, 0])
-    edges = BCOO((values, indices), shape=(4, 2))
+    def setUp(self):
+        indices = jnp.array([[0, 0],
+                             [0, 1],
+                             [1, 0],
+                             [2, 1],
+                             [3, 0],
+                             [3, 1]])
+        values = jnp.array([0, 0, 0, 0, 1, 0])
+        edges = BCOO((values, indices), shape=(4, 2)).sum_duplicates(remove_zeros=False).sort_indices()
+        self.product_layer = ProductLayer([self.p_z, self.p1_x, self.p2_x, self.p_y, ], edges)
 
-    product_layer = ProductLayer([p_z, p1_x, p2_x, p_y, ], edges)
 
     def test_variables(self):
         self.assertTrue(jnp.allclose(self.product_layer.variables, jnp.array([0, 1, 2])))
@@ -37,6 +45,8 @@ class DiracProductTestCase(unittest.TestCase):
     def test_sample_from_frequencies(self):
         frequencies = jnp.array([5, 3])
         samples = self.product_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(69))
+
+        print(embed_sparse_array_in_nan_array(samples))
 
         samples_n0 = samples[0].todense()
         samples_n1 = samples[1].todense()
