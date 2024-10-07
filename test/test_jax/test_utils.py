@@ -34,6 +34,7 @@ class BCOOTestCase(unittest.TestCase):
                                             [0.4, 0., 0.6, 0.]]))
         probs.data = jnp.log(probs.data)
         amount = jnp.array([2, 3])
+
         samples = sample_from_sparse_probabilities(probs,amount, jax.random.PRNGKey(69))
         amounts = samples.sum(axis=1).todense()
         self.assertTrue(jnp.all(amounts == amount))
