@@ -401,6 +401,30 @@ class SumLayer(InnerLayer):
         normalization_constants = jnp.exp(self.log_normalization_constants)
         return result / normalization_constants
 
+    def probability_of_simple_event(self, event: SimpleEvent) -> jnp.array:
+        result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the probability of the child nodes
+            child_layer_prob = child_layer.probability_of_simple_event(event)
+
+            # weight the probability of the child nodes by the weight for each node of this layer
+            cloned_log_weights = copy_bcoo(log_weights)  # clone the weights
+
+            # multiply the weights with the child layer cdf
+            cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent weights
+            cloned_log_weights.data *= child_layer_prob[cloned_log_weights.indices[:, 1]]
+
+            # sum the weights for each node
+            ll = cloned_log_weights.sum(1).todense()
+
+            # sum the child layer result
+            result += ll
+
+        # normalize the result
+        normalization_constants = jnp.exp(self.log_normalization_constants)
+        return result / normalization_constants
+
     def moment_of_nodes(self, order: jax.Array, center: jax.Array):
         result = jnp.zeros((self.number_of_nodes, len(self.variables)), dtype=jnp.float32)
 

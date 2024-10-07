@@ -1,6 +1,8 @@
 import unittest
 
 from jax.experimental.sparse import BCOO
+from random_events.interval import closed
+from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 import jax.numpy as jnp
 from triton.language import dtype
@@ -91,3 +93,9 @@ class DiracSumUnitTestCase(unittest.TestCase):
         moment = self.sum_layer.moment_of_nodes(order, center)
         result = jnp.array([0.9, -0.5], dtype=jnp.float32).reshape(-1, 1)
         self.assertTrue(jnp.allclose(moment, result))
+
+    def test_probability(self):
+        event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(4.5, 10)})
+        prob = self.sum_layer.probability_of_simple_event(event)
+        result = jnp.array([0.7, 0.5], dtype=jnp.float32)
+        self.assertTrue(jnp.allclose(result, prob))
