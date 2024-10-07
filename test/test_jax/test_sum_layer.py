@@ -3,9 +3,8 @@ import unittest
 from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
 import jax.numpy as jnp
-from triton.language import dtype
 
-from probabilistic_model.probabilistic_circuit.jax import in_bound_elements_from_sparse_slice
+
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import SumLayer
 import jax
@@ -67,7 +66,7 @@ class DiracSumUnitTestCase(unittest.TestCase):
         frequencies = jnp.array([10, 5])
         samples = self.sum_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(0))
         for index, sample_row in enumerate(samples):
-            _, sample_row = in_bound_elements_from_sparse_slice(sample_row)
+            sample_row = sample_row.sum_duplicates(remove_zeros=False).data
             self.assertEqual(len(sample_row), frequencies[index])
             likelihood = self.sum_layer.log_likelihood_of_nodes(sample_row)
             self.assertTrue(all(likelihood[:, index] > -jnp.inf))

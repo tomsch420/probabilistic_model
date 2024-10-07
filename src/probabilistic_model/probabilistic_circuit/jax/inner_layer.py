@@ -20,8 +20,8 @@ from triton.language import dtype
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional
 
 from . import create_sparse_array_indices_from_row_lengths, embed_sparse_array_in_nan_array
-from .utils import copy_bcoo, in_bound_elements_from_sparse_slice
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
+from .utils import copy_bcoo
 import tqdm
 
 
@@ -568,10 +568,10 @@ class ProductLayer(InnerLayer):
         concatenated_samples_per_variable = [jnp.full((0, 1), jnp.nan) for _ in self.variables]
 
         for edges, child_layer in zip(self.edges, self.child_layers):
-            edge_indices, edge_data = in_bound_elements_from_sparse_slice(edges)
+            edges: BCOO = edges.sum_duplicates(remove_zeros=False)
 
             # create a frequency array for the child layer of shape #nodes, #child nodes
-            frequencies_for_child_layer = BCOO((frequencies[edge_indices], jnp.array([edge_indices, edge_data]).T),
+            frequencies_for_child_layer = BCOO((frequencies[edges.indices[:,0]], jnp.array([edges.indices[:, 0], edges.data]).T),
                                                shape=(self.number_of_nodes, child_layer.number_of_nodes),
                                                indices_sorted=True, unique_indices=True)
 

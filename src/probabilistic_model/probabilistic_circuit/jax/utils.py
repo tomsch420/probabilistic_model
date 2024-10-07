@@ -62,16 +62,3 @@ def embed_sparse_array_in_nan_array(sparse_array: BCOO) -> jax.Array:
     result = jnp.full(sparse_array.shape, jnp.nan, dtype=jnp.float32)
     result = result.at[sparse_array.indices[:, 0], sparse_array.indices[:, 1]].set(sparse_array.data)
     return result
-
-def in_bound_elements_from_sparse_slice(sparse_slice: BCOO) -> Tuple[jax.Array, jax.Array]:
-    """
-    Get the indices and data that are not out of bounds in a slice of a sparse array.
-
-    :param sparse_slice: The slice from the sparse array
-    :return: The valid indices and valid data
-    """
-    sparse_slice_indices = sparse_slice.indices[:, 0]
-    in_bound_elements = sparse_slice_indices < sparse_slice.nse
-    edge_indices = sparse_slice_indices[in_bound_elements]
-    edge_data = sparse_slice.data[in_bound_elements]
-    return edge_indices, edge_data
