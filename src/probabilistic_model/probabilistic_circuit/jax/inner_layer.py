@@ -46,14 +46,32 @@ class Layer(eqx.Module, ABC):
         """
         Calculate the log-likelihood of the distribution.
 
-        .. Note::
-            The shape of the log likelihood depends on the number of samples and nodes.
-            The shape of the result is (#samples, #nodes).
+        :param x: The input vector.
+        :return: The log-likelihood of every node in the layer for x.
         """
         raise NotImplementedError
 
     def log_likelihood_of_nodes(self, x: jnp.array) -> jnp.array:
+        """
+        Vectorized version of :meth:`log_likelihood_of_nodes_single`
+        """
         return jax.vmap(self.log_likelihood_of_nodes_single)(x)
+
+
+    def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
+        """
+        Calculate the cumulative distribution function of the distribution if applicable.
+
+        :param x: The input vector.
+        :return: The cumulative distribution function of every node in the layer for x.
+        """
+        raise NotImplementedError
+
+    def cdf_of_nodes(self, x: jnp.array) -> jnp.array:
+        """
+        Vectorized version of :meth:`cdf_of_nodes_single`
+        """
+        return jax.vmap(self.cdf_of_nodes_single)(x)
 
     def validate(self):
         """
@@ -139,6 +157,7 @@ class Layer(eqx.Module, ABC):
     def partition(self) -> Tuple[Any, Any]:
         """
         Partition the layer into the parameters and the static structure.
+
         :return: A tuple containing the parameters and the static structure as pytrees.
         """
         return eqx.partition(self, eqx.is_inexact_array)
@@ -320,7 +339,7 @@ class SumLayer(InnerLayer):
         return result
 
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
-        result = jnp.zeros(self.number_of_nodes)
+        result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
 
         for log_weights, child_layer in self.log_weighted_child_layers:
             # get the log likelihoods of the child nodes
@@ -340,6 +359,31 @@ class SumLayer(InnerLayer):
             result += ll
 
         return jnp.where(result > 0, jnp.log(result) - self.log_normalization_constants, -jnp.inf)
+
+    def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
+        result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the cdf of the child nodes
+            child_layer_cdf = child_layer.cdf_of_nodes_single(x)
+
+            # weight the cdf of the child nodes by the weight for each node of this layer
+            cloned_log_weights = copy_bcoo(log_weights)  # clone the weights
+
+            # multiply the weights with the child layer cdf
+            cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent weights
+            cloned_log_weights.data *= child_layer_cdf[cloned_log_weights.indices[:, 1]]
+
+            # sum the weights for each node
+            ll = cloned_log_weights.sum(1).todense()
+
+            # sum the child layer result
+            result += ll
+
+        # normalize the result
+        normalization_constants = jnp.exp(self.log_normalization_constants)
+        return result / normalization_constants
+
 
 
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:

@@ -19,11 +19,6 @@ class ContinuousLayer(InputLayer, ABC):
     Abstract base class for continuous univariate input units.
     """
 
-    def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
-        raise NotImplementedError
-
-    def cdf_of_nodes(self, x: jnp.array) -> jnp.array:
-        return jax.vmap(self.cdf_of_nodes_single)(x)
 
 
 class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):

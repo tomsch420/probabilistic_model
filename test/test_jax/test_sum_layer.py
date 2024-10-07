@@ -3,6 +3,7 @@ import unittest
 from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
 import jax.numpy as jnp
+from triton.language import dtype
 
 from probabilistic_model.probabilistic_circuit.jax import in_bound_elements_from_sparse_slice
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
@@ -70,3 +71,17 @@ class DiracSumUnitTestCase(unittest.TestCase):
             self.assertEqual(len(sample_row), frequencies[index])
             likelihood = self.sum_layer.log_likelihood_of_nodes(sample_row)
             self.assertTrue(all(likelihood[:, index] > -jnp.inf))
+
+    def test_cdf(self):
+        data = jnp.arange(7, dtype=jnp.float32).reshape(-1, 1) - 0.5
+        cdf = self.sum_layer.cdf_of_nodes(data)
+        self.assertEqual(cdf.shape, (7, 2))
+        result = jnp.array([[0, 0], # -0.5
+                               [0, 0.4], # 0.5
+                               [0.1, 0.4], # 1.5
+                               [0.3, 0.7], # 2.5
+                               [0.6, 0.7], # 3.5
+                               [0.6, 0.8], # 4.5
+                               [1, 1], # 5.5
+                               ], dtype=jnp.float32)
+        self.assertTrue(jnp.allclose(cdf, result))
