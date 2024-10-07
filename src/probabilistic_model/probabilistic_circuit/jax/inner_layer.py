@@ -175,6 +175,16 @@ class Layer(eqx.Module, ABC):
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
         raise NotImplementedError
 
+    def moment_of_nodes(self, order: jax.Array, center: jax.Array):
+        """
+        Calculate the moment of the nodes.
+
+        :param order: The order of the moment for each variable.
+        :param center: The center of the moment for each variable.
+        :return: The moments of the nodes.
+        """
+        raise NotImplementedError
+
 class InnerLayer(Layer, ABC):
     """
     Abstract Base Class for inner layers

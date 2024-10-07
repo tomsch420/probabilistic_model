@@ -83,5 +83,16 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
     def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
         return jnp.clip((x - self.lower) / (self.upper - self.lower), 0, 1)
 
+    def moment_of_nodes(self, order: jax.Array, center: jax.Array):
+        """
+        Calculate the moment of the uniform distribution.
+        """
+        order = order[self.variables[0]]
+        center = center[self.variables[0]]
+        pdf_value = jnp.exp(self.log_pdf_value())
+        lower_integral_value = (pdf_value * (self.lower - center) ** (order + 1)) / (order + 1)
+        upper_integral_value = (pdf_value * (self.upper - center) ** (order + 1)) / (order + 1)
+        return (upper_integral_value - lower_integral_value).reshape(-1, 1)
+
     def __deepcopy__(self):
         return self.__class__(self.variables[0].item(), self.interval.copy())

@@ -56,3 +56,10 @@ class UniformLayerTestCaste(unittest.TestCase):
         self.assertEqual(cdf.shape, (3, 2))
         result = jnp.array([[0.5, 0], [1, 0.25], [1, 1]])
         self.assertTrue(jnp.allclose(cdf, result))
+
+    def test_moment(self):
+        order = jnp.array([1], dtype=jnp.int32)
+        center = jnp.array([1.], dtype=jnp.float32)
+        moment = self.p_x.moment_of_nodes(order, center)
+        result = jnp.array([[-0.5], [1.]], dtype=jnp.float32)
+        self.assertTrue(jnp.allclose(moment, result))
