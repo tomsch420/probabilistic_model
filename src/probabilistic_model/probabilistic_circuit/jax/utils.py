@@ -62,3 +62,32 @@ def embed_sparse_array_in_nan_array(sparse_array: BCOO) -> jax.Array:
     result = jnp.full(sparse_array.shape, jnp.nan, dtype=jnp.float32)
     result = result.at[sparse_array.indices[:, 0], sparse_array.indices[:, 1]].set(sparse_array.data)
     return result
+
+
+def sample_from_sparse_probabilities(log_probabilities: BCOO, amount: jax.Array, key: jax.random.PRNGKey) -> BCOO:
+    """
+    Sample from a sparse array of probabilities.
+    Each row in the sparse array encodes a categorical probability distribution.
+
+    :param log_probabilities: The unnormalized sparse array of log-probabilities.
+    :param amount:  The amount of samples to draw from each row.
+    :param key: The random key.
+    :return: The samples that are drawn for each state in the probabilities indicies.
+    """
+
+    all_samples = []
+
+    for probability_row, row_amount in zip(log_probabilities, amount):
+        probability_row: BCOO
+        probability_row = probability_row.sum_duplicates(remove_zeros=False)
+
+        samples = jax.random.categorical(key, probability_row.data, shape=(row_amount.item(), ))
+        frequencies = jnp.zeros((probability_row.data.shape[0],), dtype=jnp.int32)
+        unique, counts = jnp.unique(samples, return_counts=True)
+
+        frequencies = frequencies.at[unique].set(counts)
+        all_samples.append(frequencies)
+
+    return BCOO((jnp.concatenate(all_samples), log_probabilities.indices), shape=log_probabilities.shape,
+                indices_sorted=True, unique_indices=True)
+

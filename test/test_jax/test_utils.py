@@ -1,9 +1,13 @@
 import unittest
+
+import jax.random
 from jax.experimental.sparse import BCOO
 import jax.numpy as jnp
+from sympy.physics.quantum.matrixutils import sparse
 
+from probabilistic_model.probabilistic_circuit.jax import embed_sparse_array_in_nan_array
 from probabilistic_model.probabilistic_circuit.jax.utils import copy_bcoo, simple_interval_to_open_array, \
-    create_sparse_array_indices_from_row_lengths
+    create_sparse_array_indices_from_row_lengths, sample_from_sparse_probabilities
 from random_events.interval import SimpleInterval
 
 class BCOOTestCase(unittest.TestCase):
@@ -25,6 +29,15 @@ class BCOOTestCase(unittest.TestCase):
         result = jnp.array([[0,0],[0,1],[1, 0],[1, 1],[1, 2]])
         self.assertTrue(jnp.allclose(indices, result))
 
+    def test_sample_from_sparse_probabilities(self):
+        probs = BCOO.fromdense(jnp.array([[0.1, 0.2, 0., .7],
+                                            [0.4, 0., 0.6, 0.]]))
+        probs.data = jnp.log(probs.data)
+        amount = jnp.array([2, 3])
+        samples = sample_from_sparse_probabilities(probs,amount, jax.random.PRNGKey(69))
+        amounts = samples.sum(axis=1).todense()
+        self.assertTrue(jnp.all(amounts == amount))
+        self.assertTrue(jnp.all(samples.data <= 3))
 
 class IntervalConversionTestCase(unittest.TestCase):
 

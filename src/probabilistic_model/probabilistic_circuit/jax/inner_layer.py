@@ -17,8 +17,8 @@ from random_events.utils import recursive_subclasses, SubclassJSONSerializer
 from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional, Self
 
-from . import create_sparse_array_indices_from_row_lengths
-from .utils import copy_bcoo
+from . import create_sparse_array_indices_from_row_lengths, embed_sparse_array_in_nan_array
+from .utils import copy_bcoo, sample_from_sparse_probabilities
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
 
 
@@ -346,7 +346,7 @@ class SumLayer(InnerLayer):
         """
         :return: The concatenated weights of the child layers for each node.
         """
-        return bcoo_concatenate(self.log_weights, dimension=1)
+        return bcoo_concatenate(self.log_weights, dimension=1).sort_indices()
 
     @property
     def log_normalization_constants(self) -> jax.Array:
@@ -455,14 +455,7 @@ class SumLayer(InnerLayer):
         return result / jnp.exp(self.log_normalization_constants.reshape(-1, 1))
 
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
-        # calculate the probabilities for the latent variable interpretation of this layer
-        catted_weights = self.normalized_weights
-
-        unsqueezed_frequencies = frequencies.reshape(-1, 1)
-        # pseudo sample the latent variables by evaluating the events w. r. t. their probabilities (histogram)
-        # TODO this may produce wrong results if the frequencies are not rounding to the desired number of samples
-        node_to_child_frequency_map = (catted_weights * unsqueezed_frequencies)
-        node_to_child_frequency_map.data = jnp.round(node_to_child_frequency_map.data).astype(jnp.int32)
+        node_to_child_frequency_map = sample_from_sparse_probabilities(self.concatenated_log_weights, frequencies, key)
 
         # offset for shifting through the frequencies of the node_to_child_frequency_map
         prev_column_index = 0
