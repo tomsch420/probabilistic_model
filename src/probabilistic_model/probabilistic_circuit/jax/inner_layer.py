@@ -611,6 +611,21 @@ class ProductLayer(InnerLayer):
 
         return result
 
+    def probability_of_simple_event(self, event: SimpleEvent) -> jnp.array:
+        result = jnp.ones(self.number_of_nodes, dtype=jnp.float32)
+
+        for edges, layer in zip(self.edges, self.child_layers):
+            # calculate the cdf over the columns of the child layer
+            prob = layer.probability_of_simple_event(event)  # shape: #child_nodes
+
+            # gather the cdf at the indices of the nodes that are required for the edges
+            prob = prob[edges.data]  # shape: #len(edges.values())
+
+            # multiply the gathered values by the result where the edges define the indices
+            result = result.at[edges.indices[:, 0]].mul(prob)
+
+        return result
+
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
 
         concatenated_samples_per_variable = [jnp.full((0, 1), jnp.nan) for _ in self.variables]

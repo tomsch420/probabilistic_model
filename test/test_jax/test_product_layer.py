@@ -4,6 +4,8 @@ import equinox
 import jax
 from jax.experimental.sparse import BCOO
 from numpy import dtype
+from random_events.interval import closed, singleton
+from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 import jax.numpy as jnp
 
@@ -13,6 +15,10 @@ from probabilistic_model.probabilistic_circuit.jax.inner_layer import ProductLay
 
 
 class DiracProductTestCase(unittest.TestCase):
+
+    x = Continuous("x")
+    y = Continuous("y")
+    z = Continuous("z")
 
     p1_x = DiracDeltaLayer(0, jnp.array([0., 1.]), jnp.array([1, 1]))
     p2_x = DiracDeltaLayer(0, jnp.array([2., 3.]), jnp.array([1, 1]))
@@ -76,6 +82,12 @@ class DiracProductTestCase(unittest.TestCase):
         result = jnp.array([[0, 4., 0.],
                             [2., 3., 0.]], dtype=jnp.float32)
         self.assertTrue(jnp.allclose(moment, result))
+
+    def test_probability(self):
+        event = SimpleEvent({self.x: closed(0,2), self.y: singleton(5), self.z: singleton(6.)})
+        prob = self.product_layer.probability_of_simple_event(event)
+        result = jnp.array([1, 0], dtype=jnp.float32)
+        self.assertTrue(jnp.allclose(prob, result))
 
 
 if __name__ == '__main__':
