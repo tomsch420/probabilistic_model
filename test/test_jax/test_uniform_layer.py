@@ -3,7 +3,9 @@ import unittest
 
 import jax
 import jax.numpy as jnp
-from random_events.interval import SimpleInterval, Bound
+from random_events.interval import SimpleInterval, Bound, closed
+from random_events.product_algebra import SimpleEvent
+from random_events.variable import Continuous
 
 from probabilistic_model.probabilistic_circuit.jax import simple_interval_to_open_array
 from probabilistic_model.probabilistic_circuit.jax.uniform_layer import UniformLayer
@@ -11,6 +13,7 @@ import equinox as eqx
 
 
 class UniformLayerTestCaste(unittest.TestCase):
+    x = Continuous("x")
     p_x = UniformLayer(0, jnp.array([[0, 1], [1, 3]]))
     key = jax.random.PRNGKey(69)
 
@@ -63,3 +66,10 @@ class UniformLayerTestCaste(unittest.TestCase):
         moment = self.p_x.moment_of_nodes(order, center)
         result = jnp.array([[-0.5], [1.]], dtype=jnp.float32)
         self.assertTrue(jnp.allclose(moment, result))
+
+    def test_probability(self):
+        event = SimpleEvent({self.x: closed(0.5, 2.5) | closed(3, 5)})
+        prob = self.p_x.probability_of_simple_event(event)
+        self.assertEqual(prob.shape, (2,))
+        result = jnp.array([0.5, 0.75])
+        self.assertTrue(jnp.allclose(prob, result))

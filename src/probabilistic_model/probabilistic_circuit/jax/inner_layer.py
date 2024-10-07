@@ -3,26 +3,23 @@ from __future__ import annotations
 import inspect
 import math
 from abc import abstractmethod, ABC
-from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property
 
-import jax
-from jax.typing import ArrayLike
-from jaxtyping import Array, Float, Int
-from jax import numpy as jnp, tree_flatten
 import equinox as eqx
-from jax.experimental.sparse import BCOO, bcoo_concatenate, bcoo_reduce_sum, bcoo_multiply_dense
+import jax
+import tqdm
+from jax import numpy as jnp, tree_flatten
+from jax.experimental.sparse import BCOO, bcoo_concatenate
+from jaxtyping import Int
+from random_events.product_algebra import SimpleEvent
 from random_events.utils import recursive_subclasses
 from sortedcontainers import SortedSet
-from torch.onnx.symbolic_opset9 import unsqueeze
-from triton.language import dtype
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional
 
-from . import create_sparse_array_indices_from_row_lengths, embed_sparse_array_in_nan_array
-from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
+from . import create_sparse_array_indices_from_row_lengths
 from .utils import copy_bcoo
-import tqdm
+from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -57,7 +54,6 @@ class Layer(eqx.Module, ABC):
         """
         return jax.vmap(self.log_likelihood_of_nodes_single)(x)
 
-
     def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
         """
         Calculate the cumulative distribution function of the distribution if applicable.
@@ -72,6 +68,15 @@ class Layer(eqx.Module, ABC):
         Vectorized version of :meth:`cdf_of_nodes_single`
         """
         return jax.vmap(self.cdf_of_nodes_single)(x)
+
+    def probability_of_simple_event(self, event: SimpleEvent) -> jnp.array:
+        """
+        Calculate the probability of a simple event P(E).
+
+        :param event: The simple event to calculate the probability for. It has to contain every variable.
+        :return: P(E)
+        """
+        raise NotImplementedError
 
     def validate(self):
         """
@@ -187,6 +192,7 @@ class Layer(eqx.Module, ABC):
         """
         raise NotImplementedError
 
+
 class InnerLayer(Layer, ABC):
     """
     Abstract Base Class for inner layers
@@ -291,7 +297,6 @@ class InputLayer(Layer, ABC):
 
 
 class SumLayer(InnerLayer):
-
     log_weights: List[BCOO]
     child_layers: Union[List[[ProductLayer]], List[InputLayer]]
 
@@ -415,7 +420,6 @@ class SumLayer(InnerLayer):
 
         return result / jnp.exp(self.log_normalization_constants.reshape(-1, 1))
 
-
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
         # calculate the probabilities for the latent variable interpretation of this layer
         catted_weights = self.normalized_weights
@@ -432,7 +436,8 @@ class SumLayer(InnerLayer):
         all_samples = []
 
         for child_layer in self.child_layers:
-            current_frequency_block = node_to_child_frequency_map[:, prev_column_index:prev_column_index + child_layer.number_of_nodes]
+            current_frequency_block = node_to_child_frequency_map[:,
+                                      prev_column_index:prev_column_index + child_layer.number_of_nodes]
             samples = self.sample_from_frequency_block(current_frequency_block, child_layer, key)
 
             if samples is not None:
@@ -447,7 +452,7 @@ class SumLayer(InnerLayer):
         # build result
         new_indices = create_sparse_array_indices_from_row_lengths(frequencies)
         result = BCOO((catted_samples.data, new_indices),
-                    shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
+                      shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
                       indices_sorted=True, unique_indices=True)
 
         return result
@@ -464,13 +469,14 @@ class SumLayer(InnerLayer):
             NXConverterLayer:
 
         result_hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        variables = jnp.array([nodes[0].probabilistic_circuit.variables.index(variable) for variable in nodes[0].variables])
+        variables = jnp.array(
+            [nodes[0].probabilistic_circuit.variables.index(variable) for variable in nodes[0].variables])
 
         number_of_nodes = len(nodes)
 
         # filter the child layers to only contain layers with the same scope as this one
         filtered_child_layers = [child_layer for child_layer in child_layers if (child_layer.layer.variables ==
-                                 variables).all()]
+                                                                                 variables).all()]
         log_weights = []
 
         # for every possible child layer
@@ -552,7 +558,7 @@ class ProductLayer(InnerLayer):
         return unique_values.sort()
 
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
-        result = jnp.zeros(self.number_of_nodes,  dtype=jnp.float32)
+        result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
 
         for edges, layer in zip(self.edges, self.child_layers):
             # calculate the log likelihood over the columns of the child layer
@@ -589,9 +595,10 @@ class ProductLayer(InnerLayer):
             edges: BCOO = edges.sum_duplicates(remove_zeros=False)
 
             # create a frequency array for the child layer of shape #nodes, #child nodes
-            frequencies_for_child_layer = BCOO((frequencies[edges.indices[:,0]], jnp.array([edges.indices[:, 0], edges.data]).T),
-                                               shape=(self.number_of_nodes, child_layer.number_of_nodes),
-                                               indices_sorted=True, unique_indices=True)
+            frequencies_for_child_layer = BCOO(
+                (frequencies[edges.indices[:, 0]], jnp.array([edges.indices[:, 0], edges.data]).T),
+                shape=(self.number_of_nodes, child_layer.number_of_nodes),
+                indices_sorted=True, unique_indices=True)
 
             # sample from the child layer
             current_samples = self.sample_from_frequency_block(frequencies_for_child_layer, child_layer, key)
@@ -649,7 +656,8 @@ class ProductLayer(InnerLayer):
 
             # for every child layer
             for child_layer_index, child_layer in enumerate(child_layers):
-                cl_variables = SortedSet([node.probabilistic_circuit.variables[index] for index in child_layer.layer.variables])
+                cl_variables = SortedSet(
+                    [node.probabilistic_circuit.variables[index] for index in child_layer.layer.variables])
 
                 # for every subcircuit
                 for subcircuit_index, subcircuit in enumerate(node.subcircuits):

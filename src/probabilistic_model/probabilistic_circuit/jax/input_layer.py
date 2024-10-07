@@ -4,14 +4,15 @@ from typing import List
 import jax
 from jax import numpy as jnp
 from jax.experimental.sparse import BCOO
+from random_events.interval import Interval
+from random_events.product_algebra import SimpleEvent
 from typing_extensions import Tuple, Type
 
 from . import create_sparse_array_indices_from_row_lengths
 from .inner_layer import InputLayer, NXConverterLayer
 from ..nx.distributions import DiracDeltaDistribution
 import equinox as eqx
-
-from ..torch import create_sparse_tensor_indices_from_row_lengths
+from .utils import simple_interval_to_open_array
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -19,6 +20,12 @@ class ContinuousLayer(InputLayer, ABC):
     Abstract base class for continuous univariate input units.
     """
 
+    def probability_of_simple_event(self, event:SimpleEvent) -> jnp.array:
+        interval: Interval = list(event.values())[self.variables[0]]
+        points = jnp.array([simple_interval_to_open_array(i) for i in interval.simple_sets])
+        upper_bound_cdf = self.cdf_of_nodes(points[:, (1,)])
+        lower_bound_cdf = self.cdf_of_nodes(points[:, (0,)])
+        return (upper_bound_cdf - lower_bound_cdf).sum(axis=0)
 
 
 class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
