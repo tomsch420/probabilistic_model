@@ -3,7 +3,7 @@ import unittest
 from jax.experimental.sparse import BCOO
 from random_events.variable import Continuous
 import jax.numpy as jnp
-
+from triton.language import dtype
 
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import SumLayer
@@ -84,3 +84,10 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [1, 1], # 5.5
                                ], dtype=jnp.float32)
         self.assertTrue(jnp.allclose(cdf, result))
+
+    def test_moment(self):
+        order = jnp.array([1], dtype=jnp.int32)
+        center = jnp.array([2.5], dtype=jnp.float32)
+        moment = self.sum_layer.moment_of_nodes(order, center)
+        result = jnp.array([0.9, -0.5], dtype=jnp.float32).reshape(-1, 1)
+        self.assertTrue(jnp.allclose(moment, result))

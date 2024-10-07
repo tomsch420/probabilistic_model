@@ -396,6 +396,24 @@ class SumLayer(InnerLayer):
         normalization_constants = jnp.exp(self.log_normalization_constants)
         return result / normalization_constants
 
+    def moment_of_nodes(self, order: jax.Array, center: jax.Array):
+        result = jnp.zeros((self.number_of_nodes, len(self.variables)), dtype=jnp.float32)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the moment of the child nodes
+            moment = child_layer.moment_of_nodes(order, center)  # shape (#child_layer_nodes, #variables)
+
+            # weight the moment of the child nodes by the weight for each node of this layer
+            weights = copy_bcoo(log_weights)  # clone the weights, shape (#nodes, #child_layer_nodes)
+            weights.data = jnp.exp(weights.data)  # exponent weights
+
+            #  calculate the weighted sum in layer
+            moment = weights @ moment
+
+            # sum the child layer result
+            result += moment
+
+        return result / jnp.exp(self.log_normalization_constants.reshape(-1, 1))
 
 
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
