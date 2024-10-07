@@ -13,9 +13,9 @@ from jax import numpy as jnp, tree_flatten
 from jax.experimental.sparse import BCOO, bcoo_concatenate
 from jaxtyping import Int
 from random_events.product_algebra import SimpleEvent
-from random_events.utils import recursive_subclasses
+from random_events.utils import recursive_subclasses, SubclassJSONSerializer
 from sortedcontainers import SortedSet
-from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional
+from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional, Self
 
 from . import create_sparse_array_indices_from_row_lengths
 from .utils import copy_bcoo
@@ -31,7 +31,7 @@ def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
     raise TypeError(f"Could not find class for {clazz}")
 
 
-class Layer(eqx.Module, ABC):
+class Layer(eqx.Module, SubclassJSONSerializer, ABC):
     """
     Abstract class for Layers of a layered circuit.
 
@@ -273,6 +273,11 @@ class InnerLayer(Layer, ABC):
                                 indices_sorted=True, unique_indices=True)
         return samples_of_block
 
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["child_layers"] = [child_layer.to_json() for child_layer in self.child_layers]
+        return result
+
 
 class InputLayer(Layer, ABC):
     """
@@ -294,6 +299,11 @@ class InputLayer(Layer, ABC):
     @property
     def variables(self) -> jax.Array:
         return self._variables
+
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["variable"] = self._variables[0].item()
+        return result
 
 
 class SumLayer(InnerLayer):
@@ -486,6 +496,18 @@ class SumLayer(InnerLayer):
         log_weights = [copy_bcoo(log_weight) for log_weight in self.log_weights]
         return self.__class__(child_layers, log_weights)
 
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["log_weights"] = [(lw.data.tolist(), lw.indices.tolist(), lw.shape) for lw in self.log_weights]
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        child_layer = [Layer.from_json(child_layer) for child_layer in data["child_layers"]]
+        log_weights = [BCOO((jnp.array(lw[0]), jnp.array(lw[1])), shape=lw[2],
+                            indices_sorted=True, unique_indices=True) for lw in data["log_weights"]]
+        return cls(child_layer, log_weights)
+
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
                                                          child_layers: List[NXConverterLayer],
@@ -676,6 +698,18 @@ class ProductLayer(InnerLayer):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
         edges = copy_bcoo(self.edges)
         return self.__class__(child_layers, edges)
+
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["edges"] = (self.edges.data.tolist(), self.edges.indices.tolist(), self.edges.shape)
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        child_layer = [Layer.from_json(child_layer) for child_layer in data["child_layers"]]
+        edges = BCOO((jnp.array(data["edges"][0]), jnp.array(data["edges"][1])), shape=data["edges"][2],
+                     indices_sorted=True, unique_indices=True)
+        return cls(child_layer, edges)
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],

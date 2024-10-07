@@ -1,12 +1,12 @@
 from abc import ABC
-from typing import List
+from typing import List, Dict, Any
 
 import jax
 from jax import numpy as jnp
 from jax.experimental.sparse import BCOO
 from random_events.interval import Interval
 from random_events.product_algebra import SimpleEvent
-from typing_extensions import Tuple, Type
+from typing_extensions import Tuple, Type, Self
 
 from . import create_sparse_array_indices_from_row_lengths
 from .inner_layer import InputLayer, NXConverterLayer
@@ -76,6 +76,11 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
          """
         return self.left_included_condition(x) & self.right_included_condition(x)
 
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["interval"] = self.interval.tolist()
+        return result
+
 
 class DiracDeltaLayer(ContinuousLayer):
 
@@ -141,3 +146,13 @@ class DiracDeltaLayer(ContinuousLayer):
         else:
             result = jnp.zeros(self.number_of_nodes)
         return result.reshape(-1, 1)
+
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["location"] = self.location.tolist()
+        result["density_cap"] = self.density_cap.tolist()
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        return cls(data["variable"], jnp.array(data["location"]), jnp.array(data["density_cap"]))

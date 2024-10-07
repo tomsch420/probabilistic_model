@@ -1,3 +1,4 @@
+import json
 import math
 import unittest
 
@@ -73,3 +74,10 @@ class UniformLayerTestCaste(unittest.TestCase):
         self.assertEqual(prob.shape, (2,))
         result = jnp.array([0.5, 0.75])
         self.assertTrue(jnp.allclose(prob, result))
+
+    def test_to_json(self):
+        data = self.p_x.to_json()
+        json.dumps(data)
+        p_x = UniformLayer.from_json(data)
+
+        self.assertTrue(jnp.allclose(self.p_x.interval, p_x.interval))

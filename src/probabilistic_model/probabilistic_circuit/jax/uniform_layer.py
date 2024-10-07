@@ -1,9 +1,9 @@
-from typing import List
+from typing import List, Dict, Any
 
 import jax
 from jax import numpy as jnp
 from jax.experimental.sparse import BCOO
-from typing_extensions import Type, Tuple
+from typing_extensions import Type, Tuple, Self
 
 from .inner_layer import NXConverterLayer
 from .input_layer import ContinuousLayerWithFiniteSupport
@@ -96,3 +96,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
 
     def __deepcopy__(self):
         return self.__class__(self.variables[0].item(), self.interval.copy())
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        return cls(data["variable"], jnp.array(data["interval"]))

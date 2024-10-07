@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import collections
+from typing import Dict, Any
 
+from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Self, List
@@ -11,9 +13,10 @@ from ..nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCi
 import jax
 import tqdm
 import networkx as nx
+import jax.numpy as jnp
 
 
-class ProbabilisticCircuit:
+class ProbabilisticCircuit(SubclassJSONSerializer):
     """
     A probabilistic circuit as wrapper for a layered probabilistic model.
     """
@@ -34,6 +37,9 @@ class ProbabilisticCircuit:
 
     def log_likelihood(self, x: jax.Array) -> jax.Array:
         return self.root.log_likelihood_of_nodes(x)[:, 0]
+
+    def sample(self, amount: int, key: jax.random.PRNGKey = jax.random.PRNGKey(69)) -> jax.Array:
+        return self.root.sample_from_frequencies(jnp.array([amount]), key)[0].todense()
 
     @classmethod
     def from_nx(cls, pc: NXProbabilisticCircuit, progress_bar: bool = False) -> ProbabilisticCircuit:
@@ -70,3 +76,15 @@ class ProbabilisticCircuit:
         for layer in self.root.all_layers():
             parameters.extend(layer.trainable_parameters)
         return parameters
+
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["variables"] = [variable.to_json() for variable in self.variables]
+        result["root"] = self.root.to_json()
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variables = SortedSet(Variable.from_json(variable) for variable in data["variables"])
+        root = Layer.from_json(data["root"])
+        return cls(variables, root)
