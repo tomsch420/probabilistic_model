@@ -178,10 +178,12 @@ class Layer(eqx.Module, ABC):
     def moment_of_nodes(self, order: jax.Array, center: jax.Array):
         """
         Calculate the moment of the nodes.
+        The order and center vectors describe the moments for all variables in the entire model. Hence, they should
+        never be touched by the forward pass.
 
         :param order: The order of the moment for each variable.
         :param center: The center of the moment for each variable.
-        :return: The moments of the nodes.
+        :return: The moments of the nodes with shape (#nodes, #variables).
         """
         raise NotImplementedError
 
@@ -593,9 +595,18 @@ class ProductLayer(InnerLayer):
                       indices_sorted=True, unique_indices=True)
         return result
 
+    def moment_of_nodes(self, order: jax.Array, center: jax.Array):
+        result = jnp.full((self.number_of_nodes, self.variables.shape[0]), jnp.nan)
+        for edges, layer in zip(self.edges, self.child_layers):
+            edges = edges.sum_duplicates(remove_zeros=False)
 
-    def log_likelihood_of_nodes(self, x: jax.Array) -> jax.Array:
-        return jax.vmap(self.log_likelihood_of_nodes_single)(x)
+            # calculate the moments over the columns of the child layer
+            child_layer_moment = layer.moment_of_nodes(order, center)
+
+            # gather the moments at the indices of the nodes that are required for the edges
+            result = result.at[edges.indices[:, 0], layer.variables].set(child_layer_moment[edges.data][:, 0])
+
+        return result
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]

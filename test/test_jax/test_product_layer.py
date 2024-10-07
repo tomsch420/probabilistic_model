@@ -68,6 +68,15 @@ class DiracProductTestCase(unittest.TestCase):
         result = jnp.array([[0, 0], [1., 0.], [0., 1], [1, 1]], dtype=jnp.float32)
         self.assertTrue(jnp.allclose(cdf, result))
 
+    def test_moment(self):
+        order = jnp.array([1, 1, 2], dtype=jnp.int32)
+        center = jnp.array([0., 1., 2], dtype=jnp.float32)
+        moment = self.product_layer.moment_of_nodes(order, center)
+
+        result = jnp.array([[0, 4., 0.],
+                            [2., 3., 0.]], dtype=jnp.float32)
+        self.assertTrue(jnp.allclose(moment, result))
+
 
 if __name__ == '__main__':
     unittest.main()
