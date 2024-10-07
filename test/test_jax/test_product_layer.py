@@ -3,6 +3,7 @@ import unittest
 import equinox
 import jax
 from jax.experimental.sparse import BCOO
+from numpy import dtype
 from random_events.variable import Continuous
 import jax.numpy as jnp
 
@@ -59,6 +60,13 @@ class DiracProductTestCase(unittest.TestCase):
 
         # s = equinox.filter_jit(self.product_layer.sample_from_frequencies)
         # s(frequencies, jax.random.PRNGKey(69))
+
+    def test_cdf(self):
+        data = jnp.array([[0, 0, 0], [0, 5, 6], [2, 4, 6], [10, 10, 10]], dtype=jnp.float32)
+        cdf = self.product_layer.cdf_of_nodes(data)
+        self.assertEqual(cdf.shape, (4, 2))
+        result = jnp.array([[0, 0], [1., 0.], [0., 1], [1, 1]], dtype=jnp.float32)
+        self.assertTrue(jnp.allclose(cdf, result))
 
 
 if __name__ == '__main__':

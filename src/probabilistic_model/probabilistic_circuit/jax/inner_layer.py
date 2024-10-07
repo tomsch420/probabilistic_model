@@ -522,7 +522,7 @@ class ProductLayer(InnerLayer):
         return unique_values.sort()
 
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
-        result = jnp.zeros(self.number_of_nodes)
+        result = jnp.zeros(self.number_of_nodes,  dtype=jnp.float32)
 
         for edges, layer in zip(self.edges, self.child_layers):
             # calculate the log likelihood over the columns of the child layer
@@ -533,6 +533,21 @@ class ProductLayer(InnerLayer):
 
             # add the gathered values to the result where the edges define the indices
             result = result.at[edges.indices[:, 0]].add(ll)
+
+        return result
+
+    def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
+        result = jnp.ones(self.number_of_nodes, dtype=jnp.float32)
+
+        for edges, layer in zip(self.edges, self.child_layers):
+            # calculate the cdf over the columns of the child layer
+            cdf = layer.cdf_of_nodes_single(x[layer.variables])  # shape: #child_nodes
+
+            # gather the cdf at the indices of the nodes that are required for the edges
+            cdf = cdf[edges.data]  # shape: #len(edges.values())
+
+            # multiply the gathered values by the result where the edges define the indices
+            result = result.at[edges.indices[:, 0]].mul(cdf)
 
         return result
 
