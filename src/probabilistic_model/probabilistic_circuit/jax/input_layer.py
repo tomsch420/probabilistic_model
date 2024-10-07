@@ -123,3 +123,14 @@ class DiracDeltaLayer(ContinuousLayer):
 
     def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
         return jnp.where(x < self.location, 0., 1.)
+
+    def moment_of_nodes(self, order: jax.Array, center: jax.Array):
+        order = order[self.variables[0]]
+        center = center[self.variables[0]]
+        if order == 0:
+            result = jnp.ones(self.number_of_nodes)
+        elif order == 1:
+            result = self.location - center
+        else:
+            result = jnp.zeros(self.number_of_nodes)
+        return result.reshape(-1, 1)

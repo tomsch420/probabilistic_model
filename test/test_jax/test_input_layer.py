@@ -30,6 +30,14 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         result = jnp.array([[0, 0], [1, 0], [1, 1], [1, 1]], dtype=jnp.float32)
         self.assertTrue(jnp.allclose(cdf, result))
 
+    def test_moment(self):
+        order = jnp.array([1.], dtype=jnp.int32)
+        center = jnp.array([1.5], dtype=jnp.float32)
+        moment = self.layer.moment_of_nodes(order, center)
+        result = jnp.array([-1.5, -0.5], dtype=jnp.float32).reshape(-1, 1)
+        self.assertTrue(jnp.allclose(moment, result))
+
+
 
 if __name__ == '__main__':
     unittest.main()
