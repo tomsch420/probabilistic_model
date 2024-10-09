@@ -87,3 +87,14 @@ def sample_from_sparse_probabilities(log_probabilities: BCOO, amount: jax.Array,
 
     return BCOO((jnp.concatenate(all_samples), log_probabilities.indices), shape=log_probabilities.shape,
                 indices_sorted=True, unique_indices=True)
+
+
+def extraction_mask(reference_indices: jax.Array, extraction_indices: jax.Array) -> jax.Array:
+    """
+    Create a mask that represents for every element in the reference indices whether it is in the extraction indices.
+
+    :param reference_indices: The reference indices.
+    :param extraction_indices: The extraction indices.
+    :return: The mask.
+    """
+    return jnp.isin(reference_indices, extraction_indices)

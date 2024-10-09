@@ -64,9 +64,18 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [0., 0.,]]))
         assert jnp.allclose(ll, result)
 
-    def test_sampling(self):
+    def test_sampling_exact(self):
         frequencies = jnp.array([10, 5])
-        samples = self.sum_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(0))
+        samples = self.sum_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(0), approximate=False)
+        for index, sample_row in enumerate(samples):
+            sample_row = sample_row.sum_duplicates(remove_zeros=False).data
+            self.assertEqual(len(sample_row), frequencies[index])
+            likelihood = self.sum_layer.log_likelihood_of_nodes(sample_row)
+            self.assertTrue(all(likelihood[:, index] > -jnp.inf))
+
+    def test_sampling_approximate(self):
+        frequencies = jnp.array([10, 5])
+        samples = self.sum_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(0), approximate=True)
         for index, sample_row in enumerate(samples):
             sample_row = sample_row.sum_duplicates(remove_zeros=False).data
             self.assertEqual(len(sample_row), frequencies[index])
