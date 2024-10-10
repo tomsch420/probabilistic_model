@@ -1,8 +1,11 @@
 import jax.numpy as jnp
+import numpy as np
 from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import SimpleInterval, Bound
 import jax
+from scipy.sparse import csr_matrix
 from typing_extensions import Tuple
+
 
 
 def copy_bcoo(x: BCOO) -> BCOO:
@@ -111,21 +114,17 @@ def sample_from_sparse_probabilities_bcsr(log_probabilities: BCSR, bcoo_indices:
     :return: The samples that are drawn for each state in the probabilities indicies.
     """
     all_samples = []
-
+    log_probabilities = csr_matrix((log_probabilities.data, log_probabilities.indices, log_probabilities.indptr), shape=log_probabilities.shape)
     # iterate through every row of the sparse array
     for row_index, (start, end) in enumerate(zip(log_probabilities.indptr[:-1], log_probabilities.indptr[1:])):
-        # get the log-probabilities of the current row
         probability_row = log_probabilities.data[start:end]
+        samples = np.random.multinomial(amount[row_index].item(), pvals=probability_row)
+        all_samples.append(jnp.array(samples))
 
-        # sample from the log-probabilities
-        samples = jax.random.categorical(key, probability_row, shape=(amount[row_index].item(), ))
-        # count the frequencies of the samples
-        frequencies = jnp.zeros((probability_row.shape[0],), dtype=jnp.int32)
-        frequencies = frequencies.at[samples].add(1)
-        all_samples.append(frequencies)
+    result = BCOO((jnp.concatenate(all_samples), bcoo_indices), shape=log_probabilities.shape,
+                    indices_sorted=True, unique_indices=True)
 
-    return BCOO((jnp.concatenate(all_samples), bcoo_indices), shape=log_probabilities.shape,
-                indices_sorted=True, unique_indices=True)
+    return result
 
 
 def sample_from_sparse_probabilities(log_probabilities: BCOO, amount: jax.Array, key: jax.random.PRNGKey) -> BCOO:

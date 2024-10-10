@@ -96,7 +96,7 @@ def eval_performance(nx_method, nx_args,  jax_method, jax_args, number_of_iterat
 data = nx_model.sample(number_of_samples_for_evaluation)
 data_jax = jnp.array(data)
 # event = SimpleEvent(VariableMap({variable: closed(0, 1) for variable in variables}))
-#
+
 # with jax.profiler.trace("/tmp/jax-trace", create_perfetto_link=True):
 #     jax_model.sample(1000)
 

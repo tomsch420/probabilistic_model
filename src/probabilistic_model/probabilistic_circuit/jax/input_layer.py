@@ -3,12 +3,12 @@ from typing import List, Dict, Any
 
 import jax
 from jax import numpy as jnp
-from jax.experimental.sparse import BCOO
+from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import Interval
 from random_events.product_algebra import SimpleEvent
 from typing_extensions import Tuple, Type, Self
 
-from . import create_bcoo_indices_from_row_lengths
+from . import create_bcoo_indices_from_row_lengths, create_bcsr_indices_from_row_lengths
 from .inner_layer import InputLayer, NXConverterLayer
 from ..nx.distributions import DiracDeltaDistribution
 import equinox as eqx
@@ -130,6 +130,14 @@ class DiracDeltaLayer(ContinuousLayer):
         result_indices = create_bcoo_indices_from_row_lengths(frequencies)
         values = self.location.repeat(frequencies).reshape(-1, 1)
         result = BCOO((values, result_indices), shape=(self.number_of_nodes, max_frequency, 1),
+                      indices_sorted=True, unique_indices=True)
+        return result
+
+    def sample_from_frequencies_bcsr(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCSR:
+        max_frequency = jnp.max(frequencies)
+        column_indices, indent_pointer = create_bcsr_indices_from_row_lengths(frequencies)
+        values = self.location.repeat(frequencies).reshape(-1, 1)
+        result = BCSR((values, column_indices, indent_pointer), shape=(self.number_of_nodes, max_frequency, 1),
                       indices_sorted=True, unique_indices=True)
         return result
 

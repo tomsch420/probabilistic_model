@@ -4,6 +4,7 @@ import jax.random
 from jax.experimental.sparse import BCOO, BCSR
 import jax.numpy as jnp
 from sympy.physics.quantum.matrixutils import sparse
+from sympy.physics.units import amount
 
 from probabilistic_model.probabilistic_circuit.jax import embed_sparse_array_in_nan_array, \
     sample_from_sparse_probabilities_bcsr, create_bcsr_indices_from_row_lengths
@@ -64,6 +65,8 @@ class BCOOTestCase(unittest.TestCase):
         amounts = samples.sum(axis=1).todense()
         self.assertTrue(jnp.all(amounts == amount))
         self.assertTrue(jnp.all(samples.data <= 3))
+
+
 
 
 class IntervalConversionTestCase(unittest.TestCase):
