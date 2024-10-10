@@ -56,7 +56,6 @@ class BCOOTestCase(unittest.TestCase):
     def test_sample_from_sparse_probabilities_bcsr(self):
         probs = BCOO.fromdense(jnp.array([[0.1, 0.2, 0., .7],
                                           [0.4, 0., 0.6, 0.]]))
-        probs.data = jnp.log(probs.data)
         bcoo_indices = probs.indices
         probs = BCSR.from_bcoo(probs)
         amount = jnp.array([2, 3])

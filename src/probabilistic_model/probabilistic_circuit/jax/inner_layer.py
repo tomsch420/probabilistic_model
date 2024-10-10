@@ -529,7 +529,6 @@ class SumLayer(InnerLayer):
         clw = self.normalized_weights
         bcsr_weights = BCSR.from_bcoo(clw)
         return sample_from_sparse_probabilities_bcsr(bcsr_weights, clw.indices, frequencies, key)
-        return sample_from_sparse_probabilities(self.concatenated_log_weights, frequencies, key)
 
     def node_to_child_frequency_map_approximate(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
         """

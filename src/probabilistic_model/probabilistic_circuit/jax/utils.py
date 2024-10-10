@@ -102,27 +102,27 @@ def embed_sparse_array_in_nan_array(sparse_array: BCOO) -> jax.Array:
     result = result.at[sparse_array.indices[:, 0], sparse_array.indices[:, 1]].set(sparse_array.data)
     return result
 
-def sample_from_sparse_probabilities_bcsr(log_probabilities: BCSR, bcoo_indices: jax.Array, amount: jax.Array,
+def sample_from_sparse_probabilities_bcsr(probabilities: BCSR, bcoo_indices: jax.Array, amount: jax.Array,
                                           key: jax.random.PRNGKey) -> BCOO:
     """
     Sample from a sparse array of probabilities.
     Each row in the sparse array encodes a categorical probability distribution.
 
-    :param log_probabilities: The unnormalized sparse array of log-probabilities.
+    :param probabilities: The unnormalized sparse array of log-probabilities.
     :param amount:  The amount of samples to draw from each row.
     :param key: The random key.
     :return: The samples that are drawn for each state in the probabilities indicies.
     """
     all_samples = []
-    log_probabilities = csr_matrix((log_probabilities.data, log_probabilities.indices, log_probabilities.indptr), shape=log_probabilities.shape)
+    probabilities = csr_matrix((probabilities.data, probabilities.indices, probabilities.indptr), shape=probabilities.shape)
     # iterate through every row of the sparse array
-    for row_index, (start, end) in enumerate(zip(log_probabilities.indptr[:-1], log_probabilities.indptr[1:])):
-        probability_row = log_probabilities.data[start:end]
+    for row_index, (start, end) in enumerate(zip(probabilities.indptr[:-1], probabilities.indptr[1:])):
+        probability_row = probabilities.data[start:end]
         samples = np.random.multinomial(amount[row_index].item(), pvals=probability_row)
         all_samples.append(jnp.array(samples))
 
-    result = BCOO((jnp.concatenate(all_samples), bcoo_indices), shape=log_probabilities.shape,
-                    indices_sorted=True, unique_indices=True)
+    result = BCOO((jnp.concatenate(all_samples), bcoo_indices), shape=probabilities.shape,
+                  indices_sorted=True, unique_indices=True)
 
     return result
 
