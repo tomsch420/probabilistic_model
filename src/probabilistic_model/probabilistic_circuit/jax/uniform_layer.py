@@ -61,8 +61,6 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
 
         # create indices for the sparse result
         indices = create_sparse_array_indices_from_row_lengths(frequencies)
-        # indices = jnp.concatenate([indices, jnp.zeros((indices.shape[0], 1), dtype=jnp.int32)], axis=1)
-        # print(indices)
 
         # sample from U(0,1)
         standard_uniform_samples = jax.random.uniform(key, shape=(indices.shape[0], 1))
