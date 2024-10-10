@@ -1,11 +1,12 @@
 import unittest
 
 import jax.random
-from jax.experimental.sparse import BCOO
+from jax.experimental.sparse import BCOO, BCSR
 import jax.numpy as jnp
 from sympy.physics.quantum.matrixutils import sparse
 
-from probabilistic_model.probabilistic_circuit.jax import embed_sparse_array_in_nan_array
+from probabilistic_model.probabilistic_circuit.jax import embed_sparse_array_in_nan_array, \
+    sample_from_sparse_probabilities_bcsr
 from probabilistic_model.probabilistic_circuit.jax.utils import copy_bcoo, simple_interval_to_open_array, \
     create_sparse_array_indices_from_row_lengths, sample_from_sparse_probabilities
 from random_events.interval import SimpleInterval
@@ -39,6 +40,20 @@ class BCOOTestCase(unittest.TestCase):
         amounts = samples.sum(axis=1).todense()
         self.assertTrue(jnp.all(amounts == amount))
         self.assertTrue(jnp.all(samples.data <= 3))
+
+    def test_sample_from_sparse_probabilities_bcsr(self):
+        probs = BCOO.fromdense(jnp.array([[0.1, 0.2, 0., .7],
+                                          [0.4, 0., 0.6, 0.]]))
+        probs.data = jnp.log(probs.data)
+        bcoo_indices = probs.indices
+        probs = BCSR.from_bcoo(probs)
+        amount = jnp.array([2, 3])
+
+        samples = sample_from_sparse_probabilities_bcsr(probs, bcoo_indices, amount, jax.random.PRNGKey(69))
+        amounts = samples.sum(axis=1).todense()
+        self.assertTrue(jnp.all(amounts == amount))
+        self.assertTrue(jnp.all(samples.data <= 3))
+
 
 class IntervalConversionTestCase(unittest.TestCase):
 

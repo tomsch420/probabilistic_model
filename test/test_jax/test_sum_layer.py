@@ -1,11 +1,10 @@
 import unittest
 
-from jax.experimental.sparse import BCOO
+from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 import jax.numpy as jnp
-from triton.language import dtype
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
@@ -118,15 +117,21 @@ class NygaDistributionTestCase(unittest.TestCase):
 
     nx_model: NXProbabilisticCircuit
     jax_model: ProbabilisticCircuit
+    data: jax.Array
 
     @classmethod
     def setUpClass(cls):
-        data = jax.random.normal(jax.random.PRNGKey(69), (1000, 1))
+        cls.data = jax.random.normal(jax.random.PRNGKey(69), (1000, 1))
         model = NygaDistribution(Continuous("x"), min_samples_per_quantile=10)
-        model.fit(data)
+        model.fit(cls.data)
         cls.nx_model = model.probabilistic_circuit
         cls.jax_model = ProbabilisticCircuit.from_nx(cls.nx_model)
         cls.jax_model.root.validate()
+
+    def test_log_likelihood(self):
+        ll = self.jax_model.log_likelihood(self.data)
+        self.assertTrue(jnp.all(ll > -jnp.inf))
+
 
     def test_sampling(self):
         data = self.jax_model.sample(1000, jax.random.PRNGKey(69))

@@ -1,12 +1,16 @@
 import jax.numpy as jnp
-from jax.experimental.sparse import BCOO
+from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import SimpleInterval, Bound
 import jax
 from typing_extensions import Tuple
 
 
 def copy_bcoo(x: BCOO) -> BCOO:
-    return BCOO((x.data.copy(), x.indices.copy()), shape=x.shape, indices_sorted=x.indices_sorted,
+    return x.__class__((x.data.copy(), x.indices.copy()), shape=x.shape, indices_sorted=x.indices_sorted,
+                unique_indices=x.unique_indices)
+
+def copy_bcsr(x: BCSR) -> BCSR:
+    return x.__class__((x.data.copy(), x.indices.copy(), x.indptr.copy()), shape=x.shape, indices_sorted=x.indices_sorted,
                 unique_indices=x.unique_indices)
 
 def simple_interval_to_open_array(interval: SimpleInterval) -> jnp.array:
@@ -62,6 +66,34 @@ def embed_sparse_array_in_nan_array(sparse_array: BCOO) -> jax.Array:
     result = jnp.full(sparse_array.shape, jnp.nan, dtype=jnp.float32)
     result = result.at[sparse_array.indices[:, 0], sparse_array.indices[:, 1]].set(sparse_array.data)
     return result
+
+def sample_from_sparse_probabilities_bcsr(log_probabilities: BCSR, bcoo_indices: jax.Array, amount: jax.Array,
+                                          key: jax.random.PRNGKey) -> BCOO:
+    """
+    Sample from a sparse array of probabilities.
+    Each row in the sparse array encodes a categorical probability distribution.
+
+    :param log_probabilities: The unnormalized sparse array of log-probabilities.
+    :param amount:  The amount of samples to draw from each row.
+    :param key: The random key.
+    :return: The samples that are drawn for each state in the probabilities indicies.
+    """
+    all_samples = []
+
+    # iterate through every row of the sparse array
+    for row_index, (start, end) in enumerate(zip(log_probabilities.indptr[:-1], log_probabilities.indptr[1:])):
+        # get the log-probabilities of the current row
+        probability_row = log_probabilities.data[start:end]
+
+        # sample from the log-probabilities
+        samples = jax.random.categorical(key, probability_row, shape=(amount[row_index].item(), ))
+        # count the frequencies of the samples
+        frequencies = jnp.zeros((probability_row.shape[0],), dtype=jnp.int32)
+        frequencies = frequencies.at[samples].add(1)
+        all_samples.append(frequencies)
+
+    return BCOO((jnp.concatenate(all_samples), bcoo_indices), shape=log_probabilities.shape,
+                indices_sorted=True, unique_indices=True)
 
 
 def sample_from_sparse_probabilities(log_probabilities: BCOO, amount: jax.Array, key: jax.random.PRNGKey) -> BCOO:

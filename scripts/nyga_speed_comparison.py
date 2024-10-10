@@ -2,9 +2,10 @@ import json
 
 from random_events.interval import closed
 from random_events.product_algebra import VariableMap, SimpleEvent
+from random_events.variable import Continuous
 
 from probabilistic_model.learning.jpt.jpt import JPT
-from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
+from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
 import numpy as np
@@ -20,11 +21,9 @@ np.random.seed(69)
 
 
 # training
-number_of_variables = 5
-number_of_samples_per_component = 100000
+number_of_samples_per_component = 10000
 number_of_samples_for_evaluation = 5000
-number_of_components = 2
-min_samples_leaf = 0.0005
+number_of_components = 5
 min_samples_per_quantile = 10
 
 # performance evaluation
@@ -33,29 +32,24 @@ warmup_iterations = 10
 
 # model selection
 path_prefix = os.path.join(os.path.expanduser("~"), "Documents")
-nx_model_path = os.path.join(path_prefix, "nx_model.pm")
-jax_model_path = os.path.join(path_prefix, "jax_model.pm")
+nx_model_path = os.path.join(path_prefix, "nx_nyga.pm")
+jax_model_path = os.path.join(path_prefix, "jax_nyga.pm")
 load_from_disc = True
 save_to_disc = True
 
 
 data = []
 for component in tqdm.trange(number_of_components, desc="Generating data"):
-    mean = np.full(number_of_variables, component)
-    cov = np.random.uniform(0, 1, (number_of_variables, number_of_variables))
-    cov = np.dot(cov, cov.T)
-    samples = np.random.multivariate_normal(mean, cov, number_of_samples_per_component)
+    samples = np.random.normal(component, 1., (number_of_samples_per_component, 1))
     data.append(samples)
 
 data = np.concatenate(data, axis=0)
-df = pd.DataFrame(data, columns=[f"x_{i}" for i in range(number_of_variables)])
-
-variables = infer_variables_from_dataframe(df, min_samples_per_quantile=min_samples_per_quantile)
+variable = Continuous("x")
 
 # create models
 if not load_from_disc:
-    nx_model = JPT(variables, min_samples_leaf=min_samples_leaf)
-    nx_model.fit(df)
+    nx_model = NygaDistribution(variable, min_samples_per_quantile=min_samples_per_quantile)
+    nx_model.fit(data)
     nx_model = nx_model.probabilistic_circuit
     jax_model = ProbabilisticCircuit.from_nx(nx_model, True)
     if save_to_disc:
@@ -101,14 +95,16 @@ def eval_performance(nx_method, nx_args,  jax_method, jax_args, number_of_iterat
 
 data = nx_model.sample(number_of_samples_for_evaluation)
 data_jax = jnp.array(data)
-event = SimpleEvent(VariableMap({variable: closed(0, 1) for variable in variables}))
+# event = SimpleEvent(VariableMap({variable: closed(0, 1) for variable in variables}))
 #
 # with jax.profiler.trace("/tmp/jax-trace", create_perfetto_link=True):
 #     jax_model.sample(1000)
 
+compiled_sample = equinox.filter_jit(jax_model.sample)
+
 # times_nx, times_jax = eval_performance(nx_model.log_likelihood, (data, ), compiled_ll_jax, (data_jax, ), 20, 2)
 # times_nx, times_jax = eval_performance(prob_nx, event, prob_jax, event, 15, 10)
-times_nx, times_jax = eval_performance(nx_model.sample, (100, ), jax_model.sample, (100, ), 5, 2)
+times_nx, times_jax = eval_performance(nx_model.sample, (1000, ), compiled_sample, (1000, ), 10, 5)
 
 time_jax = np.mean(times_jax), np.std(times_jax)
 time_nx = np.mean(times_nx), np.std(times_nx)

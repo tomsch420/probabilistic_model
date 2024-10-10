@@ -10,7 +10,7 @@ import equinox as eqx
 import jax
 import tqdm
 from jax import numpy as jnp, tree_flatten
-from jax.experimental.sparse import BCOO, bcoo_concatenate
+from jax.experimental.sparse import BCOO, bcoo_concatenate, BCSR
 from jaxtyping import Int
 from networkx.algorithms.operators.binary import difference
 from random_events.product_algebra import SimpleEvent
@@ -18,7 +18,8 @@ from random_events.utils import recursive_subclasses, SubclassJSONSerializer
 from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional, Self
 
-from . import create_sparse_array_indices_from_row_lengths, embed_sparse_array_in_nan_array
+from . import create_sparse_array_indices_from_row_lengths, embed_sparse_array_in_nan_array, \
+    sample_from_sparse_probabilities_bcsr
 from .utils import copy_bcoo, sample_from_sparse_probabilities
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
 
@@ -455,7 +456,7 @@ class SumLayer(InnerLayer):
 
         return result / jnp.exp(self.log_normalization_constants.reshape(-1, 1))
 
-    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey, approximate=True):
+    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey, approximate=False):
 
         if not approximate:
             node_to_child_frequency_map = self.node_to_child_frequency_map_exact(frequencies, key)
@@ -520,6 +521,9 @@ class SumLayer(InnerLayer):
         :param key:
         :return:
         """
+        clw = self.concatenated_log_weights
+        bcsr_weights = BCSR.from_bcoo(clw)
+        return sample_from_sparse_probabilities_bcsr(bcsr_weights, clw.indices, frequencies, key)
         return sample_from_sparse_probabilities(self.concatenated_log_weights, frequencies, key)
 
     def node_to_child_frequency_map_approximate(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
@@ -694,6 +698,8 @@ class ProductLayer(InnerLayer):
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
 
         concatenated_samples_per_variable = [jnp.full((0, 1), jnp.nan) for _ in self.variables]
+
+        # edges_bcsr = BCSR.from_bcoo(self.edges)
 
         for edges, child_layer in zip(self.edges, self.child_layers):
             edges: BCOO = edges.sum_duplicates(remove_zeros=False)
