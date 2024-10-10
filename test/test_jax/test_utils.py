@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from sympy.physics.quantum.matrixutils import sparse
 
 from probabilistic_model.probabilistic_circuit.jax import embed_sparse_array_in_nan_array, \
-    sample_from_sparse_probabilities_bcsr
+    sample_from_sparse_probabilities_bcsr, create_bcsr_indices_from_row_lengths
 from probabilistic_model.probabilistic_circuit.jax.utils import copy_bcoo, simple_interval_to_open_array, \
     create_bcoo_indices_from_row_lengths, sample_from_sparse_probabilities
 from random_events.interval import SimpleInterval
@@ -29,6 +29,17 @@ class BCOOTestCase(unittest.TestCase):
         indices = create_bcoo_indices_from_row_lengths(row_lengths)
         result = jnp.array([[0,0],[0,1],[1, 0],[1, 1],[1, 2]])
         self.assertTrue(jnp.allclose(indices, result))
+
+    def test_create_bcsr_indices_from_row_lengths(self):
+        row_lengths = jnp.array([2, 3])
+        column_indices, indent_pointer = create_bcsr_indices_from_row_lengths(row_lengths)
+
+        bcsr = BCSR.fromdense(
+            jnp.array([[1, 1, 0], [1, 1, 1]])
+        )
+
+        self.assertTrue(jnp.allclose(bcsr.indices, column_indices))
+        self.assertTrue(jnp.allclose(bcsr.indptr, indent_pointer))
 
     def test_sample_from_sparse_probabilities(self):
         probs = BCOO.fromdense(jnp.array([[0.1, 0.2, 0., .7],

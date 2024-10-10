@@ -61,29 +61,21 @@ def create_bcoo_indices_from_row_lengths(row_lengths: jax.Array) -> jax.Array:
 
     return jnp.vstack([row_indices, col_indices]).T
 
-def create_bcsr_indices_from_row_lengths(row_lengths: jax.Array) -> jax.Array:
+def create_bcsr_indices_from_row_lengths(row_lengths: jax.Array) -> Tuple[jax.Array, jax.Array]:
     """
-    Create the indices of a sparse tensor with the given row lengths.
+    Create the column indices and indent pointer of bcsr array with the given row lengths.
 
-    The shape of the indices is (2, sum(row_lengths)).
     The shape of the sparse tensor that the indices describe should be (len(row_lengths), max(row_lengths)).
 
     Example::
 
         >>> row_lengths = jnp.array([2, 3])
-        >>> create_bcoo_indices_from_row_lengths(row_lengths)
-            [[0 0]
-             [0 1]
-             [1 0]
-             [1 1]
-             [1 2]]
+        >>> create_bcsr_indices_from_row_lengths(row_lengths)
+        (Array([0, 1, 0, 1, 2], dtype=int32), Array([0, 2, 5], dtype=int32))
 
     :param row_lengths: The row lengths.
     :return: The indices of the sparse tensor
     """
-
-    # create row indices
-    row_indices = jnp.repeat(jnp.arange(len(row_lengths)), row_lengths)
 
     # offset the row lengths by the one element
     offset_row_lengths = jnp.concatenate([jnp.array([0]), row_lengths[:-1]])
@@ -97,7 +89,9 @@ def create_bcsr_indices_from_row_lengths(row_lengths: jax.Array) -> jax.Array:
     # create the column indices
     col_indices = summed_row_lengths - cum_sum
 
-    return jnp.vstack([row_indices, col_indices]).T
+    indent_pointer = jnp.concatenate([jnp.array([0]), jnp.cumsum(row_lengths)])
+
+    return col_indices, indent_pointer
 
 
 def embed_sparse_array_in_nan_array(sparse_array: BCOO) -> jax.Array:
