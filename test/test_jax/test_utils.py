@@ -8,7 +8,7 @@ from sympy.physics.quantum.matrixutils import sparse
 from probabilistic_model.probabilistic_circuit.jax import embed_sparse_array_in_nan_array, \
     sample_from_sparse_probabilities_bcsr
 from probabilistic_model.probabilistic_circuit.jax.utils import copy_bcoo, simple_interval_to_open_array, \
-    create_sparse_array_indices_from_row_lengths, sample_from_sparse_probabilities
+    create_bcoo_indices_from_row_lengths, sample_from_sparse_probabilities
 from random_events.interval import SimpleInterval
 
 class BCOOTestCase(unittest.TestCase):
@@ -26,7 +26,7 @@ class BCOOTestCase(unittest.TestCase):
 
     def test_create_sparse_array_indices_from_row_lengths(self):
         row_lengths = jnp.array([2, 3])
-        indices = create_sparse_array_indices_from_row_lengths(row_lengths)
+        indices = create_bcoo_indices_from_row_lengths(row_lengths)
         result = jnp.array([[0,0],[0,1],[1, 0],[1, 1],[1, 2]])
         self.assertTrue(jnp.allclose(indices, result))
 

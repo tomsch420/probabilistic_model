@@ -8,7 +8,7 @@ from typing_extensions import Type, Tuple, Self
 from .inner_layer import NXConverterLayer
 from .input_layer import ContinuousLayerWithFiniteSupport
 from ..nx.distributions import UniformDistribution
-from .utils import simple_interval_to_open_array, create_sparse_array_indices_from_row_lengths
+from .utils import simple_interval_to_open_array, create_bcoo_indices_from_row_lengths
 import tqdm
 
 
@@ -60,7 +60,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         max_frequency = jnp.max(frequencies)
 
         # create indices for the sparse result
-        indices = create_sparse_array_indices_from_row_lengths(frequencies)
+        indices = create_bcoo_indices_from_row_lengths(frequencies)
 
         # sample from U(0,1)
         standard_uniform_samples = jax.random.uniform(key, shape=(indices.shape[0], 1))

@@ -8,7 +8,7 @@ from random_events.interval import Interval
 from random_events.product_algebra import SimpleEvent
 from typing_extensions import Tuple, Type, Self
 
-from . import create_sparse_array_indices_from_row_lengths
+from . import create_bcoo_indices_from_row_lengths
 from .inner_layer import InputLayer, NXConverterLayer
 from ..nx.distributions import DiracDeltaDistribution
 import equinox as eqx
@@ -127,7 +127,7 @@ class DiracDeltaLayer(ContinuousLayer):
 
     def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
         max_frequency = jnp.max(frequencies)
-        result_indices = create_sparse_array_indices_from_row_lengths(frequencies)
+        result_indices = create_bcoo_indices_from_row_lengths(frequencies)
         values = self.location.repeat(frequencies).reshape(-1, 1)
         result = BCOO((values, result_indices), shape=(self.number_of_nodes, max_frequency, 1),
                       indices_sorted=True, unique_indices=True)

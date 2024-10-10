@@ -18,7 +18,7 @@ from random_events.utils import recursive_subclasses, SubclassJSONSerializer
 from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional, Self
 
-from . import create_sparse_array_indices_from_row_lengths, embed_sparse_array_in_nan_array, \
+from . import create_bcoo_indices_from_row_lengths, embed_sparse_array_in_nan_array, \
     sample_from_sparse_probabilities_bcsr
 from .utils import copy_bcoo, sample_from_sparse_probabilities
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
@@ -270,7 +270,7 @@ class InnerLayer(Layer, ABC):
         # reorder the samples from the child layer
         samples_from_child_layer = samples_from_child_layer.data[arg_sorted_indices]
 
-        samples_of_block = BCOO((samples_from_child_layer, create_sparse_array_indices_from_row_lengths(frequencies)),
+        samples_of_block = BCOO((samples_from_child_layer, create_bcoo_indices_from_row_lengths(frequencies)),
                                 shape=(self.number_of_nodes, jnp.max(frequencies), len(child_layer.variables)),
                                 indices_sorted=True, unique_indices=True)
         return samples_of_block
@@ -488,12 +488,12 @@ class SumLayer(InnerLayer):
         if approximate:
             # calculate the real frequencies that were obtained be the approximate sampling
             real_frequencies = node_to_child_frequency_map.sum(1).todense().astype(jnp.int32)
-            real_indices = create_sparse_array_indices_from_row_lengths(real_frequencies)
+            real_indices = create_bcoo_indices_from_row_lengths(real_frequencies)
 
             max_real_frequency = jnp.max(real_frequencies)
 
             # calculate the desired indices for the result
-            desired_indices = create_sparse_array_indices_from_row_lengths(frequencies)
+            desired_indices = create_bcoo_indices_from_row_lengths(frequencies)
 
             # calculate the matching indices
             raveled_desired_indices = jnp.ravel_multi_index(desired_indices.T, (self.number_of_nodes, max_real_frequency))
@@ -505,7 +505,7 @@ class SumLayer(InnerLayer):
                           indices_sorted=True, unique_indices=True)
         else:
 
-            new_indices = create_sparse_array_indices_from_row_lengths(frequencies)
+            new_indices = create_bcoo_indices_from_row_lengths(frequencies)
             result = BCOO((catted_samples.data, new_indices),
                           shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
                           indices_sorted=True, unique_indices=True)
@@ -744,7 +744,7 @@ class ProductLayer(InnerLayer):
         #             jnp.concatenate((concatenated_samples_per_variable[column], current_samples.data[:, (column,)])))
 
         # assemble the result
-        result_indices = create_sparse_array_indices_from_row_lengths(frequencies)
+        result_indices = create_bcoo_indices_from_row_lengths(frequencies)
         result_values = jnp.concatenate(concatenated_samples_per_variable, axis=-1)
 
         result = BCOO((result_values, result_indices),
