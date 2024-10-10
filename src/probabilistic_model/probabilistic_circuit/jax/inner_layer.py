@@ -16,6 +16,7 @@ from jaxtyping import Int
 from networkx.algorithms.operators.binary import difference
 from random_events.product_algebra import SimpleEvent
 from random_events.utils import recursive_subclasses, SubclassJSONSerializer
+from scipy.sparse import coo_matrix, csr_matrix
 from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional, Self
 
@@ -462,12 +463,9 @@ class SumLayer(InnerLayer):
 
         return result / jnp.exp(self.log_normalization_constants.reshape(-1, 1))
 
-    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey, approximate=False):
+    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey):
 
-        if not approximate:
-            node_to_child_frequency_map = self.node_to_child_frequency_map_exact(frequencies, key)
-        else:
-            node_to_child_frequency_map = self.node_to_child_frequency_map_approximate(frequencies, key)
+        node_to_child_frequency_map = self.node_to_child_frequency_map_exact(frequencies, key)
 
         # offset for shifting through the frequencies of the node_to_child_frequency_map
         prev_column_index = 0
@@ -491,29 +489,10 @@ class SumLayer(InnerLayer):
         catted_samples = bcoo_concatenate(all_samples, dimension=1).sort_indices()
 
         # build result
-        if approximate:
-            # calculate the real frequencies that were obtained be the approximate sampling
-            real_frequencies = node_to_child_frequency_map.sum(1).todense().astype(jnp.int32)
-            real_indices = create_bcoo_indices_from_row_lengths(real_frequencies)
-
-            max_real_frequency = jnp.max(real_frequencies)
-
-            # calculate the desired indices for the result
-            desired_indices = create_bcoo_indices_from_row_lengths(frequencies)
-
-            # calculate the matching indices
-            raveled_desired_indices = jnp.ravel_multi_index(desired_indices.T, (self.number_of_nodes, max_real_frequency))
-            raveled_real_indices = jnp.ravel_multi_index(real_indices.T, (self.number_of_nodes, max_real_frequency))
-            matching_indices = jnp.isin(raveled_real_indices, raveled_desired_indices)
-
-            result = BCOO((catted_samples.data[matching_indices], desired_indices),
-                          shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
-                          indices_sorted=True, unique_indices=True)
-        else:
-            new_indices = create_bcoo_indices_from_row_lengths(frequencies)
-            result = BCOO((catted_samples.data, new_indices),
-                          shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
-                          indices_sorted=True, unique_indices=True)
+        new_indices = create_bcoo_indices_from_row_lengths(frequencies)
+        result = BCOO((catted_samples.data, new_indices),
+                      shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
+                      indices_sorted=True, unique_indices=True)
 
         return result
 
@@ -527,20 +506,8 @@ class SumLayer(InnerLayer):
         :return:
         """
         clw = self.normalized_weights
-        bcsr_weights = BCSR.from_bcoo(clw)
-        return sample_from_sparse_probabilities_bcsr(bcsr_weights, clw.indices, frequencies, key)
-
-    def node_to_child_frequency_map_approximate(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
-        """
-        Sample from the sum layer nodes by multiplying the normalized weights with the frequencies and then rounding
-        :param frequencies:
-        :param key:
-        :return:
-        """
-        weights = self.normalized_weights
-        node_to_child_frequency_map = weights * frequencies.reshape(-1, 1)
-        node_to_child_frequency_map.data = jnp.ceil(node_to_child_frequency_map.data).astype(jnp.int32)
-        return node_to_child_frequency_map
+        csr = coo_matrix((clw.data, clw.indices.T), shape=(clw.shape[0], clw.shape[1])).tocsr(copy=False)
+        return sample_from_sparse_probabilities_bcsr(csr, clw.indices, frequencies, key)
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]

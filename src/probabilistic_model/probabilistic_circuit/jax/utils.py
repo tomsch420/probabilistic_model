@@ -114,11 +114,10 @@ def sample_from_sparse_probabilities_bcsr(probabilities: BCSR, bcoo_indices: jax
     :return: The samples that are drawn for each state in the probabilities indicies.
     """
     all_samples = []
-    probabilities = csr_matrix((probabilities.data, probabilities.indices, probabilities.indptr), shape=probabilities.shape)
+    # probabilities = csr_matrix((probabilities.data, probabilities.indices, probabilities.indptr), shape=probabilities.shape)
     # iterate through every row of the sparse array
-    for row_index, (start, end) in enumerate(zip(probabilities.indptr[:-1], probabilities.indptr[1:])):
-        probability_row = probabilities.data[start:end]
-        samples = np.random.multinomial(amount[row_index].item(), pvals=probability_row)
+    for amount_, probability_row in zip(amount, probabilities):
+        samples = np.random.multinomial(amount_.item(), pvals=probability_row.data)
         all_samples.append(jnp.array(samples))
 
     result = BCOO((jnp.concatenate(all_samples), bcoo_indices), shape=probabilities.shape,

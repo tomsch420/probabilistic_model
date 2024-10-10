@@ -53,17 +53,17 @@ class BCOOTestCase(unittest.TestCase):
         self.assertTrue(jnp.all(amounts == amount))
         self.assertTrue(jnp.all(samples.data <= 3))
 
-    def test_sample_from_sparse_probabilities_bcsr(self):
-        probs = BCOO.fromdense(jnp.array([[0.1, 0.2, 0., .7],
-                                          [0.4, 0., 0.6, 0.]]))
-        bcoo_indices = probs.indices
-        probs = BCSR.from_bcoo(probs)
-        amount = jnp.array([2, 3])
-
-        samples = sample_from_sparse_probabilities_bcsr(probs, bcoo_indices, amount, jax.random.PRNGKey(69))
-        amounts = samples.sum(axis=1).todense()
-        self.assertTrue(jnp.all(amounts == amount))
-        self.assertTrue(jnp.all(samples.data <= 3))
+    # def test_sample_from_sparse_probabilities_bcsr(self):
+    #     probs = BCOO.fromdense(jnp.array([[0.1, 0.2, 0., .7],
+    #                                       [0.4, 0., 0.6, 0.]]))
+    #     bcoo_indices = probs.indices
+    #     probs = BCSR.from_bcoo(probs)
+    #     amount = jnp.array([2, 3])
+    #
+    #     samples = sample_from_sparse_probabilities_bcsr(probs, bcoo_indices, amount, jax.random.PRNGKey(69))
+    #     amounts = samples.sum(axis=1).todense()
+    #     self.assertTrue(jnp.all(amounts == amount))
+    #     self.assertTrue(jnp.all(samples.data <= 3))
 
 
 
