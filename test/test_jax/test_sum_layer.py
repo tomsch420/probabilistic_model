@@ -1,10 +1,12 @@
 import unittest
 
+import numpy as np
 from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 import jax.numpy as jnp
+from sortedcontainers import SortedSet
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
@@ -67,18 +69,9 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [0., 0.,]]))
         assert jnp.allclose(ll, result)
 
-    def test_sampling_exact(self):
+    def test_sampling(self):
         frequencies = jnp.array([10, 5])
-        samples = self.sum_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(0), approximate=False)
-        for index, sample_row in enumerate(samples):
-            sample_row = sample_row.sum_duplicates(remove_zeros=False).data
-            self.assertEqual(len(sample_row), frequencies[index])
-            likelihood = self.sum_layer.log_likelihood_of_nodes(sample_row)
-            self.assertTrue(all(likelihood[:, index] > -jnp.inf))
-
-    def test_sampling_approximate(self):
-        frequencies = jnp.array([10, 5])
-        samples = self.sum_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(0), approximate=True)
+        samples = self.sum_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(0))
         for index, sample_row in enumerate(samples):
             sample_row = sample_row.sum_duplicates(remove_zeros=False).data
             self.assertEqual(len(sample_row), frequencies[index])
@@ -111,6 +104,43 @@ class DiracSumUnitTestCase(unittest.TestCase):
         prob = self.sum_layer.probability_of_simple_event(event)
         result = jnp.array([0.7, 0.5], dtype=jnp.float32)
         self.assertTrue(jnp.allclose(result, prob))
+
+
+class PCSumUnitTestCase(unittest.TestCase):
+    x: Continuous = Continuous("x")
+
+    p1_x = DiracDeltaLayer(0, jnp.array([0., 1.]), jnp.array([1, 2]))
+    p2_x = DiracDeltaLayer(0,jnp.array([2.]), jnp.array([3]))
+    p3_x = DiracDeltaLayer(0, jnp.array([3., 4., 5.]), jnp.array([4, 5, 6]))
+    p4_x = DiracDeltaLayer(0, jnp.array([6.]), jnp.array([1]))
+    model: ProbabilisticCircuit
+
+    @classmethod
+    def setUpClass(cls):
+        weights_p1 = BCOO.fromdense(jnp.array([[0, 0.1]])) * 2
+        weights_p1.data = jnp.log(weights_p1.data)
+
+        weights_p2 = BCOO.fromdense(jnp.array([[0.2]])) * 2
+        weights_p2.data = jnp.log(weights_p2.data)
+
+        weights_p3 = BCOO.fromdense(jnp.array([[0.3, 0, 0.4]])) * 2
+        weights_p3.data = jnp.log(weights_p3.data)
+
+        weights_p4 = BCOO.fromdense(jnp.array([[0]])) * 2
+        weights_p4.data = jnp.log(weights_p4.data)
+
+        sum_layer = SumLayer([cls.p1_x, cls.p2_x, cls.p3_x, cls.p4_x],
+                                 log_weights=[weights_p1, weights_p2, weights_p3, weights_p4])
+        sum_layer.validate()
+        cls.model = ProbabilisticCircuit(SortedSet([cls.x]), sum_layer)
+
+    def test_sampling(self):
+        np.random.seed(69)
+        samples = self.model.sample2(10)
+        self.assertEqual(samples.shape, (10, 1))
+        result = np.array([2, 2, 2, 3, 3, 5, 5, 5, 5, 5]).reshape(-1, 1)
+        self.assertTrue(np.allclose(samples, result))
+
 
 
 class NygaDistributionTestCase(unittest.TestCase):

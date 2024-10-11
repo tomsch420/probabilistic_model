@@ -2,6 +2,7 @@ from abc import ABC
 from typing import List, Dict, Any
 
 import jax
+import numpy as np
 from jax import numpy as jnp
 from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import Interval
@@ -132,6 +133,10 @@ class DiracDeltaLayer(ContinuousLayer):
         result = BCOO((values, result_indices), shape=(self.number_of_nodes, max_frequency, 1),
                       indices_sorted=True, unique_indices=True)
         return result
+
+    def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
+        values = self.location.repeat(frequencies).reshape(-1, 1)
+        result[start_index:start_index + len(values), self.variables] = values
 
     def sample_from_frequencies_bcsr(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCSR:
         max_frequency = jnp.max(frequencies)

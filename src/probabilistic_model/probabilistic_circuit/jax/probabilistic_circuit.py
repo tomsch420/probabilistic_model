@@ -43,6 +43,11 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
     def sample(self, amount: int, key: jax.random.PRNGKey = jax.random.PRNGKey(69)) -> jax.Array:
         return self.root.sample_from_frequencies(np.array([amount]), key)[0].todense()
 
+    def sample2(self, amount: int) -> np.array:
+        result_array = np.full((amount, len(self.variables)), np.nan)
+        self.root.sample_from_frequencies2(np.array([amount]), result_array)
+        return result_array
+
     def probability_of_simple_event(self, event: SimpleEvent):
         return self.root.probability_of_simple_event(event)
 

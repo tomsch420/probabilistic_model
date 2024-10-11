@@ -95,6 +95,10 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         jax_ll = model.log_likelihood(samples)
         self.assertTrue((jax_ll > -jnp.inf).all())
 
+    def test_sample(self):
+        samples = self.jax_model.sample2(100)
+        ll = self.jax_model.log_likelihood(samples)
+        self.assertTrue((ll > -jnp.inf).all())
 
 class JPTIntegrationTestCase(unittest.TestCase):
     number_of_variables = 2

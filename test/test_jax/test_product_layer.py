@@ -2,16 +2,19 @@ import unittest
 
 import equinox
 import jax
+import numpy as np
 from jax.experimental.sparse import BCOO
 from numpy import dtype
 from random_events.interval import closed, singleton
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 import jax.numpy as jnp
+from sortedcontainers import SortedSet
 
 from probabilistic_model.probabilistic_circuit.jax import embed_sparse_array_in_nan_array
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import ProductLayer
+from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 
 
 class DiracProductTestCase(unittest.TestCase):
@@ -88,6 +91,35 @@ class DiracProductTestCase(unittest.TestCase):
         prob = self.product_layer.probability_of_simple_event(event)
         result = jnp.array([1, 0], dtype=jnp.float32)
         self.assertTrue(jnp.allclose(prob, result))
+
+
+class PCProductLayerTestCase(unittest.TestCase):
+
+    x = Continuous("x")
+    y = Continuous("y")
+    z = Continuous("z")
+
+    p1_x = DiracDeltaLayer(0, jnp.array([0., 1.]), jnp.array([1, 1]))
+    p2_x = DiracDeltaLayer(0, jnp.array([2., 3.]), jnp.array([1, 1]))
+    p_y = DiracDeltaLayer(1, jnp.array([4., 5.]), jnp.array([1, 1]))
+    p_z = DiracDeltaLayer(2, jnp.array([6.]), jnp.array([1]))
+    model: ProbabilisticCircuit
+
+    def setUp(self):
+        indices = jnp.array([[0, 0],
+                             [1, 0],
+                             [3, 0]])
+        values = jnp.array([0, 0, 1])
+        edges = BCOO((values, indices), shape=(4, 2)).sum_duplicates(remove_zeros=False).sort_indices()
+        product_layer = ProductLayer([self.p_z, self.p1_x, self.p2_x, self.p_y, ], edges)
+        self.model = ProbabilisticCircuit(SortedSet([self.x, self.y, self.z]), product_layer)
+
+    def test_sample(self):
+        samples = self.model.sample2(3)
+        result = np.array([[0, 5, 6],
+                            [0, 5, 6],
+                            [0, 5, 6]])
+        self.assertTrue(np.allclose(samples, result))
 
 
 if __name__ == '__main__':

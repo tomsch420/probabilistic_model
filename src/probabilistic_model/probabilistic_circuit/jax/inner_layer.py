@@ -187,6 +187,9 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
     def sample_from_frequencies(self, frequencies: np.array, key: jax.random.PRNGKey) -> BCOO:
         raise NotImplementedError
 
+    def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
+        raise NotImplementedError
+
     def moment_of_nodes(self, order: jax.Array, center: jax.Array):
         """
         Calculate the moment of the nodes.
@@ -265,6 +268,7 @@ class InnerLayer(Layer, ABC):
         # the node_ownership should contain the node index in this layer for each sample
         # Example: [1, 1, 0] means that the first two samples belong to node 1 and the last sample belongs to node 0.
         transposed_frequency_block = frequency_block.T# .sort_indices()
+        transposed_frequency_block.sum_duplicates()
 
         node_ownership = np.repeat(transposed_frequency_block.col, transposed_frequency_block.data)
 
@@ -497,6 +501,27 @@ class SumLayer(InnerLayer):
 
         return result
 
+    def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
+        node_to_child_frequency_map = self.node_to_child_frequency_map_csc(frequencies, None)
+
+        # offset for shifting through the frequencies of the node_to_child_frequency_map
+        prev_column_index = 0
+
+        consumed_indices = start_index
+
+        for child_layer in self.child_layers:
+
+            # extract the frequencies for the child layer
+            current_frequency_block = node_to_child_frequency_map[:,
+                                      prev_column_index:prev_column_index + child_layer.number_of_nodes]
+            frequencies_for_child_nodes = current_frequency_block.sum(0)
+            child_layer.sample_from_frequencies2(frequencies_for_child_nodes, result, consumed_indices)
+            consumed_indices += frequencies_for_child_nodes.sum()
+
+            # shift the offset
+            prev_column_index += child_layer.number_of_nodes
+
+
     def node_to_child_frequency_map(self, frequencies: jax.Array, key: jax.random.PRNGKey):
         """
         Sample from the exact distribution of the layer by interpreting every node as latent variable.
@@ -712,6 +737,20 @@ class ProductLayer(InnerLayer):
                       indices_sorted=True, unique_indices=True)
 
         return result
+
+    def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
+        edges_csr = BCSR.from_bcoo(self.edges)
+        for row_index, (start, end, child_layer) in enumerate(zip(edges_csr.indptr[:-1], edges_csr.indptr[1:], self.child_layers)):
+
+            # get the edges for the current child layer
+            row = edges_csr.data[start:end]
+            column_indices = edges_csr.indices[start:end]
+
+            frequencies_for_child_layer = np.zeros((child_layer.number_of_nodes,), dtype=np.int32)
+            frequencies_for_child_layer[row] = frequencies[column_indices]
+
+            child_layer.sample_from_frequencies2(frequencies_for_child_layer, result, start_index)
+
 
     def moment_of_nodes(self, order: jax.Array, center: jax.Array):
         result = jnp.full((self.number_of_nodes, self.variables.shape[0]), jnp.nan)
