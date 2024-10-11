@@ -3,7 +3,7 @@ import numpy as np
 from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import SimpleInterval, Bound
 import jax
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, csr_array, csc_array
 from typing_extensions import Tuple
 
 
@@ -26,7 +26,7 @@ def simple_interval_to_open_array(interval: SimpleInterval) -> jnp.array:
     return jnp.array([lower, upper])
 
 
-def create_bcoo_indices_from_row_lengths(row_lengths: jax.Array) -> jax.Array:
+def create_bcoo_indices_from_row_lengths(row_lengths: np.array) -> np.array:
     """
     Create the indices of a BCOO array with the given row lengths.
 
@@ -48,21 +48,60 @@ def create_bcoo_indices_from_row_lengths(row_lengths: jax.Array) -> jax.Array:
     """
 
     # create row indices
-    row_indices = jnp.repeat(jnp.arange(len(row_lengths)), row_lengths)
+    row_indices = np.repeat(np.arange(len(row_lengths)), row_lengths)
 
     # offset the row lengths by the one element
-    offset_row_lengths = jnp.concatenate([jnp.array([0]), row_lengths[:-1]])
+    offset_row_lengths = np.concatenate([jnp.array([0]), row_lengths[:-1]])
 
     # create a cumulative sum of the offset row lengths and offset it by the first row length
-    cum_sum = jnp.repeat(offset_row_lengths, row_lengths)
+    cum_sum = np.repeat(offset_row_lengths, row_lengths)
 
     # arrange column indices
-    summed_row_lengths = jnp.arange(row_lengths.sum())
+    summed_row_lengths = np.arange(row_lengths.sum())
 
     # create the column indices
     col_indices = summed_row_lengths - cum_sum
 
-    return jnp.vstack([row_indices, col_indices]).T
+    return np.vstack((row_indices, col_indices)).T
+
+def create_bcoo_indices_from_row_lengths_np(row_lengths: np.array) -> np.array:
+    """
+    Create the indices of a BCOO array with the given row lengths.
+
+    The shape of the indices is (2, sum(row_lengths)).
+    The shape of the sparse tensor that the indices describe should be (len(row_lengths), max(row_lengths)).
+
+    Example::
+
+        >>> row_lengths = jnp.array([2, 3])
+        >>> create_bcoo_indices_from_row_lengths(row_lengths)
+            [[0 0]
+             [0 1]
+             [1 0]
+             [1 1]
+             [1 2]]
+
+    :param row_lengths: The row lengths.
+    :return: The indices of the sparse tensor
+    """
+
+    # create row indices
+    row_indices = np.repeat(jnp.arange(len(row_lengths)), row_lengths)
+
+    # offset the row lengths by the one element
+    offset_row_lengths = np.concatenate([jnp.array([0]), row_lengths[:-1]])
+
+    # create a cumulative sum of the offset row lengths and offset it by the first row length
+    cum_sum = np.repeat(offset_row_lengths, row_lengths)
+
+    # arrange column indices
+    summed_row_lengths = np.arange(row_lengths.sum())
+
+    # create the column indices
+    col_indices = summed_row_lengths - cum_sum
+
+    return np.vstack((row_indices, col_indices))
+
 
 def create_bcsr_indices_from_row_lengths(row_lengths: jax.Array) -> Tuple[jax.Array, jax.Array]:
     """
@@ -124,6 +163,32 @@ def sample_from_sparse_probabilities_bcsr(probabilities: BCSR, bcoo_indices: jax
                   indices_sorted=True, unique_indices=True)
 
     return result
+
+
+def sample_from_sparse_probabilities_csc(probabilities: csr_array, bcoo_indices: jax.Array, amount: jax.Array,
+                                          key: jax.random.PRNGKey) -> csc_array:
+    """
+    Sample from a sparse array of probabilities.
+    Each row in the sparse array encodes a categorical probability distribution.
+
+    :param probabilities: The unnormalized sparse array of log-probabilities.
+    :param amount:  The amount of samples to draw from each row.
+    :param key: The random key.
+    :return: The samples that are drawn for each state in the probabilities indicies.
+    """
+    all_samples = []
+    # probabilities = csr_matrix((probabilities.data, probabilities.indices, probabilities.indptr), shape=probabilities.shape)
+    # iterate through every row of the sparse array
+    for amount_, probability_row in zip(amount, probabilities):
+        samples = np.random.multinomial(amount_.item(), pvals=probability_row.data)
+        all_samples.append(jnp.array(samples))
+
+    result = csr_array((np.concatenate(all_samples), probabilities.indices, probabilities.indptr),
+                       shape=probabilities.shape).tocsc(copy=False)
+
+    return result
+
+
 
 
 def sample_from_sparse_probabilities(log_probabilities: BCOO, amount: jax.Array, key: jax.random.PRNGKey) -> BCOO:

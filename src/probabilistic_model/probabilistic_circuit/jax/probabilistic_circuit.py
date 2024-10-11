@@ -3,6 +3,7 @@ from __future__ import annotations
 import collections
 from typing import Dict, Any
 
+import numpy as np
 from random_events.product_algebra import SimpleEvent
 from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable
@@ -40,7 +41,7 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
         return self.root.log_likelihood_of_nodes(x)[:, 0]
 
     def sample(self, amount: int, key: jax.random.PRNGKey = jax.random.PRNGKey(69)) -> jax.Array:
-        return self.root.sample_from_frequencies(jnp.array([amount]), key)[0].todense()
+        return self.root.sample_from_frequencies(np.array([amount]), key)[0].todense()
 
     def probability_of_simple_event(self, event: SimpleEvent):
         return self.root.probability_of_simple_event(event)

@@ -76,3 +76,18 @@ def timeit(func):
 
     return timeit_wrapper
 
+def timeit_print(func):
+
+    @wraps(func)
+    def timeit_print_wrapper(*args, **kwargs):
+        self = args[0]
+        start_time = time.perf_counter_ns()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter_ns()
+
+        total_time = end_time - start_time
+        total_time = datetime.timedelta(microseconds=total_time/1000)
+        print(f"{func.__qualname__} with variables {self.variables} took : {total_time}")
+        return result
+
+    return timeit_print_wrapper

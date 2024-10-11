@@ -108,7 +108,7 @@ event = SimpleEvent(VariableMap({variable: closed(0, 1) for variable in variable
 
 # times_nx, times_jax = eval_performance(nx_model.log_likelihood, (data, ), compiled_ll_jax, (data_jax, ), 20, 2)
 # times_nx, times_jax = eval_performance(prob_nx, event, prob_jax, event, 15, 10)
-times_nx, times_jax = eval_performance(nx_model.sample, (100, ), jax_model.sample, (100, ), 5, 2)
+times_nx, times_jax = eval_performance(nx_model.sample, (100, ), jax_model.sample, (100, ), 1, 0)
 
 time_jax = np.mean(times_jax), np.std(times_jax)
 time_nx = np.mean(times_nx), np.std(times_nx)
