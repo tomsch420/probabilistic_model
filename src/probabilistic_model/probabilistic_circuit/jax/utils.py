@@ -142,24 +142,19 @@ def embed_sparse_array_in_nan_array(sparse_array: BCOO) -> jax.Array:
     result = result.at[sparse_array.indices[:, 0], sparse_array.indices[:, 1]].set(sparse_array.data)
     return result
 
-@timeit_print
+
 def sample_from_sparse_probabilities_csc(probabilities: csr_array, amount: np.array) -> csc_array:
     """
     Sample from a sparse array of probabilities.
     Each row in the sparse array encodes a categorical probability distribution.
 
-    :param probabilities: The unnormalized sparse array of log-probabilities.
-    :param amount:  The amount of samples to draw from each row.
-    :param key: The random key.
+    :param probabilities: The sparse array of probabilities.
+    :param amount: The amount of samples to draw from each row.
     :return: The samples that are drawn for each state in the probabilities indicies.
     """
-    all_samples = []
-    # iterate through every row of the sparse array
-    for amount_, probability_row in zip(amount, probabilities):
-        samples = np.random.multinomial(amount_.item(), pvals=probability_row.data)
-        all_samples.append(jnp.array(samples))
 
-    result = csr_array((np.concatenate(all_samples), probabilities.indices, probabilities.indptr),
+    all_samples = np.concatenate([np.random.multinomial(amount_.item(), pvals=probability_row.data) for amount_, probability_row in zip(amount, probabilities)], axis=0)
+    result = csr_array((all_samples, probabilities.indices, probabilities.indptr),
                        shape=probabilities.shape).tocsc(copy=False)
 
     return result

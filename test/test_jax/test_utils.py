@@ -2,12 +2,14 @@ import unittest
 
 import jax.numpy as jnp
 import jax.random
+import numpy as np
 from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import SimpleInterval
+from scipy.sparse import coo_array
 
 from probabilistic_model.probabilistic_circuit.jax import create_bcsr_indices_from_row_lengths
 from probabilistic_model.probabilistic_circuit.jax.utils import copy_bcoo, simple_interval_to_open_array, \
-    create_bcoo_indices_from_row_lengths
+    create_bcoo_indices_from_row_lengths, sample_from_sparse_probabilities_csc
 
 
 class BCOOTestCase(unittest.TestCase):
@@ -40,28 +42,16 @@ class BCOOTestCase(unittest.TestCase):
         self.assertTrue(jnp.allclose(bcsr.indices, column_indices))
         self.assertTrue(jnp.allclose(bcsr.indptr, indent_pointer))
 
-    def test_sample_from_sparse_probabilities(self):
-        probs = BCOO.fromdense(jnp.array([[0.1, 0.2, 0., .7],
-                                          [0.4, 0., 0.6, 0.]]))
-        probs.data = jnp.log(probs.data)
+    def test_sample_from_sparse_probabilities_csc(self):
+        probs = coo_array(np.array([[0.1, 0.2, 0., .7],
+                                          [0.4, 0., 0.6, 0.]])).tocsr()
         amount = jnp.array([2, 3])
 
-        samples = sample_from_sparse_probabilities(probs, amount, jax.random.PRNGKey(69))
-        amounts = samples.sum(axis=1).todense()
-        self.assertTrue(jnp.all(amounts == amount))
-        self.assertTrue(jnp.all(samples.data <= 3))
+        samples = sample_from_sparse_probabilities_csc(probs, amount)
 
-    # def test_sample_from_sparse_probabilities_bcsr(self):
-    #     probs = BCOO.fromdense(jnp.array([[0.1, 0.2, 0., .7],
-    #                                       [0.4, 0., 0.6, 0.]]))
-    #     bcoo_indices = probs.indices
-    #     probs = BCSR.from_bcoo(probs)
-    #     amount = jnp.array([2, 3])
-    #
-    #     samples = sample_from_sparse_probabilities_bcsr(probs, bcoo_indices, amount, jax.random.PRNGKey(69))
-    #     amounts = samples.sum(axis=1).todense()
-    #     self.assertTrue(jnp.all(amounts == amount))
-    #     self.assertTrue(jnp.all(samples.data <= 3))
+        amounts = samples.sum(axis=1)
+        self.assertTrue(np.all(amounts == amount))
+        self.assertTrue(np.all(samples.data <= 3))
 
 
 class IntervalConversionTestCase(unittest.TestCase):
