@@ -432,7 +432,7 @@ class SumLayer(InnerLayer):
             current_frequency_block = node_to_child_frequency_map[:,
                                       prev_column_index:prev_column_index + child_layer.number_of_nodes]
             frequencies_for_child_nodes = current_frequency_block.sum(0)
-            child_layer.sample_from_frequencies2(frequencies_for_child_nodes, result, consumed_indices)
+            child_layer.sample_from_frequencies(frequencies_for_child_nodes, result, consumed_indices)
             consumed_indices += frequencies_for_child_nodes.sum()
 
             # shift the offset
