@@ -98,7 +98,7 @@ class PCProductLayerTestCase(unittest.TestCase):
         self.model = ProbabilisticCircuit(SortedSet([self.x, self.y, self.z]), product_layer)
 
     def test_sample(self):
-        samples = self.model.sample2(3)
+        samples = self.model.sample(3)
         result = np.array([[0, 5, 6],
                             [0, 5, 6],
                             [0, 5, 6]])

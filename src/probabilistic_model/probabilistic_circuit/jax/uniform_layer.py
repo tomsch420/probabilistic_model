@@ -57,7 +57,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         result = cls(nodes[0].probabilistic_circuit.variables.index(variable), intervals)
         return NXConverterLayer(result, nodes, hash_remap)
 
-    def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
         # sample from U(0,1)
         standard_uniform_samples = np.random.uniform(size=(sum(frequencies), 1))
 

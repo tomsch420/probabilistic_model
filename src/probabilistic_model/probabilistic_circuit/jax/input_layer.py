@@ -126,7 +126,7 @@ class DiracDeltaLayer(ContinuousLayer):
         result = cls(nodes[0].probabilistic_circuit.variables.index(nodes[0].variable), locations, density_caps)
         return NXConverterLayer(result, nodes, hash_remap)
 
-    def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
         values = self.location.repeat(frequencies).reshape(-1, 1)
         result[start_index:start_index + len(values), self.variables] = values
 

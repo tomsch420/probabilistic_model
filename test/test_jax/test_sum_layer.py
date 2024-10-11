@@ -127,7 +127,7 @@ class PCSumUnitTestCase(unittest.TestCase):
 
     def test_sampling(self):
         np.random.seed(69)
-        samples = self.model.sample2(10)
+        samples = self.model.sample(10)
         self.assertEqual(samples.shape, (10, 1))
         result = np.array([2, 2, 2, 3, 3, 5, 5, 5, 5, 5]).reshape(-1, 1)
         self.assertTrue(np.allclose(samples, result))

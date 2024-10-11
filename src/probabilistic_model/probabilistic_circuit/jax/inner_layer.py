@@ -184,7 +184,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         number_of_parameters = sum([len(p) for p in flattened_parameters])
         return number_of_parameters
 
-    def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
         raise NotImplementedError
 
     def moment_of_nodes(self, order: jax.Array, center: jax.Array):
@@ -418,7 +418,7 @@ class SumLayer(InnerLayer):
 
         return result / jnp.exp(self.log_normalization_constants.reshape(-1, 1))
 
-    def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
         node_to_child_frequency_map = self.node_to_child_frequency_map_csc(frequencies, None)
 
         # offset for shifting through the frequencies of the node_to_child_frequency_map
@@ -622,7 +622,7 @@ class ProductLayer(InnerLayer):
 
         return result
 
-    def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
         edges_csr = BCSR.from_bcoo(self.edges)
         for row_index, (start, end, child_layer) in enumerate(zip(edges_csr.indptr[:-1], edges_csr.indptr[1:], self.child_layers)):
 
@@ -633,7 +633,7 @@ class ProductLayer(InnerLayer):
             frequencies_for_child_layer = np.zeros((child_layer.number_of_nodes,), dtype=np.int32)
             frequencies_for_child_layer[row] = frequencies[column_indices]
 
-            child_layer.sample_from_frequencies2(frequencies_for_child_layer, result, start_index)
+            child_layer.sample_from_frequencies(frequencies_for_child_layer, result, start_index)
 
     def moment_of_nodes(self, order: jax.Array, center: jax.Array):
         result = jnp.full((self.number_of_nodes, self.variables.shape[0]), jnp.nan)
