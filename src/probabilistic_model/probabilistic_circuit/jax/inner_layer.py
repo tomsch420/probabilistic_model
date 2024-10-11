@@ -17,7 +17,7 @@ from random_events.product_algebra import SimpleEvent
 from random_events.utils import recursive_subclasses, SubclassJSONSerializer
 from scipy.sparse import coo_matrix, coo_array
 from sortedcontainers import SortedSet
-from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Self
+from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Self, Optional
 
 from .utils import copy_bcoo, sample_from_sparse_probabilities_csc
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
@@ -125,6 +125,23 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         :return: The tuple of matching classes of the layer in the probabilistic_model.probabilistic_circuit.nx package.
         """
         return tuple()
+
+    @property
+    def impossible_condition_result(self) -> Tuple[None, jax.Array]:
+        """
+        :return: The result that a layer yields if it is conditioned on an event E with P(E) = 0
+        """
+        return None, jnp.full((self.number_of_nodes,), -jnp.inf, dtype=jnp.float32)
+
+    def log_conditional_of_simple_event(self, event: SimpleEvent, ) -> Tuple[Optional[Self], jax.Array]:
+        """
+        Calculate the conditional probability distribution given a simple event P(X|E).
+        Also return the log probability of E log(P(E)).
+
+        :param event: The event to calculate the conditional distribution for.
+        :return: The conditional distribution and the log probability of the event.
+        """
+        raise NotImplementedError
 
     @staticmethod
     def create_layers_from_nodes(nodes: List[ProbabilisticCircuitMixin], child_layers: List[NXConverterLayer],

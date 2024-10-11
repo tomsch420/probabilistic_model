@@ -152,9 +152,7 @@ def sample_from_sparse_probabilities_csc(probabilities: csr_array, amount: np.ar
     :param amount: The amount of samples to draw from each row.
     :return: The samples that are drawn for each state in the probabilities indicies.
     """
-
     all_samples = np.concatenate([np.random.multinomial(amount_.item(), pvals=probability_row.data) for amount_, probability_row in zip(amount, probabilities)], axis=0)
     result = csr_array((all_samples, probabilities.indices, probabilities.indptr),
                        shape=probabilities.shape).tocsc(copy=False)
-
     return result
