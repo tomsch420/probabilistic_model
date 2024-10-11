@@ -126,25 +126,9 @@ class DiracDeltaLayer(ContinuousLayer):
         result = cls(nodes[0].probabilistic_circuit.variables.index(nodes[0].variable), locations, density_caps)
         return NXConverterLayer(result, nodes, hash_remap)
 
-    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCOO:
-        max_frequency = jnp.max(frequencies)
-        result_indices = create_bcoo_indices_from_row_lengths(frequencies)
-        values = self.location.repeat(frequencies).reshape(-1, 1)
-        result = BCOO((values, result_indices), shape=(self.number_of_nodes, max_frequency, 1),
-                      indices_sorted=True, unique_indices=True)
-        return result
-
     def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
         values = self.location.repeat(frequencies).reshape(-1, 1)
         result[start_index:start_index + len(values), self.variables] = values
-
-    def sample_from_frequencies_bcsr(self, frequencies: jax.Array, key: jax.random.PRNGKey) -> BCSR:
-        max_frequency = jnp.max(frequencies)
-        column_indices, indent_pointer = create_bcsr_indices_from_row_lengths(frequencies)
-        values = self.location.repeat(frequencies).reshape(-1, 1)
-        result = BCSR((values, column_indices, indent_pointer), shape=(self.number_of_nodes, max_frequency, 1),
-                      indices_sorted=True, unique_indices=True)
-        return result
 
     def cdf_of_nodes_single(self, x: jnp.array) -> jnp.array:
         return jnp.where(x < self.location, 0., 1.)

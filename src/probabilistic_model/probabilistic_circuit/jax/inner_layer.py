@@ -184,9 +184,6 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         number_of_parameters = sum([len(p) for p in flattened_parameters])
         return number_of_parameters
 
-    def sample_from_frequencies(self, frequencies: np.array, key: jax.random.PRNGKey) -> BCOO:
-        raise NotImplementedError
-
     def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
         raise NotImplementedError
 
@@ -239,53 +236,6 @@ class InnerLayer(Layer, ABC):
         for child_layer in self.child_layers:
             result.extend(child_layer.all_layers_with_depth(depth + 1))
         return result
-
-    def sample_from_frequency_block(self, frequency_block: coo_array, child_layer: Layer,
-                                    key: jax.random.PRNGKey) -> Optional[BCOO]:
-        """
-        Get the samples from the frequency-block of the child layer.
-
-        :param frequency_block: A parse tensor that maps the nodes of this layer to the frequencies of the
-        child layer nodes. An element at position (i, j) describes that node i of this layer request
-        frequency_block[i, j] many samples from the child node j.
-        :param child_layer: The child layer to sample from.
-        :param key: The random key to use for sampling.
-        :return: The samples for this layer.
-        The result is a sparse matrix with shape (#nodes, max(frequency_block.sum(1)), #childer_layer.variables).
-        The result is None if no samples are requested.
-        """
-
-        # calculate the total number of samples requested for each node of the child layer
-        frequencies_for_child_nodes = frequency_block.sum(0)
-
-        if np.all(frequencies_for_child_nodes == 0):
-            return None
-
-        # calculate total samples requested for each node of this layer
-        frequencies = frequency_block.sum(1)
-
-        # calculate the row (node) in this layer the samples in samples_from_child_layer.values() belong to.
-        # the node_ownership should contain the node index in this layer for each sample
-        # Example: [1, 1, 0] means that the first two samples belong to node 1 and the last sample belongs to node 0.
-        transposed_frequency_block = frequency_block.T# .sort_indices()
-        transposed_frequency_block.sum_duplicates()
-
-        node_ownership = np.repeat(transposed_frequency_block.col, transposed_frequency_block.data)
-
-        # sample the child layer
-        samples_from_child_layer = child_layer.sample_from_frequencies(frequencies_for_child_nodes, key)
-
-        # arg-sort the node ownership to get the indices of the samples in the correct order
-        arg_sorted_indices = np.argsort(node_ownership)
-
-        # reorder the samples from the child layer
-        samples_from_child_layer = samples_from_child_layer.data[arg_sorted_indices]
-
-        samples_of_block = BCOO((samples_from_child_layer, create_bcoo_indices_from_row_lengths(frequencies)),
-                                shape=(self.number_of_nodes, jnp.max(frequencies), len(child_layer.variables)),
-                                indices_sorted=True, unique_indices=True)
-
-        return samples_of_block
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
@@ -467,39 +417,6 @@ class SumLayer(InnerLayer):
             result += moment
 
         return result / jnp.exp(self.log_normalization_constants.reshape(-1, 1))
-
-    def sample_from_frequencies(self, frequencies: jax.Array, key: jax.random.PRNGKey):
-
-        node_to_child_frequency_map = self.node_to_child_frequency_map_csc(frequencies, key)
-
-        # offset for shifting through the frequencies of the node_to_child_frequency_map
-        prev_column_index = 0
-
-        all_samples = []
-
-        for child_layer in self.child_layers:
-
-            # extract the frequencies for the child layer
-            current_frequency_block = node_to_child_frequency_map[:,
-                                      prev_column_index:prev_column_index + child_layer.number_of_nodes]
-            samples = self.sample_from_frequency_block(current_frequency_block.tocoo(copy=False), child_layer, key)
-
-            if samples is not None:
-                all_samples.append(samples)
-
-            # shift the offset
-            prev_column_index += child_layer.number_of_nodes
-
-        # concatenate the samples
-        catted_samples = bcoo_concatenate(all_samples, dimension=1).sort_indices()
-
-        # build result
-        new_indices = create_bcoo_indices_from_row_lengths(frequencies)
-        result = BCOO((catted_samples.data, new_indices),
-                      shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
-                      indices_sorted=True, unique_indices=True)
-
-        return result
 
     def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
         node_to_child_frequency_map = self.node_to_child_frequency_map_csc(frequencies, None)
@@ -705,39 +622,6 @@ class ProductLayer(InnerLayer):
 
         return result
 
-    def sample_from_frequencies(self, frequencies: np.array, key: jax.random.PRNGKey) -> BCOO:
-        concatenated_samples_per_variable = [jnp.full((0, 1), jnp.nan) for _ in self.variables]
-        edges_csr = BCSR.from_bcoo(self.edges)
-        for row_index, (start, end, child_layer) in enumerate(zip(edges_csr.indptr[:-1], edges_csr.indptr[1:], self.child_layers)):
-
-            # get the log-probabilities of the current row
-            row = edges_csr.data[start:end]
-            column_indices = edges_csr.indices[start:end]
-            frequencies_for_child_layer = coo_array(
-                (frequencies[column_indices], jnp.array([column_indices, row])),
-                        shape=(self.number_of_nodes, child_layer.number_of_nodes))
-
-            # sample from the child layer
-            current_samples = self.sample_from_frequency_block(frequencies_for_child_layer, child_layer, key)
-
-            if current_samples is None:
-                continue
-
-            # write samples in the correct columns for the result
-            for column in child_layer.variables:
-                concatenated_samples_per_variable[column] = (
-                    jnp.concatenate((concatenated_samples_per_variable[column], current_samples.data[:, (column,)])))
-
-        # assemble the result
-        result_indices = create_bcoo_indices_from_row_lengths(frequencies)
-        result_values = jnp.concatenate(concatenated_samples_per_variable, axis=-1)
-
-        result = BCOO((result_values, result_indices),
-                      shape=(self.number_of_nodes, jnp.max(frequencies), len(self.variables)),
-                      indices_sorted=True, unique_indices=True)
-
-        return result
-
     def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
         edges_csr = BCSR.from_bcoo(self.edges)
         for row_index, (start, end, child_layer) in enumerate(zip(edges_csr.indptr[:-1], edges_csr.indptr[1:], self.child_layers)):
@@ -750,7 +634,6 @@ class ProductLayer(InnerLayer):
             frequencies_for_child_layer[row] = frequencies[column_indices]
 
             child_layer.sample_from_frequencies2(frequencies_for_child_layer, result, start_index)
-
 
     def moment_of_nodes(self, order: jax.Array, center: jax.Array):
         result = jnp.full((self.number_of_nodes, self.variables.shape[0]), jnp.nan)

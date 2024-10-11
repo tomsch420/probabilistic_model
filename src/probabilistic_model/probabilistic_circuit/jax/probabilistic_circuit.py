@@ -40,9 +40,6 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
     def log_likelihood(self, x: jax.Array) -> jax.Array:
         return self.root.log_likelihood_of_nodes(x)[:, 0]
 
-    def sample(self, amount: int, key: jax.random.PRNGKey = jax.random.PRNGKey(69)) -> jax.Array:
-        return self.root.sample_from_frequencies(np.array([amount]), key)[0].todense()
-
     def sample2(self, amount: int) -> np.array:
         result_array = np.full((amount, len(self.variables)), np.nan)
         self.root.sample_from_frequencies2(np.array([amount]), result_array)

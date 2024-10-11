@@ -91,7 +91,7 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
     def test_serialization(self):
         json = self.jax_model.to_json()
         model = ProbabilisticCircuit.from_json(json)
-        samples = model.sample(1000)
+        samples = model.sample2(1000)
         jax_ll = model.log_likelihood(samples)
         self.assertTrue((jax_ll > -jnp.inf).all())
 

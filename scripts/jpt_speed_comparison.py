@@ -106,9 +106,13 @@ event = SimpleEvent(VariableMap({variable: closed(0, 1) for variable in variable
 # with jax.profiler.trace("/tmp/jax-trace", create_perfetto_link=True):
 #     jax_model.sample(1000)
 
+# samples = jax_model.sample(1000)
+# ll = jax_model.log_likelihood(samples)
+# assert (ll > -jnp.inf).all()
+
 # times_nx, times_jax = eval_performance(nx_model.log_likelihood, (data, ), compiled_ll_jax, (data_jax, ), 20, 2)
 # times_nx, times_jax = eval_performance(prob_nx, event, prob_jax, event, 15, 10)
-times_nx, times_jax = eval_performance(nx_model.sample, (100, ), jax_model.sample2, (100, ), 1, 0)
+times_nx, times_jax = eval_performance(nx_model.sample, (100, ), jax_model.sample2, (100, ), 4, 2)
 
 time_jax = np.mean(times_jax), np.std(times_jax)
 time_nx = np.mean(times_nx), np.std(times_nx)

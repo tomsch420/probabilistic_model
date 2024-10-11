@@ -53,23 +53,6 @@ class DiracProductTestCase(unittest.TestCase):
         self.assertTrue(likelihood[0, 1] == -jnp.inf)
         self.assertTrue(likelihood[1, 0] == -jnp.inf)
 
-    def test_sample_from_frequencies(self):
-        frequencies = jnp.array([5, 3])
-
-        samples = self.product_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(69))
-
-        samples_n0 = samples[0].todense()
-        samples_n1 = samples[1].todense()
-
-        self.assertEqual(samples_n0.shape, (5, 3))
-        self.assertEqual(samples_n1.shape, (5, 3))
-        self.assertTrue(jnp.all(samples_n1[3:] == 0))
-        self.assertTrue(jnp.all(samples_n0 == jnp.array([0, 5 ,6])))
-        self.assertTrue(jnp.all(samples_n1[:3] == jnp.array([2, 4 ,6])))
-
-        # s = equinox.filter_jit(self.product_layer.sample_from_frequencies)
-        # s(frequencies, jax.random.PRNGKey(69))
-
     def test_cdf(self):
         data = jnp.array([[0, 0, 0], [0, 5, 6], [2, 4, 6], [10, 10, 10]], dtype=jnp.float32)
         cdf = self.product_layer.cdf_of_nodes(data)

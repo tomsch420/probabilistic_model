@@ -57,28 +57,6 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         result = cls(nodes[0].probabilistic_circuit.variables.index(variable), intervals)
         return NXConverterLayer(result, nodes, hash_remap)
 
-    def sample_from_frequencies(self, frequencies: np.array, key: jax.random.PRNGKey) -> BCOO:
-        max_frequency = np.max(frequencies)
-
-        # create indices for the sparse result
-        indices = create_bcoo_indices_from_row_lengths(frequencies)
-
-        # sample from U(0,1)
-        standard_uniform_samples = np.random.uniform(size=(indices.shape[0], 1))
-
-        # calculate range for each node
-        range_per_sample = (self.upper - self.lower).repeat(frequencies).reshape(-1, 1)
-
-        # calculate the right shift for each node
-        right_shift_per_sample = self.lower.repeat(frequencies).reshape(-1, 1)
-
-        # apply the transformation to the desired intervals
-        samples = standard_uniform_samples * range_per_sample + right_shift_per_sample
-
-        result = BCOO((samples, indices), shape=(self.number_of_nodes, max_frequency, 1), indices_sorted=True,
-                      unique_indices=True)
-        return result
-
     def sample_from_frequencies2(self, frequencies: np.array, result: np.array, start_index = 0):
         # sample from U(0,1)
         standard_uniform_samples = np.random.uniform(size=(sum(frequencies), 1))

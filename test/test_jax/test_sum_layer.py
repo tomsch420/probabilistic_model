@@ -69,15 +69,6 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [0., 0.,]]))
         assert jnp.allclose(ll, result)
 
-    def test_sampling(self):
-        frequencies = jnp.array([10, 5])
-        samples = self.sum_layer.sample_from_frequencies(frequencies, jax.random.PRNGKey(0))
-        for index, sample_row in enumerate(samples):
-            sample_row = sample_row.sum_duplicates(remove_zeros=False).data
-            self.assertEqual(len(sample_row), frequencies[index])
-            likelihood = self.sum_layer.log_likelihood_of_nodes(sample_row)
-            self.assertTrue(all(likelihood[:, index] > -jnp.inf))
-
     def test_cdf(self):
         data = jnp.arange(7, dtype=jnp.float32).reshape(-1, 1) - 0.5
         cdf = self.sum_layer.cdf_of_nodes(data)
@@ -161,8 +152,8 @@ class NygaDistributionTestCase(unittest.TestCase):
     def test_log_likelihood(self):
         ll = self.jax_model.log_likelihood(self.data)
         self.assertTrue(jnp.all(ll > -jnp.inf))
-
-
-    def test_sampling(self):
-        data = self.jax_model.sample(1000, jax.random.PRNGKey(69))
-        self.assertEqual(data.shape, (1000, 1))
+    #
+    #
+    # def test_sampling(self):
+    #     data = self.jax_model.sample(1000, jax.random.PRNGKey(69))
+    #     self.assertEqual(data.shape, (1000, 1))
