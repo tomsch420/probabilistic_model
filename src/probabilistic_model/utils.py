@@ -87,7 +87,7 @@ def timeit_print(func):
 
         total_time = end_time - start_time
         total_time = datetime.timedelta(microseconds=total_time/1000)
-        print(f"{func.__qualname__} with variables {self.variables} took : {total_time}")
+        print(f"{func.__qualname__} took : {total_time}")
         return result
 
     return timeit_print_wrapper

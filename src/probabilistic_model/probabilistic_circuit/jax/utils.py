@@ -6,6 +6,7 @@ import jax
 from scipy.sparse import csr_matrix, csr_array, csc_array
 from typing_extensions import Tuple
 
+from probabilistic_model.utils import timeit_print
 
 
 def copy_bcoo(x: BCOO) -> BCOO:
@@ -141,8 +142,8 @@ def embed_sparse_array_in_nan_array(sparse_array: BCOO) -> jax.Array:
     result = result.at[sparse_array.indices[:, 0], sparse_array.indices[:, 1]].set(sparse_array.data)
     return result
 
-def sample_from_sparse_probabilities_bcsr(probabilities: BCSR, bcoo_indices: jax.Array, amount: jax.Array,
-                                          key: jax.random.PRNGKey) -> BCOO:
+@timeit_print
+def sample_from_sparse_probabilities_csc(probabilities: csr_array, amount: np.array) -> csc_array:
     """
     Sample from a sparse array of probabilities.
     Each row in the sparse array encodes a categorical probability distribution.
@@ -153,31 +154,6 @@ def sample_from_sparse_probabilities_bcsr(probabilities: BCSR, bcoo_indices: jax
     :return: The samples that are drawn for each state in the probabilities indicies.
     """
     all_samples = []
-    # probabilities = csr_matrix((probabilities.data, probabilities.indices, probabilities.indptr), shape=probabilities.shape)
-    # iterate through every row of the sparse array
-    for amount_, probability_row in zip(amount, probabilities):
-        samples = np.random.multinomial(amount_.item(), pvals=probability_row.data)
-        all_samples.append(jnp.array(samples))
-
-    result = BCOO((jnp.concatenate(all_samples), bcoo_indices), shape=probabilities.shape,
-                  indices_sorted=True, unique_indices=True)
-
-    return result
-
-
-def sample_from_sparse_probabilities_csc(probabilities: csr_array, bcoo_indices: jax.Array, amount: jax.Array,
-                                          key: jax.random.PRNGKey) -> csc_array:
-    """
-    Sample from a sparse array of probabilities.
-    Each row in the sparse array encodes a categorical probability distribution.
-
-    :param probabilities: The unnormalized sparse array of log-probabilities.
-    :param amount:  The amount of samples to draw from each row.
-    :param key: The random key.
-    :return: The samples that are drawn for each state in the probabilities indicies.
-    """
-    all_samples = []
-    # probabilities = csr_matrix((probabilities.data, probabilities.indices, probabilities.indptr), shape=probabilities.shape)
     # iterate through every row of the sparse array
     for amount_, probability_row in zip(amount, probabilities):
         samples = np.random.multinomial(amount_.item(), pvals=probability_row.data)
@@ -187,41 +163,3 @@ def sample_from_sparse_probabilities_csc(probabilities: csr_array, bcoo_indices:
                        shape=probabilities.shape).tocsc(copy=False)
 
     return result
-
-
-
-
-def sample_from_sparse_probabilities(log_probabilities: BCOO, amount: jax.Array, key: jax.random.PRNGKey) -> BCOO:
-    """
-    Sample from a sparse array of probabilities.
-    Each row in the sparse array encodes a categorical probability distribution.
-
-    :param log_probabilities: The unnormalized sparse array of log-probabilities.
-    :param amount:  The amount of samples to draw from each row.
-    :param key: The random key.
-    :return: The samples that are drawn for each state in the probabilities indicies.
-    """
-    all_samples = []
-
-    for probability_row, row_amount in zip(log_probabilities, amount):
-        probability_row: BCOO
-        probability_row = probability_row.sum_duplicates(remove_zeros=False)
-
-        samples = jax.random.categorical(key, probability_row.data, shape=(row_amount.item(), ))
-        frequencies = jnp.zeros((probability_row.data.shape[0],), dtype=jnp.int32)
-        frequencies = frequencies.at[samples].add(1)
-        all_samples.append(frequencies)
-
-    return BCOO((jnp.concatenate(all_samples), log_probabilities.indices), shape=log_probabilities.shape,
-                indices_sorted=True, unique_indices=True)
-
-
-def extraction_mask(reference_indices: jax.Array, extraction_indices: jax.Array) -> jax.Array:
-    """
-    Create a mask that represents for every element in the reference indices whether it is in the extraction indices.
-
-    :param reference_indices: The reference indices.
-    :param extraction_indices: The extraction indices.
-    :return: The mask.
-    """
-    return jnp.isin(reference_indices, extraction_indices)

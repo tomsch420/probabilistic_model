@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 import inspect
 import math
 from abc import abstractmethod, ABC
@@ -12,21 +11,17 @@ import jax
 import numpy as np
 import tqdm
 from jax import numpy as jnp, tree_flatten
-from jax.experimental.sparse import BCOO, bcoo_concatenate, BCSR
+from jax.experimental.sparse import BCOO, bcoo_concatenate
 from jaxtyping import Int
-from networkx.algorithms.operators.binary import difference
 from random_events.product_algebra import SimpleEvent
 from random_events.utils import recursive_subclasses, SubclassJSONSerializer
-from scipy.sparse import coo_matrix, csr_matrix, coo_array
+from scipy.sparse import coo_matrix, coo_array
 from sortedcontainers import SortedSet
-from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Optional, Self
+from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Self
 
-from . import create_bcoo_indices_from_row_lengths, embed_sparse_array_in_nan_array, \
-    sample_from_sparse_probabilities_bcsr
-from .utils import copy_bcoo, sample_from_sparse_probabilities, sample_from_sparse_probabilities_csc, \
-    create_bcoo_indices_from_row_lengths_np
+from .utils import copy_bcoo, sample_from_sparse_probabilities_csc
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
-from ...utils import timeit, timeit_print
+from ...utils import timeit_print
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -184,7 +179,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         number_of_parameters = sum([len(p) for p in flattened_parameters])
         return number_of_parameters
 
-    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index=0):
         raise NotImplementedError
 
     def moment_of_nodes(self, order: jax.Array, center: jax.Array):
@@ -418,8 +413,8 @@ class SumLayer(InnerLayer):
 
         return result / jnp.exp(self.log_normalization_constants.reshape(-1, 1))
 
-    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
-        node_to_child_frequency_map = self.node_to_child_frequency_map_csc(frequencies, None)
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index=0):
+        node_to_child_frequency_map = self.node_to_child_frequency_map(frequencies)
 
         # offset for shifting through the frequencies of the node_to_child_frequency_map
         prev_column_index = 0
@@ -427,7 +422,6 @@ class SumLayer(InnerLayer):
         consumed_indices = start_index
 
         for child_layer in self.child_layers:
-
             # extract the frequencies for the child layer
             current_frequency_block = node_to_child_frequency_map[:,
                                       prev_column_index:prev_column_index + child_layer.number_of_nodes]
@@ -438,8 +432,8 @@ class SumLayer(InnerLayer):
             # shift the offset
             prev_column_index += child_layer.number_of_nodes
 
-
-    def node_to_child_frequency_map(self, frequencies: jax.Array, key: jax.random.PRNGKey):
+    @timeit_print
+    def node_to_child_frequency_map(self, frequencies: np.array):
         """
         Sample from the exact distribution of the layer by interpreting every node as latent variable.
         This is very slow due to BCOO.sum_duplicates being very slow.
@@ -449,21 +443,8 @@ class SumLayer(InnerLayer):
         :return:
         """
         clw = self.normalized_weights
-        csr = coo_matrix((clw.data, clw.indices.T), shape=(clw.shape[0], clw.shape[1])).tocsr(copy=False)
-        return sample_from_sparse_probabilities_bcsr(csr, clw.indices, frequencies, key)
-
-    def node_to_child_frequency_map_csc(self, frequencies: jax.Array, key: jax.random.PRNGKey):
-        """
-        Sample from the exact distribution of the layer by interpreting every node as latent variable.
-        This is very slow due to BCOO.sum_duplicates being very slow.
-
-        :param frequencies:
-        :param key:
-        :return:
-        """
-        clw = self.normalized_weights
-        csr = coo_matrix((clw.data, clw.indices.T), shape=(clw.shape[0], clw.shape[1])).tocsr(copy=False)
-        return sample_from_sparse_probabilities_csc(csr, clw.indices, frequencies, key)
+        csr = coo_matrix((clw.data, clw.indices.T), shape=clw.shape).tocsr(copy=False)
+        return sample_from_sparse_probabilities_csc(csr, frequencies)
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
@@ -622,10 +603,11 @@ class ProductLayer(InnerLayer):
 
         return result
 
-    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
-        edges_csr = BCSR.from_bcoo(self.edges)
-        for row_index, (start, end, child_layer) in enumerate(zip(edges_csr.indptr[:-1], edges_csr.indptr[1:], self.child_layers)):
-
+    @timeit_print
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index=0):
+        edges_csr = coo_array((self.edges.data, self.edges.indices.T), shape=self.edges.shape).tocsr()
+        for row_index, (start, end, child_layer) in enumerate(
+                zip(edges_csr.indptr[:-1], edges_csr.indptr[1:], self.child_layers)):
             # get the edges for the current child layer
             row = edges_csr.data[start:end]
             column_indices = edges_csr.indices[start:end]

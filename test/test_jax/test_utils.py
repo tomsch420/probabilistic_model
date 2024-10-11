@@ -1,16 +1,14 @@
 import unittest
 
+import jax.numpy as jnp
 import jax.random
 from jax.experimental.sparse import BCOO, BCSR
-import jax.numpy as jnp
-from sympy.physics.quantum.matrixutils import sparse
-from sympy.physics.units import amount
-
-from probabilistic_model.probabilistic_circuit.jax import embed_sparse_array_in_nan_array, \
-    sample_from_sparse_probabilities_bcsr, create_bcsr_indices_from_row_lengths
-from probabilistic_model.probabilistic_circuit.jax.utils import copy_bcoo, simple_interval_to_open_array, \
-    create_bcoo_indices_from_row_lengths, sample_from_sparse_probabilities
 from random_events.interval import SimpleInterval
+
+from probabilistic_model.probabilistic_circuit.jax import create_bcsr_indices_from_row_lengths
+from probabilistic_model.probabilistic_circuit.jax.utils import copy_bcoo, simple_interval_to_open_array, \
+    create_bcoo_indices_from_row_lengths
+
 
 class BCOOTestCase(unittest.TestCase):
 
@@ -28,7 +26,7 @@ class BCOOTestCase(unittest.TestCase):
     def test_create_sparse_array_indices_from_row_lengths(self):
         row_lengths = jnp.array([2, 3])
         indices = create_bcoo_indices_from_row_lengths(row_lengths)
-        result = jnp.array([[0,0],[0,1],[1, 0],[1, 1],[1, 2]])
+        result = jnp.array([[0, 0], [0, 1], [1, 0], [1, 1], [1, 2]])
         self.assertTrue(jnp.allclose(indices, result))
 
     def test_create_bcsr_indices_from_row_lengths(self):
@@ -44,11 +42,11 @@ class BCOOTestCase(unittest.TestCase):
 
     def test_sample_from_sparse_probabilities(self):
         probs = BCOO.fromdense(jnp.array([[0.1, 0.2, 0., .7],
-                                            [0.4, 0., 0.6, 0.]]))
+                                          [0.4, 0., 0.6, 0.]]))
         probs.data = jnp.log(probs.data)
         amount = jnp.array([2, 3])
 
-        samples = sample_from_sparse_probabilities(probs,amount, jax.random.PRNGKey(69))
+        samples = sample_from_sparse_probabilities(probs, amount, jax.random.PRNGKey(69))
         amounts = samples.sum(axis=1).todense()
         self.assertTrue(jnp.all(amounts == amount))
         self.assertTrue(jnp.all(samples.data <= 3))
@@ -66,14 +64,12 @@ class BCOOTestCase(unittest.TestCase):
     #     self.assertTrue(jnp.all(samples.data <= 3))
 
 
-
-
 class IntervalConversionTestCase(unittest.TestCase):
 
-        def simple_interval_to_open_array(self):
-            simple_interval = SimpleInterval(0, 1)
-            array = simple_interval_to_open_array(simple_interval)
-            self.assertTrue(jnp.allclose(array, jnp.array([0, 1])))
+    def simple_interval_to_open_array(self):
+        simple_interval = SimpleInterval(0, 1)
+        array = simple_interval_to_open_array(simple_interval)
+        self.assertTrue(jnp.allclose(array, jnp.array([0, 1])))
 
 
 if __name__ == '__main__':
