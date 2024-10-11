@@ -449,7 +449,6 @@ class SumLayer(InnerLayer):
             # shift the offset
             prev_column_index += child_layer.number_of_nodes
 
-    @timeit_print
     def node_to_child_frequency_map(self, frequencies: np.array):
         """
         Sample from the exact distribution of the layer by interpreting every node as latent variable.
@@ -620,7 +619,6 @@ class ProductLayer(InnerLayer):
 
         return result
 
-    @timeit_print
     def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index=0):
         edges_csr = coo_array((self.edges.data, self.edges.indices.T), shape=self.edges.shape).tocsr()
         for row_index, (start, end, child_layer) in enumerate(
