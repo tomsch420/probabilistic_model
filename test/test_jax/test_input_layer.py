@@ -3,6 +3,8 @@ import unittest
 
 import jax.numpy as jnp
 import jax
+from random_events.interval import closed
+
 from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDeltaLayer
 
 
@@ -31,6 +33,15 @@ class DiracDeltaLayerTestCase(unittest.TestCase):
         result = jnp.array([-1.5, -0.5], dtype=jnp.float32).reshape(-1, 1)
         self.assertTrue(jnp.allclose(moment, result))
 
+    def test_conditional_of_simple_interval(self):
+        interval = closed(-0.5, 0.5).simple_sets[0]
+        layer, ll = self.layer.log_conditional_from_simple_interval(interval)
+        result = jnp.log(jnp.array([1, 0], dtype=jnp.float32))
+        self.assertTrue(jnp.allclose(ll, result))
+        layer.validate()
+        self.assertEqual(layer.number_of_nodes, 1)
+        self.assertTrue(jnp.allclose(layer.location, jnp.array([0.])))
+        self.assertTrue(jnp.allclose(layer.density_cap, jnp.array([1.])))
 
 
 if __name__ == '__main__':

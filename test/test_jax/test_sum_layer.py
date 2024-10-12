@@ -152,8 +152,7 @@ class NygaDistributionTestCase(unittest.TestCase):
     def test_log_likelihood(self):
         ll = self.jax_model.log_likelihood(self.data)
         self.assertTrue(jnp.all(ll > -jnp.inf))
-    #
-    #
-    # def test_sampling(self):
-    #     data = self.jax_model.sample(1000, jax.random.PRNGKey(69))
-    #     self.assertEqual(data.shape, (1000, 1))
+
+    def test_sampling(self):
+        data = self.jax_model.sample(1000)
+        self.assertEqual(data.shape, (1000, 1))

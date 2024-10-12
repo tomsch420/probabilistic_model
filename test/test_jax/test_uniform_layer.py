@@ -66,3 +66,18 @@ class UniformLayerTestCaste(unittest.TestCase):
         p_x = UniformLayer.from_json(data)
 
         self.assertTrue(jnp.allclose(self.p_x.interval, p_x.interval))
+
+    def test_conditional_singleton(self):
+        event = SimpleEvent({self.x: closed(0.5, 0.5)})
+        layer, ll = self.p_x.log_conditional_of_simple_event(event)
+        self.assertEqual(layer.number_of_nodes, 1)
+        self.assertTrue(jnp.allclose(jnp.array([0.5]), layer.location))
+        self.assertTrue(jnp.allclose(jnp.array([1.]), layer.density_cap))
+
+    def test_conditional_single_truncation(self):
+        event = SimpleEvent({self.x: closed(0.5, 2.5)})
+        layer, ll = self.p_x.log_conditional_of_simple_event(event)
+        layer.validate()
+        self.assertEqual(layer.number_of_nodes, 2)
+        self.assertTrue(jnp.allclose(layer.interval, jnp.array([[0.5, 1], [1, 2.5]])))
+        self.assertTrue(jnp.allclose(jnp.log(jnp.array([0.5, 0.75])), ll))

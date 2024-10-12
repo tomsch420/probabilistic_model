@@ -281,6 +281,10 @@ class InputLayer(Layer, ABC):
         result["variable"] = self._variables[0].item()
         return result
 
+    @property
+    def variable(self):
+        return self._variables[0].item()
+
 
 class SumLayer(InnerLayer):
     log_weights: List[BCOO]

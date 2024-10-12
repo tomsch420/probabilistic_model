@@ -4,6 +4,7 @@ import jax
 import numpy as np
 from jax import numpy as jnp
 from jax.experimental.sparse import BCOO
+from random_events.interval import SimpleInterval
 from typing_extensions import Type, Tuple, Self
 
 from .inner_layer import NXConverterLayer
@@ -86,8 +87,14 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         upper_integral_value = (pdf_value * (self.upper - center) ** (order + 1)) / (order + 1)
         return (upper_integral_value - lower_integral_value).reshape(-1, 1)
 
-    def __deepcopy__(self):
-        return self.__class__(self.variables[0].item(), self.interval.copy())
+    def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, jax.Array]:
+        probabilities = jnp.log(self.probability_of_simple_interval(interval))
+        open_interval_array = simple_interval_to_open_array(interval)
+        new_lowers = jnp.maximum(self.lower, open_interval_array[0])
+        new_uppers = jnp.minimum(self.upper, open_interval_array[1])
+        valid_intervals = new_lowers < new_uppers
+        new_intervals = jnp.stack([new_lowers[valid_intervals], new_uppers[valid_intervals]]).T
+        return self.__class__(self.variable, new_intervals), probabilities
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:

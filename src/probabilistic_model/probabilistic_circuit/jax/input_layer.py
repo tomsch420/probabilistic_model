@@ -1,3 +1,4 @@
+from __future__ import annotations
 from abc import ABC
 from typing import List, Dict, Any
 
@@ -5,12 +6,12 @@ import jax
 import numpy as np
 from jax import numpy as jnp
 from jax.experimental.sparse import BCOO, BCSR
-from random_events.interval import Interval
+from random_events.interval import Interval, SimpleInterval
 from random_events.product_algebra import SimpleEvent
-from typing_extensions import Tuple, Type, Self
+from typing_extensions import Tuple, Type, Self, Union, Optional
 
 from . import create_bcoo_indices_from_row_lengths, create_bcsr_indices_from_row_lengths
-from .inner_layer import InputLayer, NXConverterLayer
+from .inner_layer import InputLayer, NXConverterLayer, SumLayer
 from ..nx.distributions import DiracDeltaDistribution
 import equinox as eqx
 from .utils import simple_interval_to_open_array
@@ -21,12 +22,102 @@ class ContinuousLayer(InputLayer, ABC):
     Abstract base class for continuous univariate input units.
     """
 
-    def probability_of_simple_event(self, event:SimpleEvent) -> jnp.array:
+    def probability_of_simple_event(self, event:SimpleEvent) -> jax.Array:
         interval: Interval = list(event.values())[self.variables[0]]
+        return self.probability_of_interval(interval)
+
+    def probability_of_interval(self, interval: Interval) -> jnp.array:
         points = jnp.array([simple_interval_to_open_array(i) for i in interval.simple_sets])
         upper_bound_cdf = self.cdf_of_nodes(points[:, (1,)])
         lower_bound_cdf = self.cdf_of_nodes(points[:, (0,)])
         return (upper_bound_cdf - lower_bound_cdf).sum(axis=0)
+
+    def probability_of_simple_interval(self, interval: SimpleInterval) -> jax.Array:
+        points = simple_interval_to_open_array(interval)
+        upper_bound_cdf = self.cdf_of_nodes_single(points[1])
+        lower_bound_cdf = self.cdf_of_nodes_single(points[0])
+        return upper_bound_cdf - lower_bound_cdf
+
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Union[Self, DiracDeltaLayer]], jax.Array]:
+        if event.is_empty():
+            return self.impossible_condition_result
+
+        interval: Interval = list(event.values())[self.variable]
+
+        if interval.is_singleton():
+            return self.log_conditional_from_singleton(interval.simple_sets[0])
+
+        if len(interval.simple_sets) == 1:
+            return self.log_conditional_from_simple_interval(interval.simple_sets[0])
+        else:
+            return self.log_conditional_from_interval(interval)
+
+    def log_conditional_from_singleton(self, singleton: SimpleInterval) -> Tuple[DiracDeltaLayer, jax.Array]:
+        """
+        Calculate the conditional distribution given a singleton interval.
+
+        In this case, the conditional distribution is a Dirac delta distribution and the log-likelihood is chosen
+        instead of the log-probability.
+
+        This method returns a Dirac delta layer that has at most the same number of nodes as the input layer.
+
+        :param singleton: The singleton event
+        :return: The dirac delta layer and the log-likelihoods with shape (something <= #singletons, 1).
+        """
+        value = singleton.lower
+        log_likelihoods = self.log_likelihood_of_nodes(
+            jnp.array(value).reshape(-1, 1))[:, 0]  # shape: (#nodes, )
+
+        possible_indices = (log_likelihoods > -jnp.inf).nonzero()[0]  # shape: (#dirac-nodes, )
+        filtered_likelihood = log_likelihoods[possible_indices]
+        locations = jnp.full_like(filtered_likelihood, value)
+        layer = DiracDeltaLayer(self.variable, locations, jnp.exp(filtered_likelihood))
+        return layer, log_likelihoods
+
+    def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, jax.Array]:
+        """
+        Calculate the conditional distribution given a simple interval with p(interval) > 0.
+        The interval could also be a singleton.
+
+        :param interval: The simple interval
+        :return: The conditional distribution and the log-probability of the interval.
+        """
+        raise NotImplementedError
+
+    def log_conditional_from_interval(self, interval: Interval) -> Tuple[SumLayer, jax.Array]:
+        """
+        Calculate the conditional distribution given an interval with p(interval) > 0.
+
+        :param interval: The simple interval
+        :return: The conditional distribution and the log-probability of the interval.
+        """
+
+        # get conditionals of each simple interval
+        results = [self.log_conditional_from_simple_interval(simple_interval) for simple_interval in
+                   interval.simple_sets]
+        raise NotImplementedError
+        # create new input layer
+        possible_layers = [layer for layer, _ in results if layer is not None]
+        input_layer = possible_layers[0]
+        input_layer.merge_with(possible_layers[1:])
+
+        # stack the log probabilities
+        stacked_log_probabilities = torch.stack(
+            [log_prob for _, log_prob in results])  # shape: (#simple_intervals, #nodes, 1)
+
+        # calculate log probabilities of the entire interval
+        log_probabilities = stacked_log_probabilities.logsumexp(dim=0)  # shape: (#nodes, 1)
+
+        # remove rows and columns where all elements are -inf
+        stacked_log_probabilities.squeeze_(-1)
+        valid_log_probabilities = remove_rows_and_cols_where_all(stacked_log_probabilities, -torch.inf)
+
+        # create sparse log weights
+        log_weights = valid_log_probabilities.T.exp().to_sparse_coo()
+        log_weights.values().log_()
+
+        resulting_layer = SumLayer([input_layer], [log_weights])
+        return resulting_layer, log_probabilities
 
 
 class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
@@ -82,6 +173,9 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
         result["interval"] = self.interval.tolist()
         return result
 
+    def __deepcopy__(self):
+        return self.__class__(self.variables[0].item(), self.interval.copy())
+
 
 class DiracDeltaLayer(ContinuousLayer):
 
@@ -100,6 +194,9 @@ class DiracDeltaLayer(ContinuousLayer):
         super().__init__(variable_index)
         self.location = location
         self.density_cap = density_cap
+
+    def validate(self):
+        assert len(self.location) == len(self.density_cap), "The number of locations and density caps must match."
 
     @property
     def number_of_nodes(self):
@@ -143,6 +240,18 @@ class DiracDeltaLayer(ContinuousLayer):
         else:
             result = jnp.zeros(self.number_of_nodes)
         return result.reshape(-1, 1)
+
+    def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, jax.Array]:
+        probabilities = jnp.log(self.probability_of_simple_interval(interval))
+
+        valid_probabilities = probabilities > -jnp.inf
+
+        if not valid_probabilities.any():
+            return self.impossible_condition_result
+
+        result = self.__class__(self.variable, self.location[valid_probabilities],
+                                self.density_cap[valid_probabilities])
+        return result, probabilities
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
