@@ -211,6 +211,12 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         """
         raise NotImplementedError
 
+    def merge_with(self, others: List[Self]) -> Self:
+        """
+        Merge the layer with others of the same type.
+        """
+        raise NotImplementedError
+
 
 class InnerLayer(Layer, ABC):
     """

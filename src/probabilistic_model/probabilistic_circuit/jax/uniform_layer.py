@@ -96,6 +96,9 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         new_intervals = jnp.stack([new_lowers[valid_intervals], new_uppers[valid_intervals]]).T
         return self.__class__(self.variable, new_intervals), probabilities
 
+    def merge_with(self, others: List[Self]) -> Self:
+        return self.__class__(self.variable, jnp.vstack([self.interval] + [other.interval for other in others]))
+
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         return cls(data["variable"], jnp.array(data["interval"]))

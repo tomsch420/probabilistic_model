@@ -4,11 +4,12 @@ import unittest
 
 import jax
 import jax.numpy as jnp
+from jax.experimental.sparse import BCOO
 from random_events.interval import SimpleInterval, Bound, closed
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 
-from probabilistic_model.probabilistic_circuit.jax import simple_interval_to_open_array
+from probabilistic_model.probabilistic_circuit.jax import simple_interval_to_open_array, SumLayer
 from probabilistic_model.probabilistic_circuit.jax.uniform_layer import UniformLayer
 import equinox as eqx
 
@@ -89,3 +90,20 @@ class UniformLayerTestCaste(unittest.TestCase):
         self.assertEqual(layer.number_of_nodes, 1)
         self.assertTrue(jnp.allclose(layer.interval, jnp.array([[0.25, 0.5]])))
         self.assertTrue(jnp.allclose(jnp.log(jnp.array([0.25, 0.])), ll))
+
+    def test_conditional_multiple_truncation(self):
+        event = closed(-1, 0.5) | closed(0.7, 0.8) | closed(2., 3.) | closed(3.5, 4.)
+
+        layer, ll = self.p_x.log_conditional_from_interval(event)
+        self.assertTrue(jnp.allclose(jnp.log(jnp.array([0.6, 0.5])), ll))
+        self.assertIsInstance(layer, SumLayer)
+
+        layer.validate()
+        self.assertEqual(layer.number_of_nodes, 2)
+        self.assertEqual(len(layer.child_layers), 1)
+        self.assertTrue(jnp.allclose(layer.child_layers[0].interval, jnp.array([[0., 0.5], [0.7, 0.8], [2., 3.]])))
+
+        log_weights_by_hand = BCOO.fromdense(jnp.array([[0.5, 0.1, 0.], [0., 0., 0.5]]))
+        log_weights_by_hand.data = jnp.log(log_weights_by_hand.data)
+        self.assertTrue(jnp.allclose(layer.log_weights[0].data, log_weights_by_hand.data))
+        self.assertTrue(jnp.allclose(layer.log_weights[0].indices, log_weights_by_hand.indices))

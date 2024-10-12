@@ -95,15 +95,19 @@ class ContinuousLayer(InputLayer, ABC):
         # get conditionals of each simple interval
         results = [self.log_conditional_from_simple_interval(simple_interval) for simple_interval in
                    interval.simple_sets]
-        raise NotImplementedError
+
+        # filter results with -inf log probabilities
+        results = [(layer, log_prob) for layer, log_prob in results if log_prob > -jnp.inf]
+        layers, log_probs = zip(*results)
+
+
         # create new input layer
-        possible_layers = [layer for layer, _ in results if layer is not None]
+        possible_layers = [layer for layer, log_prob in results if log_prob > -jnp.inf]
         input_layer = possible_layers[0]
-        input_layer.merge_with(possible_layers[1:])
+        input_layer = input_layer.merge_with(possible_layers[1:])
 
         # stack the log probabilities
-        stacked_log_probabilities = torch.stack(
-            [log_prob for _, log_prob in results])  # shape: (#simple_intervals, #nodes, 1)
+        stacked_log_probabilities = jnp.stack([log_prob for _, log_prob in results])  # shape: (#simple_intervals, #nodes)
 
         # calculate log probabilities of the entire interval
         log_probabilities = stacked_log_probabilities.logsumexp(dim=0)  # shape: (#nodes, 1)
@@ -262,3 +266,7 @@ class DiracDeltaLayer(ContinuousLayer):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         return cls(data["variable"], jnp.array(data["location"]), jnp.array(data["density_cap"]))
+
+    def merge_with(self, others: List[Self]) -> Self:
+        return self.__class__(self.variable, jnp.concatenate([self.location] + [other.location for other in others]),
+                                jnp.concatenate([self.density_cap] + [other.density_cap for other in others]))
