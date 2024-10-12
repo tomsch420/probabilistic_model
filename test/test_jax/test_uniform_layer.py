@@ -81,3 +81,11 @@ class UniformLayerTestCaste(unittest.TestCase):
         self.assertEqual(layer.number_of_nodes, 2)
         self.assertTrue(jnp.allclose(layer.interval, jnp.array([[0.5, 1], [1, 2.5]])))
         self.assertTrue(jnp.allclose(jnp.log(jnp.array([0.5, 0.75])), ll))
+
+    def test_conditional_with_node_removal(self):
+        event = SimpleEvent({self.x: closed(0.25, 0.5)})
+        layer, ll = self.p_x.log_conditional_of_simple_event(event)
+        layer.validate()
+        self.assertEqual(layer.number_of_nodes, 1)
+        self.assertTrue(jnp.allclose(layer.interval, jnp.array([[0.25, 0.5]])))
+        self.assertTrue(jnp.allclose(jnp.log(jnp.array([0.25, 0.])), ll))

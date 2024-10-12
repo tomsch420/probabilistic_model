@@ -77,12 +77,6 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
 
         return cls(pc.variables, root)
 
-    @property
-    def trainable_parameters(self):
-        parameters = []
-        for layer in self.root.all_layers():
-            parameters.extend(layer.trainable_parameters)
-        return parameters
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
