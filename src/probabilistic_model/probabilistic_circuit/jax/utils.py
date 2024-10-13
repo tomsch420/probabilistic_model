@@ -156,3 +156,28 @@ def sample_from_sparse_probabilities_csc(probabilities: csr_array, amount: np.ar
     result = csr_array((all_samples, probabilities.indices, probabilities.indptr),
                        shape=probabilities.shape).tocsc(copy=False)
     return result
+
+
+def remove_rows_and_cols_where_all(array: jax.Array, value: float) -> jax.Array:
+    """
+    Remove rows and columns from an array where all elements are equal to a given value.
+
+    :param array: The tensor to remove rows and columns from.
+    :param value: The value to remove.
+    :return: The tensor without the rows and columns.
+
+    Example::
+
+
+        >>> a = jnp.array([[1, 0, 3], [0, 0, 0], [7, 0, 9]])
+        >>> remove_rows_and_cols_where_all(a, 0)
+        array([[1, 3], [7, 9]])
+    """
+
+    # get the rows and columns that are not entirely -inf
+    valid_rows = (array != value).any(axis=1)
+    valid_cols = (array != value).any(axis=0)
+
+    # remove rows and cols that are entirely -inf
+    valid = array[valid_rows][:, valid_cols]
+    return valid

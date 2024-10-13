@@ -95,6 +95,7 @@ class UniformLayerTestCaste(unittest.TestCase):
         event = closed(-1, 0.5) | closed(0.7, 0.8) | closed(2., 3.) | closed(3.5, 4.)
 
         layer, ll = self.p_x.log_conditional_from_interval(event)
+
         self.assertTrue(jnp.allclose(jnp.log(jnp.array([0.6, 0.5])), ll))
         self.assertIsInstance(layer, SumLayer)
 
@@ -103,7 +104,9 @@ class UniformLayerTestCaste(unittest.TestCase):
         self.assertEqual(len(layer.child_layers), 1)
         self.assertTrue(jnp.allclose(layer.child_layers[0].interval, jnp.array([[0., 0.5], [0.7, 0.8], [2., 3.]])))
 
-        log_weights_by_hand = BCOO.fromdense(jnp.array([[0.5, 0.1, 0.], [0., 0., 0.5]]))
+        log_weights_by_hand = jnp.array([[0.5, 0.1, 0.], [0., 0., 0.5]])
+        log_weights_by_hand /= jnp.sum(log_weights_by_hand, axis=1, keepdims=True)
+        log_weights_by_hand = BCOO.fromdense(log_weights_by_hand)
         log_weights_by_hand.data = jnp.log(log_weights_by_hand.data)
         self.assertTrue(jnp.allclose(layer.log_weights[0].data, log_weights_by_hand.data))
         self.assertTrue(jnp.allclose(layer.log_weights[0].indices, log_weights_by_hand.indices))

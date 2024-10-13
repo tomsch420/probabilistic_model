@@ -5,16 +5,18 @@ from typing import List, Dict, Any
 import jax
 import numpy as np
 from jax import numpy as jnp
+from jax.experimental.array_api import reshape
 from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import Interval, SimpleInterval
 from random_events.product_algebra import SimpleEvent
 from typing_extensions import Tuple, Type, Self, Union, Optional
 
-from . import create_bcoo_indices_from_row_lengths, create_bcsr_indices_from_row_lengths
+from . import create_bcoo_indices_from_row_lengths, create_bcsr_indices_from_row_lengths, \
+    embed_sparse_array_in_nan_array
 from .inner_layer import InputLayer, NXConverterLayer, SumLayer
 from ..nx.distributions import DiracDeltaDistribution
 import equinox as eqx
-from .utils import simple_interval_to_open_array
+from .utils import simple_interval_to_open_array, remove_rows_and_cols_where_all
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -96,32 +98,32 @@ class ContinuousLayer(InputLayer, ABC):
         results = [self.log_conditional_from_simple_interval(simple_interval) for simple_interval in
                    interval.simple_sets]
 
-        # filter results with -inf log probabilities
-        results = [(layer, log_prob) for layer, log_prob in results if log_prob > -jnp.inf]
         layers, log_probs = zip(*results)
+
+        # stack the log probabilities
+        stacked_log_probabilities = jnp.stack(log_probs, axis=1)  # shape: (#simple_intervals, #nodes)
+
+        # calculate the log probabilities of the entire interval
+        exp_stacked_log_probabilities = jnp.exp(stacked_log_probabilities)
+        summed_exp_stacked_log_probabilities = jnp.sum(exp_stacked_log_probabilities, axis=1)
+        total_log_probabilities = jnp.log(summed_exp_stacked_log_probabilities)  # shape: (#nodes, 1)
 
 
         # create new input layer
-        possible_layers = [layer for layer, log_prob in results if log_prob > -jnp.inf]
+        possible_layers = [layer for layer in layers if layer is not None]
         input_layer = possible_layers[0]
         input_layer = input_layer.merge_with(possible_layers[1:])
 
-        # stack the log probabilities
-        stacked_log_probabilities = jnp.stack([log_prob for _, log_prob in results])  # shape: (#simple_intervals, #nodes)
+        # remove the rows that are entirely -inf and normalize weights
+        bcoo_data = remove_rows_and_cols_where_all(exp_stacked_log_probabilities/
+                                                   summed_exp_stacked_log_probabilities.reshape(-1, 1),
+                                                   0)
 
-        # calculate log probabilities of the entire interval
-        log_probabilities = stacked_log_probabilities.logsumexp(dim=0)  # shape: (#nodes, 1)
-
-        # remove rows and columns where all elements are -inf
-        stacked_log_probabilities.squeeze_(-1)
-        valid_log_probabilities = remove_rows_and_cols_where_all(stacked_log_probabilities, -torch.inf)
-
-        # create sparse log weights
-        log_weights = valid_log_probabilities.T.exp().to_sparse_coo()
-        log_weights.values().log_()
+        log_weights = BCOO.fromdense(bcoo_data)
+        log_weights.data = jnp.log(log_weights.data)
 
         resulting_layer = SumLayer([input_layer], [log_weights])
-        return resulting_layer, log_probabilities
+        return resulting_layer, total_log_probabilities
 
 
 class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
