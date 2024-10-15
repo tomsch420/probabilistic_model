@@ -7,7 +7,8 @@ from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import SimpleInterval
 from scipy.sparse import coo_array
 
-from probabilistic_model.probabilistic_circuit.jax import create_bcsr_indices_from_row_lengths
+from probabilistic_model.probabilistic_circuit.jax import create_bcsr_indices_from_row_lengths, shrink_index_array, \
+    sparse_remove_rows_and_cols_where_all
 from probabilistic_model.probabilistic_circuit.jax.utils import copy_bcoo, simple_interval_to_open_array, \
     create_bcoo_indices_from_row_lengths, sample_from_sparse_probabilities_csc
 
@@ -52,6 +53,18 @@ class BCOOTestCase(unittest.TestCase):
         amounts = samples.sum(axis=1)
         self.assertTrue(np.all(amounts == amount))
         self.assertTrue(np.all(samples.data <= 3))
+
+    def test_shrink_index_array(self):
+        index_array = jnp.array([[0, 3], [1, 0], [4, 1]])
+        new_index_tensor = shrink_index_array(index_array)
+        result = jnp.array([[0, 2], [1, 0], [2, 1]])
+        self.assertTrue(jnp.allclose(new_index_tensor, result))
+
+    def test_sparse_remove_rows_and_cols_where_all(self):
+        array = BCOO.fromdense(jnp.array([[1, 0, 3], [0, 0, 0], [7, 0, 9]]))
+        result = jnp.array([[1, 3], [7, 9]])
+        new_array = sparse_remove_rows_and_cols_where_all(array, 0)
+        self.assertTrue(jnp.allclose(new_array.todense(), result))
 
 
 class IntervalConversionTestCase(unittest.TestCase):

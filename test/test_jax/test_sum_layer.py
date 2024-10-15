@@ -96,6 +96,25 @@ class DiracSumUnitTestCase(unittest.TestCase):
         result = jnp.array([0.7, 0.5], dtype=jnp.float32)
         self.assertTrue(jnp.allclose(result, prob))
 
+    def test_conditional(self):
+        event = SimpleEvent({self.x: closed(0.5, 1.5)})
+        c, lp = self.sum_layer.log_conditional_of_simple_event(event)
+        c.validate()
+        self.assertEqual(c.number_of_nodes, 1)
+        self.assertEqual(len(c.child_layers), 1)
+        self.assertEqual(c.child_layers[0].number_of_nodes, 1)
+        self.assertTrue(jnp.allclose(c.log_weights[0].todense(), jnp.array([[0.]])))
+        self.assertTrue(jnp.allclose(lp, jnp.log(jnp.array([0.1, 0.]))))
+
+    def test_conditional_2(self):
+        event = SimpleEvent({self.x: closed(1.5, 4.5)})
+        c, lp = self.sum_layer.log_conditional_of_simple_event(event)
+        c.validate()
+        self.assertEqual(c.number_of_nodes, 2)
+        self.assertEqual(len(c.child_layers), 2)
+        self.assertEqual(c.child_layers[0].number_of_nodes, 1)
+        self.assertEqual(c.child_layers[1].number_of_nodes, 2)
+
 
 class PCSumUnitTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")

@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
-from jax.experimental.sparse import BCOO, BCSR
+from jax.experimental.sparse import BCOO, BCSR, CSC, CSR
 from random_events.interval import SimpleInterval, Bound
 import jax
 from scipy.sparse import csr_matrix, csr_array, csc_array
@@ -181,3 +181,60 @@ def remove_rows_and_cols_where_all(array: jax.Array, value: float) -> jax.Array:
     # remove rows and cols that are entirely -inf
     valid = array[valid_rows][:, valid_cols]
     return valid
+
+def shrink_index_array(index_array: jax.Array) -> jax.Array:
+    """
+    Shrink an index array to only contain successive indices.
+
+    Example::
+
+        >>> shrink_index_array(jnp.array([[0, 3], [1, 0], [4, 1]]))
+            [[0 2]
+             [1 0]
+             [2 1]]
+    :param index_array: The index tensor to shrink.
+    :return: The shrunken index tensor.
+    """
+    result = index_array.copy()
+
+    for dim in range(index_array.shape[1]):
+        unique_indices = jnp.unique(index_array[:, dim])
+
+        # map the old indices to the new indices
+        for new_index, unique_index in zip(range(len(unique_indices)), unique_indices):
+            result = result.at[result[:, dim] == unique_index, dim].set(new_index)
+
+
+    return result
+
+
+def sparse_remove_rows_and_cols_where_all(array: BCOO, value: float) -> BCOO:
+    """
+    Remove rows and columns from a sparse tensor where all elements are equal to a given value.
+
+    Example::
+        >>> array = BCOO.fromdense(jnp.array([[1, 0, 3], [0, 0, 0], [7, 0, 9]]))
+        >>> sparse_remove_rows_and_cols_where_all(array, 0).todense()
+            [[1 3]
+             [7 9]]
+
+    :param array: The sparse tensor to remove rows and columns from.
+    :param value: The value to remove.
+    :return: The tensor without the unnecessary rows and columns.
+    """
+    # get indices of values where all elements are equal to a given value
+    values = array.data
+    valid_elements = (values != value)
+
+    # filter indices by valid elements
+    valid_indices = array.indices[valid_elements]
+
+    # shrink indices
+    valid_indices = shrink_index_array(valid_indices)
+
+    new_shape = jnp.max(valid_indices, axis=0) + 1
+
+    # construct result tensor
+    result = BCOO((values[valid_elements], valid_indices), shape=new_shape, indices_sorted=array.indices_sorted,
+                  unique_indices=array.unique_indices)
+    return result

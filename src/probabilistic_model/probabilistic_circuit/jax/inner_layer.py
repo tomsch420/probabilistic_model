@@ -19,7 +19,8 @@ from scipy.sparse import coo_matrix, coo_array
 from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Self, Optional
 
-from .utils import copy_bcoo, sample_from_sparse_probabilities_csc
+from . import embed_sparse_array_in_nan_array
+from .utils import copy_bcoo, sample_from_sparse_probabilities_csc, sparse_remove_rows_and_cols_where_all
 from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
 from ...utils import timeit_print
 
@@ -471,6 +472,62 @@ class SumLayer(InnerLayer):
         clw = self.normalized_weights
         csr = coo_matrix((clw.data, clw.indices.T), shape=clw.shape).tocsr(copy=False)
         return sample_from_sparse_probabilities_csc(csr, frequencies)
+
+    def log_conditional_of_simple_event(self, event: SimpleEvent, ) -> Tuple[Optional[Self], jax.Array]:
+        conditional_child_layers = []
+        conditional_log_weights = []
+
+        probabilities = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the conditional of the child layer
+            conditional, child_log_prob = child_layer.log_conditional_of_simple_event(event)
+            if conditional is None:
+                continue
+
+            # clone weights
+            log_weights = copy_bcoo(log_weights)
+
+            # calculate the weighted sum of the child log probabilities
+            log_weights.data += child_log_prob[log_weights.indices[:, 1]]
+
+            # skip if this layer is not connected to anything anymore
+            if jnp.all(log_weights.data == -jnp.inf):
+                continue
+
+            log_weights.data = jnp.exp(log_weights.data)
+
+            # calculate the probabilities of the child nodes in total
+            current_probabilities = log_weights.sum(1).todense()
+            probabilities += current_probabilities
+
+            log_weights.data = jnp.log(log_weights.data)
+
+            conditional_child_layers.append(conditional)
+            conditional_log_weights.append(log_weights)
+
+        if len(conditional_child_layers) == 0:
+            return self.impossible_condition_result
+
+        log_probabilities = jnp.log(probabilities)
+
+        concatenated_log_weights = bcoo_concatenate(conditional_log_weights, dimension=1).sort_indices()
+        # remove rows and columns where all weights are -inf
+        cleaned_log_weights = sparse_remove_rows_and_cols_where_all(concatenated_log_weights, -jnp.inf)
+
+        # normalize the weights
+        z = cleaned_log_weights.sum(1).todense()
+        cleaned_log_weights.data -= z[cleaned_log_weights.indices[:, 0]]
+
+        # slice the weights for each child layer
+        log_weight_slices = jnp.array([0] + [ccl.number_of_nodes for ccl in conditional_child_layers])
+        log_weight_slices = jnp.cumsum(log_weight_slices)
+        conditional_log_weights = [cleaned_log_weights[:, log_weight_slices[i]:log_weight_slices[i + 1]].sort_indices()
+                                   for i in range(len(conditional_child_layers))]
+
+        resulting_layer = SumLayer(conditional_child_layers, conditional_log_weights)
+        return resulting_layer, (log_probabilities - self.log_normalization_constants)
+
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]

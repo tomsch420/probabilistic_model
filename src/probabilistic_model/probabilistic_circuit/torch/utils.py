@@ -79,8 +79,8 @@ def shrink_index_tensor(index_tensor: torch.Tensor) -> torch.Tensor:
 
     Example::
 
-        >>> shrink_index_tensor(torch.tensor([[0, 3], [1, 0], [4, 1]]))
-            tensor([[0, 2], [1, 0], [2, 1]])
+        >>> shrink_index_tensor(jnp.array([[0, 3], [1, 0], [4, 1]]))
+
     :param index_tensor: The index tensor to shrink.
     :return: The shrunken index tensor.
     """

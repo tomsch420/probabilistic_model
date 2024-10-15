@@ -248,16 +248,16 @@ class DiracDeltaLayer(ContinuousLayer):
         return result.reshape(-1, 1)
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, jax.Array]:
-        probabilities = jnp.log(self.probability_of_simple_interval(interval))
+        log_probs = jnp.log(self.probability_of_simple_interval(interval))
 
-        valid_probabilities = probabilities > -jnp.inf
+        valid_log_probs = log_probs > -jnp.inf
 
-        if not valid_probabilities.any():
+        if not valid_log_probs.any():
             return self.impossible_condition_result
 
-        result = self.__class__(self.variable, self.location[valid_probabilities],
-                                self.density_cap[valid_probabilities])
-        return result, probabilities
+        result = self.__class__(self.variable, self.location[valid_log_probs],
+                                self.density_cap[valid_log_probs])
+        return result, log_probs
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
