@@ -182,6 +182,9 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
     def __deepcopy__(self):
         return self.__class__(self.variables[0].item(), self.interval.copy())
 
+    def remove_nodes(self, remove_mask: jax.Array) -> Self:
+        return self.__class__(self.variable, self.interval[~remove_mask])
+
 
 class DiracDeltaLayer(ContinuousLayer):
 
@@ -272,3 +275,6 @@ class DiracDeltaLayer(ContinuousLayer):
     def merge_with(self, others: List[Self]) -> Self:
         return self.__class__(self.variable, jnp.concatenate([self.location] + [other.location for other in others]),
                                 jnp.concatenate([self.density_cap] + [other.density_cap for other in others]))
+
+    def remove_nodes(self, remove_mask: jax.Array) -> Self:
+        return self.__class__(self.variable, self.location[~remove_mask], self.density_cap[~remove_mask])

@@ -16,6 +16,8 @@ from probabilistic_model.probabilistic_circuit.jax.input_layer import DiracDelta
 from probabilistic_model.probabilistic_circuit.jax.inner_layer import ProductLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 
+import warnings
+warnings.filterwarnings("ignore")
 
 class DiracProductTestCase(unittest.TestCase):
 
@@ -74,6 +76,21 @@ class DiracProductTestCase(unittest.TestCase):
         prob = self.product_layer.probability_of_simple_event(event)
         result = jnp.array([1, 0], dtype=jnp.float32)
         self.assertTrue(jnp.allclose(prob, result))
+
+    def test_conditioning(self):
+
+        event = SimpleEvent({self.x: closed(-1, 1),
+                             self.y: closed(4.5, 5.5),
+                             self.z: closed(5.5, 6.5)})
+
+        conditional, log_prob = self.product_layer.log_conditional_of_simple_event(event)
+        conditional.validate()
+        self.assertTrue(jnp.allclose(log_prob, jnp.log(jnp.array([1., 0.]))))
+        self.assertEqual(conditional.number_of_nodes, 1)
+        self.assertEqual(len(conditional.child_layers), 3)
+        self.assertEqual(conditional.child_layers[0].number_of_nodes, 1)
+        self.assertEqual(conditional.child_layers[1].number_of_nodes, 1)
+        self.assertEqual(conditional.child_layers[2].number_of_nodes, 1)
 
 
 class PCProductLayerTestCase(unittest.TestCase):
