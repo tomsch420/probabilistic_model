@@ -11,19 +11,20 @@ import jax
 import numpy as np
 import tqdm
 from jax import numpy as jnp, tree_flatten
-from jax.experimental.sparse import BCOO, bcoo_concatenate, bcoo_slice
+from jax.experimental.sparse import BCOO, bcoo_concatenate
 from jaxtyping import Int
+from keras.src.legacy.backend import variable
 from random_events.product_algebra import SimpleEvent
 from random_events.utils import recursive_subclasses, SubclassJSONSerializer
-from scipy.sparse import coo_matrix, coo_array
+from random_events.variable import Variable
+from scipy.sparse import coo_matrix, coo_array, csc_array
 from sortedcontainers import SortedSet
-from triton.language import dtype
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Self, Optional
 
-from . import embed_sparse_array_in_nan_array, shrink_index_array
+from . import shrink_index_array
 from .utils import copy_bcoo, sample_from_sparse_probabilities_csc, sparse_remove_rows_and_cols_where_all
-from ..nx.probabilistic_circuit import SumUnit, ProductUnit, ProbabilisticCircuitMixin
-from ...utils import timeit_print
+from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, ProbabilisticCircuitMixin,
+                                        ProbabilisticCircuit as NXProbabilisticCircuit)
 
 
 def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
@@ -128,6 +129,20 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         """
         return tuple()
 
+    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
+        ProbabilisticCircuitMixin]:
+        """
+        Convert the layer to a networkx circuit.
+        For every node in this circuit, a corresponding node in the networkx circuit
+        is created.
+        The nodes all belong to the same circuit.
+
+        :param variables: The variables of the circuit.
+        :param progress_bar: A progress bar to show the progress.
+        :return: The nodes of the networkx circuit.
+        """
+        raise NotImplementedError
+
     @property
     def impossible_condition_result(self) -> Tuple[None, jax.Array]:
         """
@@ -197,6 +212,13 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         flattened_parameters, _ = tree_flatten(parameters)
         number_of_parameters = sum([len(p) for p in flattened_parameters])
         return number_of_parameters
+
+    @property
+    def number_of_components(self) -> 0:
+        """
+        :return: The number of components (leaves + edges) of the entire circuit
+        """
+        return self.number_of_nodes
 
     def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index=0):
         raise NotImplementedError
@@ -271,6 +293,11 @@ class InnerLayer(Layer, ABC):
         result["child_layers"] = [child_layer.to_json() for child_layer in self.child_layers]
         return result
 
+    def clean_up_orphans(self) -> Self:
+        """
+        Clean up the layer by removing orphans in the child layers.
+        """
+        raise NotImplementedError
 
 class InputLayer(Layer, ABC):
     """
@@ -337,6 +364,10 @@ class SumLayer(InnerLayer):
     @property
     def number_of_nodes(self) -> int:
         return self.log_weights[0].shape[0]
+
+    @property
+    def number_of_components(self) -> int:
+        return sum([cl.number_of_components for cl in self.child_layers]) + sum([lw.nse for lw in self.log_weights])
 
     @property
     def concatenated_log_weights(self) -> BCOO:
@@ -538,7 +569,6 @@ class SumLayer(InnerLayer):
         resulting_layer = SumLayer(conditional_child_layers, conditional_log_weights)
         return resulting_layer, (log_probabilities - self.log_normalization_constants)
 
-
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
         log_weights = [copy_bcoo(log_weight) for log_weight in self.log_weights]
@@ -596,6 +626,49 @@ class SumLayer(InnerLayer):
         sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
         return NXConverterLayer(sum_layer, nodes, result_hash_remap)
 
+    def remove_nodes(self, remove_mask: jax.Array) -> Self:
+        new_log_weights = [lw[~remove_mask] for lw in self.log_weights]
+        return self.__class__(self.child_layers, new_log_weights)
+
+    def clean_up_orphans(self) -> Self:
+        raise NotImplementedError
+
+    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
+        ProbabilisticCircuitMixin]:
+
+        variables_ = [variables[i] for i in self.variables]
+
+        if progress_bar:
+            progress_bar.set_postfix_str(f"Parsing Sum Layer for variables {variables_}")
+
+        nx_pc = NXProbabilisticCircuit()
+        units = [SumUnit() for _ in range(self.number_of_nodes)]
+        nx_pc.add_nodes_from(units)
+
+        child_layer_nx = [cl.to_nx(variables, progress_bar) for cl in self.child_layers]
+
+        clw = self.normalized_weights
+        csc_weights = coo_matrix((clw.data, clw.indices.T), shape=clw.shape).tocsc(copy=False)
+
+        # offset for shifting through the frequencies of the node_to_child_frequency_map
+        prev_column_index = 0
+
+        for child_layer in child_layer_nx:
+            # extract the weights for the child layer
+            current_weight_block: csc_array = csc_weights[:, prev_column_index:prev_column_index + len(child_layer)]
+            current_weight_block: coo_array = current_weight_block.tocoo(False)
+
+            for row, col, weight in zip(current_weight_block.row, current_weight_block.col, current_weight_block.data):
+                units[row].add_subcircuit(child_layer[col], weight)
+
+                if progress_bar:
+                    progress_bar.update()
+
+            # shift the offset
+            prev_column_index += len(child_layer)
+
+        return units
+
 
 class ProductLayer(InnerLayer):
     """
@@ -642,6 +715,10 @@ class ProductLayer(InnerLayer):
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
         return ProductUnit,
+
+    @property
+    def number_of_components(self) -> int:
+        return sum([cl.number_of_components for cl in self.child_layers]) + self.edges.nse
 
     @cached_property
     def variables(self) -> jax.Array:
@@ -769,12 +846,12 @@ class ProductLayer(InnerLayer):
 
             # create new indices for the edges
             new_indices = edges.indices[valid_edges]
-            new_indices = jnp.concatenate([ jnp.zeros((len(new_indices), 1), dtype=jnp.int32), new_indices],
+            new_indices = jnp.concatenate([jnp.zeros((len(new_indices), 1), dtype=jnp.int32), new_indices],
                                           axis=1)
 
             new_edges = BCOO((remapped_child_edges[valid_edges].astype(jnp.int32),
                               new_indices),
-                             shape = (1, self.number_of_nodes), indices_sorted=True,
+                             shape=(1, self.number_of_nodes), indices_sorted=True,
                              unique_indices=True)
             remapped_edges.append(new_edges)
 
@@ -799,7 +876,6 @@ class ProductLayer(InnerLayer):
         """
         Clean up the layer by removing orphans in the child layers.
         """
-
         new_child_layers = []
 
         for index, (edges, child_layer) in enumerate(zip(self.edges, self.child_layers)):
@@ -822,9 +898,12 @@ class ProductLayer(InnerLayer):
         # compress edges
         shrunken_indices = shrink_index_array(self.edges.indices)
         new_edges = BCOO((self.edges.data, shrunken_indices), shape=self.edges.shape, indices_sorted=True,
-                          unique_indices=True)
+                         unique_indices=True)
         return self.__class__(new_child_layers, new_edges)
 
+    def remove_nodes(self, remove_mask: jax.Array) -> Self:
+        new_edges = self.edges[:, ~remove_mask]
+        return self.__class__(self.child_layers, new_edges)
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
@@ -869,6 +948,26 @@ class ProductLayer(InnerLayer):
                  sort_indices().sum_duplicates(remove_zeros=False))
         layer = cls([cl.layer for cl in child_layers], edges)
         return NXConverterLayer(layer, nodes, hash_remap)
+
+    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
+        ProbabilisticCircuitMixin]:
+
+        variables_ = [variables[i] for i in self.variables]
+        if progress_bar:
+            progress_bar.set_postfix_str(f"Parsing Product Layer of variables {variables_}")
+
+        nx_pc = NXProbabilisticCircuit()
+        units = [ProductUnit() for _ in range(self.number_of_nodes)]
+        nx_pc.add_nodes_from(units)
+
+        child_layer_nx = [cl.to_nx(variables, progress_bar) for cl in self.child_layers]
+
+        for (row, col), data in zip(self.edges.indices, self.edges.data):
+            units[col].add_subcircuit(child_layer_nx[row][data])
+            if progress_bar:
+                progress_bar.update()
+
+        return units
 
 
 @dataclass

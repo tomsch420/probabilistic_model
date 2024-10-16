@@ -124,6 +124,16 @@ class JPTIntegrationTestCase(unittest.TestCase):
         jax_ll = model.log_likelihood(samples)
         self.assertTrue((jax_ll > -jnp.inf).all())
 
+    def test_to_nx_pc(self):
+        model = ProbabilisticCircuit.from_nx(self.jpt, False)
+        model_nx = model.to_nx(True)
+        import matplotlib.pyplot as plt
+        model_nx.root.plot_structure()
+        plt.show()
+        samples = jnp.array(model_nx.sample(1000))
+        jax_ll = model.log_likelihood(samples)
+        self.assertTrue((jax_ll > -jnp.inf).all())
+
 
 class LearningTestCase(unittest.TestCase):
 

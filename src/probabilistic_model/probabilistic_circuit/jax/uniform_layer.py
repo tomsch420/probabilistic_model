@@ -1,10 +1,14 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import jax
 import numpy as np
+import random_events
 from jax import numpy as jnp
 from jax.experimental.sparse import BCOO
 from random_events.interval import SimpleInterval
+from random_events.variable import Variable
+from sortedcontainers import SortedSet
+from sqlalchemy.sql.functions import random
 from typing_extensions import Type, Tuple, Self
 
 from .inner_layer import NXConverterLayer
@@ -12,6 +16,8 @@ from .input_layer import ContinuousLayerWithFiniteSupport
 from ..nx.distributions import UniformDistribution
 from .utils import simple_interval_to_open_array, create_bcoo_indices_from_row_lengths
 import tqdm
+
+from ..nx.probabilistic_circuit import ProbabilisticCircuitMixin, ProbabilisticCircuit as NXProbabilisticCircuit
 
 
 class UniformLayer(ContinuousLayerWithFiniteSupport):
@@ -102,3 +108,23 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         return cls(data["variable"], jnp.array(data["interval"]))
+
+    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
+        ProbabilisticCircuitMixin]:
+        variable = variables[self.variable]
+
+        if progress_bar:
+            progress_bar.set_postfix_str(f"Creating Uniform distributions for variable {variable.name}")
+
+        nx_pc = NXProbabilisticCircuit()
+        nodes = [UniformDistribution(variable=variable,
+                                     interval=random_events.interval.SimpleInterval(lower.item(), upper.item(),
+                                                                                    random_events.interval.Bound.OPEN,
+                                                                                    random_events.interval.Bound.OPEN))
+                 for lower, upper in self.interval]
+
+        if progress_bar:
+            progress_bar.update(self.number_of_nodes)
+
+        nx_pc.add_nodes_from(nodes)
+        return nodes

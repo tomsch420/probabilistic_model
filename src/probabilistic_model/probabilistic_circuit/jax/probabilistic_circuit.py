@@ -77,6 +77,19 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
 
         return cls(pc.variables, root)
 
+    def to_nx(self, progress_bar: bool = True) -> NXProbabilisticCircuit:
+        """
+        Convert the probabilistic circuit to a networkx graph.
+
+        :param progress_bar: Whether to show a progress bar.
+        :return: The networkx graph.
+        """
+        if progress_bar:
+            number_of_edges = self.root.number_of_components
+            progress_bar = tqdm.tqdm(total=number_of_edges, desc="Converting to nx")
+        else:
+            progress_bar = None
+        return self.root.to_nx(self.variables, progress_bar)[0].probabilistic_circuit
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()

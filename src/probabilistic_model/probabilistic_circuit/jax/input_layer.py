@@ -4,11 +4,14 @@ from typing import List, Dict, Any
 
 import jax
 import numpy as np
+import tqdm
 from jax import numpy as jnp
 from jax.experimental.array_api import reshape
 from jax.experimental.sparse import BCOO, BCSR
 from random_events.interval import Interval, SimpleInterval
 from random_events.product_algebra import SimpleEvent
+from random_events.variable import Variable
+from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Type, Self, Union, Optional
 
 from . import create_bcoo_indices_from_row_lengths, create_bcsr_indices_from_row_lengths, \
@@ -17,6 +20,7 @@ from .inner_layer import InputLayer, NXConverterLayer, SumLayer
 from ..nx.distributions import DiracDeltaDistribution
 import equinox as eqx
 from .utils import simple_interval_to_open_array, remove_rows_and_cols_where_all
+from ..nx.probabilistic_circuit import ProbabilisticCircuitMixin, ProbabilisticCircuit as NXProbabilisticCircuit
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -278,3 +282,19 @@ class DiracDeltaLayer(ContinuousLayer):
 
     def remove_nodes(self, remove_mask: jax.Array) -> Self:
         return self.__class__(self.variable, self.location[~remove_mask], self.density_cap[~remove_mask])
+
+    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
+        ProbabilisticCircuitMixin]:
+        nx_pc = NXProbabilisticCircuit()
+
+        variable = variables[self.variable]
+
+        if progress_bar:
+            progress_bar.set_postfix_str(f"Creating Dirac Delta distributions for variable {variable.name}")
+
+        nodes = [DiracDeltaDistribution(variable, location.item(), density_cap.item()) for location, density_cap in
+                 zip(self.location, self.density_cap)]
+        progress_bar.update(self.number_of_nodes)
+        nx_pc.add_nodes_from(nodes)
+        return nodes
+

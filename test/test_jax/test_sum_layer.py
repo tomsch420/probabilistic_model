@@ -115,6 +115,11 @@ class DiracSumUnitTestCase(unittest.TestCase):
         self.assertEqual(c.child_layers[0].number_of_nodes, 1)
         self.assertEqual(c.child_layers[1].number_of_nodes, 2)
 
+    def test_remove(self):
+        result = self.sum_layer.remove_nodes(jnp.array([True, False]))
+        result.validate()
+        self.assertEqual(result.number_of_nodes, 1)
+
 
 class PCSumUnitTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
@@ -151,6 +156,10 @@ class PCSumUnitTestCase(unittest.TestCase):
         result = np.array([2, 2, 2, 3, 3, 5, 5, 5, 5, 5]).reshape(-1, 1)
         self.assertTrue(np.allclose(samples, result))
 
+    def test_conditioning(self):
+        event = SimpleEvent({self.x: closed(1.5, 4.5)})
+        conditional, log_prob = self.model.root.log_conditional_of_simple_event(event)
+        # conditional.validate()
 
 
 class NygaDistributionTestCase(unittest.TestCase):
