@@ -101,7 +101,7 @@ def eval_performance(nx_method, nx_args,  jax_method, jax_args, number_of_iterat
 
 data = nx_model.sample(number_of_samples_for_evaluation)
 data_jax = jnp.array(data)
-event = SimpleEvent(VariableMap({variable: closed(0, 1) for variable in variables}))
+event = SimpleEvent(VariableMap({variable: closed(0, 0.1) | closed(0.2, 0.3) | closed(0.4, 0.5) for variable in variables}))
 
 # with jax.profiler.trace("/tmp/jax-trace", create_perfetto_link=True):
 #     jax_model.sample(1000)
@@ -111,8 +111,8 @@ event = SimpleEvent(VariableMap({variable: closed(0, 1) for variable in variable
 # assert (ll > -jnp.inf).all()
 
 # times_nx, times_jax = eval_performance(nx_model.log_likelihood, (data, ), compiled_ll_jax, (data_jax, ), 20, 2)
-# times_nx, times_jax = eval_performance(prob_nx, event, prob_jax, event, 15, 10)
-times_nx, times_jax = eval_performance(nx_model.sample, (10000, ), jax_model.sample, (10000,), 1, 0)
+times_nx, times_jax = eval_performance(nx_model.probability_of_simple_event, (event,), jax_model.probability_of_simple_event, (event,), 20, 10)
+# times_nx, times_jax = eval_performance(nx_model.sample, (10000, ), jax_model.sample, (10000,), 1, 0)
 
 time_jax = np.mean(times_jax), np.std(times_jax)
 time_nx = np.mean(times_nx), np.std(times_nx)

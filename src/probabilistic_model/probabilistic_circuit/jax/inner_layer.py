@@ -769,28 +769,24 @@ class ProductLayer(InnerLayer):
 
             # create new indices for the edges
             new_indices = edges.indices[valid_edges]
-            new_indices = jnp.concatenate([new_indices, jnp.zeros((len(new_indices), 1), dtype=jnp.int32)],
+            new_indices = jnp.concatenate([ jnp.zeros((len(new_indices), 1), dtype=jnp.int32), new_indices],
                                           axis=1)
 
             new_edges = BCOO((remapped_child_edges[valid_edges].astype(jnp.int32),
                               new_indices),
-                             shape = (self.number_of_nodes, 1), indices_sorted=True,
+                             shape = (1, self.number_of_nodes), indices_sorted=True,
                              unique_indices=True)
             remapped_edges.append(new_edges)
 
-        remapped_edges = bcoo_concatenate(remapped_edges, dimension=1).sort_indices()
-
-        print(embed_sparse_array_in_nan_array(remapped_edges))
+        remapped_edges = bcoo_concatenate(remapped_edges, dimension=0).sort_indices()
 
         # get nodes that should be removed as boolean mask
         remove_mask = log_probabilities == -jnp.inf  # shape (#nodes, )
         keep_mask = ~remove_mask
 
-        print(remapped_edges.indices, remapped_edges.data)
         # remove the nodes that have -inf log probabilities from remapped_edges
-        remapped_edges = coo_array((remapped_edges.data, remapped_edges.indices.T), shape=remapped_edges.shape).tocsr()
-        remapped_edges = remapped_edges[keep_mask].tocoo()
-
+        remapped_edges = coo_array((remapped_edges.data, remapped_edges.indices.T), shape=remapped_edges.shape).tocsc()
+        remapped_edges = remapped_edges[:, keep_mask].tocoo()
         remapped_edges = BCOO((remapped_edges.data, jnp.stack((remapped_edges.row, remapped_edges.col)).T),
                               shape=remapped_edges.shape, indices_sorted=True, unique_indices=True)
 
