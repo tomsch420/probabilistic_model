@@ -17,121 +17,6 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 
 import plotly.graph_objects as go
 
-
-class ShowMixin:
-    model: Union[ProbabilisticCircuit, UnitMixin]
-
-    def show(self, model: Optional[Union[ProbabilisticCircuit, UnitMixin]] = None):
-
-        if model is None:
-            model = self.model
-
-        if isinstance(model, UnitMixin):
-            model = model.probabilistic_circuit
-
-        pos = nx.planar_layout(model)
-        nx.draw(model, pos=pos, with_labels=True)
-        plt.show()
-
-
-class ProductUnitTestCase(unittest.TestCase, ShowMixin):
-    x: Continuous = Continuous("x")
-    y: Continuous = Continuous("y")
-    model: ProductUnit
-
-    def setUp(self):
-        u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
-        u2 = UniformDistribution(self.y, closed(3, 4).simple_sets[0])
-
-        product_unit = ProductUnit()
-        product_unit.add_subcircuit(u1)
-        product_unit.add_subcircuit(u2)
-        self.model = product_unit
-
-    def test_setup(self):
-        self.assertEqual(len(self.model.probabilistic_circuit.nodes()), 3)
-        self.assertEqual(len(self.model.probabilistic_circuit.edges()), 2)
-
-    def test_variables(self):
-        self.assertEqual(self.model.variables, SortedSet([self.x, self.y]))
-
-    def test_leaves(self):
-        self.assertEqual(len(self.model.leaves), 2)
-
-    def test_likelihood(self):
-        event = np.array([[0.5, 3.5]])
-        result = self.model.likelihood(event)
-        self.assertEqual(result, 1)
-
-    def test_probability(self):
-        event = SimpleEvent({self.x: closed(0, 0.5), self.y: closed(3, 3.5)}).as_composite_set()
-        result = self.model.probability(event)
-        self.assertEqual(result, 0.25)
-
-    def test_mode(self):
-        mode, likelihood = self.model.mode()
-        self.assertEqual(likelihood, 1)
-        self.assertEqual(mode,
-                         SimpleEvent({self.x: closed(0, 1), self.y: closed(3, 4)}).as_composite_set())
-
-    def test_sample(self):
-        samples = self.model.sample(100)
-        likelihood = self.model.likelihood(samples)
-        self.assertTrue(all(likelihood > 0))
-
-    def test_moment(self):
-        expectation = self.model.expectation(self.model.variables)
-        self.assertEqual(expectation[self.x], 0.5)
-        self.assertEqual(expectation[self.y], 3.5)
-
-    def test_conditional(self):
-        event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
-        result, probability = self.model.conditional(event)
-        self.assertEqual(probability, 0.5)
-        self.assertEqual(len(result.probabilistic_circuit.nodes()), 3)
-        self.assertIsInstance(result, ProductUnit)
-        self.assertIsInstance(result.probabilistic_circuit.root, ProductUnit)
-
-    def test_conditional_with_0_evidence(self):
-        event = SimpleEvent({self.x: closed(1.5, 2)}).as_composite_set()
-        result, probability = self.model.conditional(event)
-        self.assertEqual(probability, 0)
-        self.assertEqual(result, None)
-
-    def test_marginal_with_intersecting_variables(self):
-        marginal = self.model.marginal([self.x])
-        self.assertEqual(len(marginal.probabilistic_circuit.nodes()), 2)
-        self.assertEqual(marginal.probabilistic_circuit.variables, SortedSet([self.x]))
-
-    def test_marginal_without_intersecting_variables(self):
-        marginal = self.model.marginal([])
-        self.assertIsNone(marginal)
-
-    def test_domain(self):
-        domain = self.model.support
-        domain_by_hand = SimpleEvent({self.x: closed(0, 1),
-                                      self.y: closed(3, 4)}).as_composite_set()
-        self.assertEqual(domain, domain_by_hand)
-
-    def test_serialization(self):
-        serialized = self.model.to_json()
-        deserialized = ProductUnit.from_json(serialized)
-        self.assertEqual(self.model, deserialized)
-
-    def test_copy(self):
-        copy = self.model.__copy__()
-        self.assertEqual(self.model, copy)
-        self.assertNotEqual(id(copy), id(self.model))
-
-    def test_sample_not_equal(self):
-        samples = self.model.sample(10)
-        uniques = np.unique(samples, axis=0)
-        self.assertEqual(len(samples), len(uniques))
-
-    def test_determinism(self):
-        self.assertTrue(self.model.is_deterministic())
-
-
 class SymbolEnum(SetElement):
     EMPTY_SET = -1
     A = 0
@@ -139,7 +24,7 @@ class SymbolEnum(SetElement):
     C = 2
 
 
-class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
+class MinimalGraphCircuitTestCase(unittest.TestCase):
     integer = Integer("integer")
     symbol = Symbolic("symbol", SymbolEnum)
     real = Continuous("x")
@@ -277,7 +162,7 @@ class MinimalGraphCircuitTestCase(unittest.TestCase, ShowMixin):
         self.assertFalse(self.model.is_deterministic())
 
 
-class FactorizationTestCase(unittest.TestCase, ShowMixin):
+class FactorizationTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
     z: Continuous = Continuous("z")
@@ -330,7 +215,7 @@ class FactorizationTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(1, self.sum_unit_1.probability(event))
 
 
-class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
+class MountedInferenceTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
 
@@ -390,7 +275,7 @@ class MountedInferenceTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(len(simplified.probabilistic_circuit.edges()), 6)
 
 
-class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
+class ComplexMountedInferenceTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
 
@@ -437,7 +322,7 @@ class ComplexMountedInferenceTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(model.probability(event), deserialized_model.probability(event))
 
 
-class MultivariateGaussianTestCase(unittest.TestCase, ShowMixin):
+class MultivariateGaussianTestCase(unittest.TestCase):
 
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
@@ -520,7 +405,7 @@ class ComplexInferenceTestCase(unittest.TestCase):
         self.assertAlmostEqual(conditional.probability(self.event), 1.)
 
 
-class KitchenCircuitTestCase(unittest.TestCase, ShowMixin):
+class KitchenCircuitTestCase(unittest.TestCase):
     model: ProbabilisticCircuit
     x = Continuous("x")
     y = Continuous("y")
@@ -549,7 +434,7 @@ class KitchenCircuitTestCase(unittest.TestCase, ShowMixin):
         # go.Figure(traces, model.plotly_layout()).show()
 
 
-class ConvolutionTestCase(unittest.TestCase, ShowMixin):
+class ConvolutionTestCase(unittest.TestCase):
 
     def setUp(self):
         self.variable = Continuous("x")

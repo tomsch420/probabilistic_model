@@ -72,9 +72,12 @@ def graph_inference_caching_wrapper(func):
     return wrapper
 
 
-class UnitMixin(ProbabilisticModel, SubclassJSONSerializer):
+class UnitMixin(SubclassJSONSerializer):
     """
-    Mixin class for all components of a probabilistic circuit.
+    Mixin class for all units of a probabilistic circuit.
+    This class is very similar to :class:`ProbabilisticModel` but is used for the internal calculations.
+    This class should not be used by new users directly.
+    Use :class:`ProbabilisticCircuit` as interface to users.
     """
 
     probabilistic_circuit: ProbabilisticCircuit
@@ -139,6 +142,48 @@ class UnitMixin(ProbabilisticModel, SubclassJSONSerializer):
         for subcircuit in self.subcircuits:
             if subcircuit.cache_result != value:
                 subcircuit.cache_result = value
+
+    def log_likelihood(self, events: np.array) -> np.array:
+        """
+        see :meth:`ProbabilisticModel.log_likelihood`
+        """
+        raise NotImplementedError
+
+    def cdf(self, events: np.array) -> np.array:
+        """
+        see :meth:`ProbabilisticModel.cdf`
+        """
+        raise NotImplementedError
+
+    def probability_of_simple_event(self, event: SimpleEvent) -> float:
+        """
+        see :meth:`ProbabilisticModel.probability_of_simple_event`
+        """
+        raise NotImplementedError
+
+    def log_mode(self) -> Tuple[Event, float]:
+        """
+        see :meth:`ProbabilisticModel.mode`
+        """
+        raise NotImplementedError
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        """
+        see :meth:`ProbabilisticModel.marginal`
+        """
+        raise NotImplementedError
+
+    def sample(self, amount: int) -> np.array:
+        """
+        see :meth:`ProbabilisticModel.sample`
+        """
+        raise NotImplementedError
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        """
+        see :meth:`ProbabilisticModel.moment`
+        """
+        raise NotImplementedError
 
     @property
     def leaves(self) -> List[UnivariateDistribution]:
@@ -211,7 +256,16 @@ class UnitMixin(ProbabilisticModel, SubclassJSONSerializer):
         """
         return None, -np.inf
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[UnitMixin], float]:
+    def log_conditional(self, event: Event, probabilistic_circuit: ProbabilisticCircuit) -> Tuple[Optional[UnitMixin], float]:
+        """
+        Construct the conditional circuit from an event.
+        The event is not required to be disjoint.
+        If it is not disjoint, the probability of the event is not correct, but the conditional distribution is.
+
+        :param event: The event to condition on.
+        :param probabilistic_circuit: The resulting circuit to add the units into.
+        :return: The conditional circuit and log(p(event))
+        """
 
         # skip trivial case
         if event.is_empty():
@@ -219,10 +273,11 @@ class UnitMixin(ProbabilisticModel, SubclassJSONSerializer):
 
         # if the event is easy, don't create a proxy node
         elif len(event.simple_sets) == 1:
-            return self.log_conditional_of_simple_event(event.simple_sets[0])
+            return self.log_conditional_of_simple_event(event.simple_sets[0], probabilistic_circuit)
 
         # construct the proxy node
         result = SumUnit()
+        result.probabilistic_circuit = probabilistic_circuit
         total_probability = 0
 
         for simple_event in event.simple_sets:
@@ -232,7 +287,7 @@ class UnitMixin(ProbabilisticModel, SubclassJSONSerializer):
 
             # add the conditional distribution of the simple event in this circuit
             conditional, log_probability = self.log_conditional_of_simple_event(simple_event,
-                                                                                result.probabilistic_circuit)
+                                                                                probabilistic_circuit)
 
             # skip if impossible
             if log_probability == -np.inf:
@@ -260,7 +315,7 @@ class UnitMixin(ProbabilisticModel, SubclassJSONSerializer):
         :param event: The simple event to condition on.
         :param probabilistic_circuit: The probabilistic circuit to mount the result into.
 
-        :return: the conditional circuit and log(p(event))
+        :return: The conditional circuit and log(p(event))
         """
         raise NotImplementedError
 
@@ -958,7 +1013,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         :return: True if the graph is valid, False otherwise.
         """
-        return nx.is_directed_acyclic_graph(self) and nx.is_weakly_connected(self)
+        return nx.is_directed_acyclic_graph(self) and nx.is_strongly_connected(self)
 
     def add_node(self, node: UnitMixin, **attr):
 
@@ -1000,7 +1055,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     # @graph_inference_caching_wrapper
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        conditional, log_probability = self.root.log_conditional(event)
+        new_circuit = self.__class__()
+        conditional, log_probability = self.root.log_conditional(event, new_circuit)
         if conditional is None:
             return conditional, log_probability
         return conditional.probabilistic_circuit, log_probability
@@ -1128,9 +1184,3 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         :return: Whether, this circuit is deterministic or not.
         """
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
-
-    def plot(self, **kwargs):
-        return self.root.plot(**kwargs)
-
-    def plotly_layout(self, **kwargs):
-        return self.root.plotly_layout()

@@ -105,7 +105,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
     def test_plot(self):
         condition = closed(-float("inf"), -1) | closed(1, float("inf"))
         distribution, _ = self.distribution.conditional(SimpleEvent({self.x: condition}).as_composite_set())
-        traces = distribution.plot()
+        traces = distribution.probabilistic_circuit.plot()
         self.assertGreater(len(traces), 0)
         # go.Figure(traces, distribution.plotly_layout()).show()
 
