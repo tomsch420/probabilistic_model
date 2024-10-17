@@ -521,6 +521,9 @@ class DiracDeltaDistribution(ContinuousDistribution):
     def representation(self):
         return f"δ({self.location}, {self.density_cap})"
 
+    def __repr__(self):
+        return f"δ({self.variable.name})"
+
     def __copy__(self):
         return self.__class__(self.variable, self.location, self.density_cap)
 
@@ -536,9 +539,6 @@ class DiracDeltaDistribution(ContinuousDistribution):
         location = data["location"]
         density_cap = data["density_cap"]
         return cls(variable, location, density_cap)
-
-    def __repr__(self):
-        return f"δ({self.variable.name}, {self.location}, {self.density_cap})"
 
     def plot(self, **kwargs) -> List:
         lower_border = self.location - 1

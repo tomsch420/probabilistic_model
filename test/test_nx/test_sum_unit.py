@@ -7,22 +7,7 @@ from typing_extensions import Union
 
 from probabilistic_model.probabilistic_circuit.nx.distributions import (UniformDistribution)
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
-
-
-class ShowMixin:
-    model: Union[ProbabilisticCircuit, UnitMixin]
-
-    def show(self, model: Optional[Union[ProbabilisticCircuit, UnitMixin]] = None):
-
-        if model is None:
-            model = self.model
-
-        if isinstance(model, UnitMixin):
-            model = model.probabilistic_circuit
-
-        pos = nx.planar_layout(model)
-        nx.draw(model, pos=pos, with_labels=True)
-        plt.show()
+import plotly.graph_objects as go
 
 
 class NormalizationTestCase(unittest.TestCase):
@@ -37,39 +22,32 @@ class NormalizationTestCase(unittest.TestCase):
         sum_unit.normalize()
         self.assertAlmostEqual(sum_unit.weights[0], 0.5 / 0.8)
         self.assertAlmostEqual(sum_unit.weights[1], 0.3 / 0.8)
-
-    def test_plot(self):
-        u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
-        u2 = UniformDistribution(self.x, closed(3, 4).simple_sets[0])
-        sum_unit = SumUnit()
-        sum_unit.add_subcircuit(u1, 0.5)
-        sum_unit.add_subcircuit(u2, 0.3)
-        sum_unit.normalize()
-        traces = sum_unit.plot()
-        self.assertGreater(len(traces), 0)  # go.Figure(traces, sum_unit.plotly_layout()).show()
+        traces = sum_unit.probabilistic_circuit.plot()
+        self.assertGreater(len(traces), 0) # go.Figure(traces, sum_unit.probabilistic_circuit.plotly_layout()).show()
 
 
-class SumUnitTestCase(unittest.TestCase, ShowMixin):
+class SumUnitTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
-    model: SumUnit
+    model: ProbabilisticCircuit
 
     def setUp(self):
         u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
         u2 = UniformDistribution(self.x, closed(3, 4).simple_sets[0])
 
-        self.model = SumUnit()
-        self.model.add_subcircuit(u1, 0.6)
-        self.model.add_subcircuit(u2, 0.4)
+        model = SumUnit()
+        model.add_subcircuit(u1, 0.6)
+        model.add_subcircuit(u2, 0.4)
+        self.model = model.probabilistic_circuit
 
     def test_setup(self):
-        self.assertEqual(len(self.model.probabilistic_circuit.nodes()), 3)
-        self.assertEqual(len(self.model.probabilistic_circuit.edges()), 2)
+        self.assertEqual(len(list(self.model.nodes())), 3)
+        self.assertEqual(len(self.model.edges()), 2)
 
     def test_variables(self):
         self.assertEqual(self.model.variables, SortedSet([self.x]))
 
     def test_latent_variable(self):
-        self.assertEqual(len(self.model.latent_variable.domain.simple_sets), 2)
+        self.assertEqual(len(self.model.root.latent_variable.domain.simple_sets), 2)
 
     def test_domain(self):
         domain = self.model.support
@@ -77,7 +55,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(domain, domain_by_hand)
 
     def test_weighted_subcircuits(self):
-        weighted_subcircuits = self.model.weighted_subcircuits
+        weighted_subcircuits = self.model.root.weighted_subcircuits
         self.assertEqual(len(weighted_subcircuits), 2)
         self.assertEqual([weighted_subcircuit[0] for weighted_subcircuit in weighted_subcircuits], [0.6, 0.4])
 
@@ -95,11 +73,10 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
         result, probability = self.model.conditional(event)
         self.assertAlmostEqual(probability, 0.3)
-        self.assertEqual(len(result.probabilistic_circuit.nodes()), 2)
-        self.assertIsInstance(result, SumUnit)
-        self.assertIsInstance(result.probabilistic_circuit.root, SumUnit)
-        self.assertEqual(len(result.weighted_subcircuits), 1)
-        self.assertEqual(result.weighted_subcircuits[0][0], 1)
+        self.assertEqual(len(list(result.nodes())), 2)
+        self.assertIsInstance(result.root, SumUnit)
+        self.assertEqual(len(result.root.weighted_subcircuits), 1)
+        self.assertEqual(result.root.weighted_subcircuits[0][0], 1)
 
     def test_conditional_impossible(self):
         event = SimpleEvent({self.x: closed(5, 6)}).as_composite_set()
@@ -131,9 +108,9 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         self.assertEqual(self.model, deserialized)
 
     def test_copy(self):
-        copy = self.model.__copy__()
-        self.assertEqual(self.model, copy)
-        self.assertNotEqual(id(copy), id(self.model))
+        copy = self.model.root.__copy__()
+        self.assertEqual(self.model.root, copy)
+        self.assertNotEqual(id(copy), id(self.model.root))
 
     def test_conditional_inference(self):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
@@ -148,7 +125,7 @@ class SumUnitTestCase(unittest.TestCase, ShowMixin):
         s2.probabilistic_circuit.add_nodes_from([s2, s3, u1])
         s2.probabilistic_circuit.add_weighted_edges_from([(s2, s3, 1.), (s3, u1, 1.)])
         s1.mount(s2)
-        self.assertEqual(len(s1.probabilistic_circuit.nodes()), 4)
+        self.assertEqual(len(list(s1.probabilistic_circuit.nodes())), 4)
 
     def test_sample_not_equal(self):
         samples = self.model.sample(10)

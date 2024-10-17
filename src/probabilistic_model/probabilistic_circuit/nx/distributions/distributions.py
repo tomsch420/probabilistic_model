@@ -40,7 +40,9 @@ class UnivariateDistribution(PMUnivariateDistribution, UnitMixin, ABC):
         result, log_prob = super().log_conditional(event.as_composite_set())
         if log_prob == -np.inf:
             return self.impossible_condition_result
-        result.probabilistic = probabilistic_circuit
+
+        probabilistic_circuit.add_node(result)
+
         return result, log_prob
 
     # @cache_inference_result

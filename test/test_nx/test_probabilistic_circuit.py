@@ -1,5 +1,6 @@
 import unittest
 
+from matplotlib import pyplot as plt
 from random_events.interval import closed, open, closed_open
 from random_events.variable import Integer, Continuous
 from typing_extensions import Union
@@ -492,44 +493,40 @@ class ConvolutionTestCase(unittest.TestCase):
         self.assertEqual(len(mode.simple_sets), 1)
 
 
-class ClassicExampleTestCase(unittest.TestCase):
+class SmallCircuitTestCast(unittest.TestCase):
 
     x = Continuous("x")
     y = Continuous("y")
-    sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
-    sum4, sum5 = SumUnit(), SumUnit()
-    prod1, prod2 = ProductUnit(), ProductUnit()
-    model = ProbabilisticCircuit()
-    model.add_node(sum1)
-    model.add_node(prod1)
-    model.add_node(prod2)
-    model.add_edge(sum1, prod1, weight=0.5)
-    model.add_edge(sum1, prod2, weight=0.5)
-    model.add_node(sum2)
-    model.add_node(sum3)
-    model.add_node(sum4)
-    model.add_node(sum5)
-    model.add_edge(prod1, sum2)
-    model.add_edge(prod1, sum4)
-    model.add_edge(prod2, sum3)
-    model.add_edge(prod2, sum5)
-    d_x1, d_x2 = DiracDeltaDistribution(x, 0, 1), DiracDeltaDistribution(x, 1, 2)
-    d_y1, d_y2 = DiracDeltaDistribution(y, 2, 3), DiracDeltaDistribution(y, 3, 4)
 
-    model.add_node(d_y1)
-    model.add_node(d_x2)
-    model.add_node(d_y2)
-    model.add_node(d_x1)
+    model: ProbabilisticCircuit
 
-    model.add_edge(sum2, d_x1, weight=0.8)
-    model.add_edge(sum2, d_x2, weight=0.2)
-    model.add_edge(sum3, d_x1, weight=0.7)
-    model.add_edge(sum3, d_x2, weight=0.3)
+    @classmethod
+    def setUpClass(cls):
+        sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
+        sum4, sum5 = SumUnit(), SumUnit()
+        prod1, prod2 = ProductUnit(), ProductUnit()
 
-    model.add_edge(sum4, d_y1, weight=0.5)
-    model.add_edge(sum4, d_y2, weight=0.5)
-    model.add_edge(sum5, d_y1, weight=0.1)
-    model.add_edge(sum5, d_y2, weight=0.9)
+        sum1.add_subcircuit(prod1, 0.5)
+        sum1.add_subcircuit(prod2, 0.5)
+        prod1.add_subcircuit(sum2)
+        prod1.add_subcircuit(sum4)
+        prod2.add_subcircuit(sum3)
+        prod2.add_subcircuit(sum5)
+
+        d_x1, d_x2 = DiracDeltaDistribution(cls.x, 0, 1), DiracDeltaDistribution(cls.x, 1, 2)
+        d_y1, d_y2 = DiracDeltaDistribution(cls.y, 2, 3), DiracDeltaDistribution(cls.y, 3, 4)
+
+        sum2.add_subcircuit(d_x1, 0.8)
+        sum2.add_subcircuit(d_x2, 0.2)
+        sum3.add_subcircuit(d_x1, 0.7)
+        sum3.add_subcircuit(d_x2, 0.3)
+
+        sum4.add_subcircuit(d_y1, 0.5)
+        sum4.add_subcircuit(d_y2, 0.5)
+        sum5.add_subcircuit(d_y1, 0.1)
+        sum5.add_subcircuit(d_y2, 0.9)
+
+        cls.model = sum1.probabilistic_circuit
 
     def test_sampling(self):
         samples = self.model.sample(100)
@@ -538,6 +535,7 @@ class ClassicExampleTestCase(unittest.TestCase):
 
     def test_plot(self):
         self.model.root.plot_structure()
+        plt.show()
 
 if __name__ == '__main__':
     unittest.main()

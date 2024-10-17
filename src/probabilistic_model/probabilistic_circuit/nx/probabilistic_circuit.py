@@ -85,11 +85,6 @@ class UnitMixin(SubclassJSONSerializer):
     The circuit this component is part of. 
     """
 
-    representation: str = None
-    """
-    The string representing this component.
-    """
-
     result_of_current_query: Any = None
     """
     Cache of the result of the current query. If the circuit would be queried multiple times,
@@ -387,7 +382,7 @@ class UnitMixin(SubclassJSONSerializer):
 
         # draw the nodes and labels
         nx.draw_networkx_nodes(subgraph, positions)
-        labels = {node: node.representation for node in subgraph.nodes}
+        labels = {node: repr(node) for node in subgraph.nodes}
         nx.draw_networkx_labels(subgraph, positions, labels)
         #  plt.show()
 
@@ -482,7 +477,7 @@ class SumUnit(UnitMixin):
                                         probabilistic_circuit: ProbabilisticCircuit) -> Tuple[Optional[Self], float]:
         # initialize result
         result = self.empty_copy()
-        result.probabilistic_circuit = probabilistic_circuit
+        probabilistic_circuit.add_node(result)
 
         # for every weighted subcircuit
         for weight, subcircuit in self.weighted_subcircuits:
@@ -773,7 +768,7 @@ class ProductUnit(UnitMixin):
     """
 
     def __repr__(self):
-        return "⊗"
+        return "∗"
 
     @property
     def variables(self) -> SortedSet:
@@ -862,7 +857,7 @@ class ProductUnit(UnitMixin):
 
         # create a new node with new circuit attached to it
         resulting_node = self.empty_copy()
-        resulting_node.probabilistic_circuit = probabilistic_circuit
+        probabilistic_circuit.add_node(resulting_node)
 
         for subcircuit in self.subcircuits:
 
@@ -1184,3 +1179,16 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         :return: Whether, this circuit is deterministic or not.
         """
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
+
+    def cdf(self, events: np.array) -> np.array:
+        return self.root.cdf(events)
+
+    def add_edges_and_nodes_from_circuit(self, other: Self):
+        """
+        Add all edges and nodes from another circuit to this circuit.
+
+        :param other: The other circuit to add.
+        """
+        self.add_nodes_from(other.nodes)
+        self.add_edges_from(other.unweighted_edges)
+        self.add_weighted_edges_from(other.weighted_edges)
