@@ -149,7 +149,7 @@ class InductionStepTestCase(unittest.TestCase):
         data = np.random.normal(0, 1, 100)
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        fig = go.Figure(distribution.plot())
+        fig = go.Figure(distribution.probabilistic_circuit.plot())
         self.assertIsNotNone(fig)
         # fig.show()
 
@@ -222,7 +222,7 @@ class NygaDistributionTestCase(unittest.TestCase):
         self.model.add_subcircuit(UniformDistribution(self.x, closed(0.5, 1.5).simple_sets[0]), 0.5)
 
     def test_plot(self):
-        fig = go.Figure(self.model.plot())
+        fig = go.Figure(self.model.probabilistic_circuit.plot())
         self.assertIsNotNone(fig)
         # fig.show()
 
@@ -239,8 +239,7 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
         self.data = data
 
     def test_plot(self):
-        self.model.support
-        fig = go.Figure(self.model.plot())
+        fig = go.Figure(self.model.probabilistic_circuit.plot())
         self.assertIsNotNone(fig)
 
     def test_likelihood(self):

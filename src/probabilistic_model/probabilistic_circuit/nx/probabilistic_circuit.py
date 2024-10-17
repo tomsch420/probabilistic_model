@@ -759,8 +759,8 @@ class SumUnit(UnitMixin):
         """
         result = np.full(len(samples), np.nan)
         for index, subcircuit in enumerate(self.subcircuits):
-            likelihood = subcircuit.likelihood(samples)
-            result[likelihood > 0] = index
+            likelihood = subcircuit.log_likelihood(samples)
+            result[likelihood > -np.inf] = index
         return result
 
 
@@ -1010,7 +1010,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         :return: True if the graph is valid, False otherwise.
         """
-        return nx.is_directed_acyclic_graph(self) and nx.is_strongly_connected(self)
+        return nx.is_directed_acyclic_graph(self) and nx.is_weakly_connected(self)
 
     def add_node(self, node: UnitMixin, **attr):
 

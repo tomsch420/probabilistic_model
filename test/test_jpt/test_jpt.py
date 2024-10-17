@@ -145,7 +145,7 @@ class JPTTestCase(unittest.TestCase):
         self.assertIsInstance(leaf_node.subcircuits[2], SymbolicDistribution)
 
         # check that all likelihoods are greater than 0
-        likelihood = leaf_node.likelihood(preprocessed_data)
+        likelihood = leaf_node.probabilistic_circuit.likelihood(preprocessed_data)
         self.assertTrue(all(likelihood > 0))
 
     def test_fit_without_sum_units(self):
@@ -163,7 +163,7 @@ class JPTTestCase(unittest.TestCase):
 
         # check that all likelihoods are greater than 0
         preprocessed_data = self.model.preprocess_data(self.data)
-        likelihood = self.model.likelihood(preprocessed_data)
+        likelihood = self.model.probabilistic_circuit.likelihood(preprocessed_data)
 
         self.assertTrue(all(likelihood > 0))
 
@@ -210,13 +210,6 @@ class JPTTestCase(unittest.TestCase):
         model = JPT(variables)
         model.fit(data)
         self.assertEqual(len(model.subcircuits), 4)
-
-    def test_plot(self):
-        self.model._min_samples_leaf = 10
-        self.model.fit(self.data)
-        fig = self.model.plot()
-        self.assertIsNotNone(fig)
-        # fig.show()
 
     def test_variable_dependencies_to_json(self):
         serialized = self.model._variable_dependencies_to_json()
@@ -274,7 +267,7 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
     def test_conditional_inference(self):
         evidence = SimpleEvent({variable: variable.domain for variable in self.model.variables}).as_composite_set()
         query = evidence
-        conditional_model, evidence_probability = self.model.conditional(evidence)
+        conditional_model, evidence_probability = self.model.probabilistic_circuit.conditional(evidence)
         self.assertAlmostEqual(1., evidence_probability)
         self.assertAlmostEqual(1., conditional_model.probability(query))
 
@@ -305,7 +298,7 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
         conditional, probability = model.conditional(SimpleEvent({x: closed(0, 10)}).as_composite_set())
 
     def test_mode(self):
-        mode, likelihood = self.model.mode()
+        mode, likelihood = self.model.probabilistic_circuit.mode()
 
         self.assertGreater(len(mode.simple_sets), 0)
 

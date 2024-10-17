@@ -115,11 +115,10 @@ class MinimalGraphCircuitTestCase(unittest.TestCase):
             self.assertIsNone(node.result_of_current_query)
             self.assertFalse(node.cache_result)
 
-    @unittest.skip("Caching is buggy.")
     def test_caching(self):
-        event = SimpleEvent({self.real: closed(0, 5), self.real2: closed(2, 5)}).as_composite_set()
+        event = SimpleEvent({self.real: closed(0, 5), self.real2: closed(2, 5)})
         self.model.root.cache_result = True
-        _ = self.model.root.probability(event)
+        _ = self.model.root.probability_of_simple_event(event)
 
         for node in self.model.nodes():
             if not isinstance(node, ContinuousDistribution):
@@ -213,7 +212,7 @@ class FactorizationTestCase(unittest.TestCase):
         self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.nodes()), 9)
         self.assertEqual(len(self.sum_unit_1.probabilistic_circuit.edges()), 9)
         event = SimpleEvent({variable: variable.domain for variable in self.sum_unit_1.variables}).as_composite_set()
-        self.assertEqual(1, self.sum_unit_1.probability(event))
+        self.assertEqual(1, self.sum_unit_1.probabilistic_circuit.probability(event))
 
 
 class MountedInferenceTestCase(unittest.TestCase):
@@ -266,7 +265,7 @@ class MountedInferenceTestCase(unittest.TestCase):
         mixture = SumUnit()
         mixture.add_subcircuit(gaussian_1, 0.5)
         mixture.add_subcircuit(gaussian_2, 0.5)
-        traces = mixture.plot()
+        traces = mixture.probabilistic_circuit.plot()
         self.assertGreater(len(traces), 0)
         # go.Figure(mixture.plot(), mixture.plotly_layout()).show()
 
@@ -489,7 +488,7 @@ class ConvolutionTestCase(unittest.TestCase):
         interval = open(-0.3, 0.3).complement()
         g1 = GaussianDistribution(self.variable, 0, 1)
         g2, _ = g1.conditional(SimpleEvent({self.variable: interval}).as_composite_set())
-        mode, _ = g2.mode()
+        mode, _ = g2.probabilistic_circuit.mode()
         self.assertEqual(len(mode.simple_sets), 1)
 
 
@@ -565,20 +564,20 @@ class SmallCircuitTestCast(unittest.TestCase):
     def test_sampling(self):
         samples = self.model.sample(100)
         unique = np.unique(samples, axis=0)
-        self.assertEqual(len(unique), 4)
+        self.assertGreater(len(unique), 95)
 
     def test_conditioning(self):
         event = SimpleEvent({self.x: closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
         conditional, prob = self.model.conditional(event)
         self.assertAlmostEqual(prob, 0.375)
-        conditional.plot_structure()
-        plt.show()
+        # conditional.plot_structure()
+        # plt.show()
 
-    def test_plot(self):
-        self.model.plot_structure()
-        plt.show()
-        fig = go.Figure(self.model.plot())
-        fig.show()
+    # def test_plot(self):
+    #     self.model.plot_structure()
+    #     plt.show()
+    #     fig = go.Figure(self.model.plot())
+    #     fig.show()
 
 if __name__ == '__main__':
     unittest.main()

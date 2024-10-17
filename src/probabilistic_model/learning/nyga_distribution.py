@@ -461,7 +461,7 @@ class NygaDistribution(SumUnit):
             else:
                 interval = closed_open(lower, upper)
             leaf = UniformDistribution(variable, interval.simple_sets[0])
-            weight = mixture.probability(SimpleEvent({variable: interval}).as_composite_set())
+            weight = mixture.probability_of_simple_event(SimpleEvent({variable: interval}))
             result.probabilistic_circuit.add_edge(result, leaf, weight=weight)
 
         return result
@@ -496,14 +496,14 @@ class NygaDistribution(SumUnit):
         Plot the distribution with PDF, CDF, Expectation and Mode.
         """
         traces = [self.pdf_trace(), self.cdf_trace()]
-        mode, maximum_likelihood = self.mode()
+        mode, maximum_likelihood = self.probabilistic_circuit.mode()
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
-        mode_trace = self.univariate_mode_traces(mode, height)
+        mode_trace = self.probabilistic_circuit.univariate_mode_traces(mode, height)
         self.reset_result_of_current_query()
 
         traces.extend(mode_trace)
         self.reset_result_of_current_query()
 
-        traces.append(self.univariate_expectation_trace(height))
+        traces.append(self.probabilistic_circuit.univariate_expectation_trace(height))
 
         return traces
