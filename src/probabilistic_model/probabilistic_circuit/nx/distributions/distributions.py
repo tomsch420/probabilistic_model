@@ -34,14 +34,14 @@ class UnivariateDistribution(PMUnivariateDistribution, UnitMixin, ABC):
     def __hash__(self):
         return UnitMixin.__hash__(self)
 
-    # @cache_inference_result
+    @cache_inference_result
     def log_conditional_of_simple_event(self, event: SimpleEvent,
                                         probabilistic_circuit: ProbabilisticCircuit) -> Tuple[Optional[Self], float]:
         result, log_prob = super().log_conditional(event.as_composite_set())
         if log_prob == -np.inf:
             return self.impossible_condition_result
 
-        probabilistic_circuit.add_node(result)
+        probabilistic_circuit.add_edges_and_nodes_from_circuit(result.probabilistic_circuit)
 
         return result, log_prob
 

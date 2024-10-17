@@ -394,6 +394,7 @@ class UnitMixin(SubclassJSONSerializer):
         for subcircuit in self.subcircuits:
             subcircuit.reset_cached_properties()
 
+
 class SumUnit(UnitMixin):
 
     def __repr__(self):
@@ -455,7 +456,7 @@ class SumUnit(UnitMixin):
     def log_likelihood(self, events: np.array) -> np.array:
         result = np.zeros(len(events))
         for weight, subcircuit in self.weighted_subcircuits:
-            subcircuit_likelihood = subcircuit.likelihood(events)
+            subcircuit_likelihood = np.exp(subcircuit.log_likelihood(events))
             result += weight * subcircuit_likelihood
         return np.log(result)
 
@@ -726,6 +727,7 @@ class SumUnit(UnitMixin):
         # if none intersect, the subcircuit is deterministic
         return True
 
+    @cache_inference_result
     def log_mode(self) -> Tuple[Event, float]:
 
         if not self.is_deterministic():
@@ -1048,7 +1050,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def log_mode(self) -> Tuple[Event, float]:
         return self.root.log_mode()
 
-    # @graph_inference_caching_wrapper
+    @graph_inference_caching_wrapper
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         new_circuit = self.__class__()
         conditional, log_probability = self.root.log_conditional(event, new_circuit)
@@ -1180,6 +1182,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
 
+    @graph_inference_caching_wrapper
     def cdf(self, events: np.array) -> np.array:
         return self.root.cdf(events)
 
@@ -1192,3 +1195,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         self.add_nodes_from(other.nodes)
         self.add_edges_from(other.unweighted_edges)
         self.add_weighted_edges_from(other.weighted_edges)
+
+    def plot_structure(self):
+        return self.root.plot_structure()

@@ -46,9 +46,11 @@ class UniformDistributionTestCase(unittest.TestCase):
 
     def test_conditional_from_complex_event(self):
         interval = closed(0., 0.2) | closed(0.5, 1.) | singleton(0.3)
-        event = SimpleEvent({self.variable: interval}).as_composite_set()
-        model, likelihood = self.model.conditional(event)
+        event = SimpleEvent({self.variable: interval})
+        model, likelihood = self.model.log_conditional_of_simple_event(event, ProbabilisticCircuit())
+
         self.assertEqual(len(list(model.probabilistic_circuit.nodes)), 4)
+        self.assertEqual(len(list(model.probabilistic_circuit.edges)), 3)
         self.assertIsInstance(model.probabilistic_circuit.root, SumUnit)
 
     def test_conditional_with_none(self):

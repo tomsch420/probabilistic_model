@@ -22,7 +22,7 @@ class RootDistribution(BayesianNetworkMixin, PCSymbolicDistribution):
         return (self.variable,)
 
     def forward_pass(self, event: SimpleEvent):
-        self.forward_message, self.forward_probability = self.log_conditional_of_simple_event(event)
+        self.forward_message, self.forward_probability = self.log_conditional_of_simple_event(event, ProbabilisticCircuit())
         self.forward_probability = np.exp(self.forward_probability)
 
     def joint_distribution_with_parent(self) -> SumUnit:
@@ -30,7 +30,7 @@ class RootDistribution(BayesianNetworkMixin, PCSymbolicDistribution):
 
         for event in self.variable.domain.simple_sets:
             event = SimpleEvent({self.variable: event})
-            conditional, probability = self.forward_message.log_conditional_of_simple_event(event)
+            conditional, probability = self.forward_message.log_conditional_of_simple_event(event, ProbabilisticCircuit())
             result.add_subcircuit(conditional, np.exp(probability))
 
         return result
@@ -80,7 +80,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
             # construct the conditional distribution P(self.variable | self.parent.variable = parent_state)
             conditional, current_log_probability = (self.conditional_probability_distributions[int(parent_state)].
-                                                    log_conditional_of_simple_event(event))
+                                                    log_conditional_of_simple_event(event, ProbabilisticCircuit()))
 
             # if the conditional is None, skip
             if conditional is None:
@@ -125,7 +125,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         distribution_template = PCSymbolicDistribution(self.variable, template_probabilities)
         for value in self.variable.domain.simple_sets:
             event = SimpleEvent({self.variable: value})
-            distribution_nodes[int(value)], _ = distribution_template.log_conditional_of_simple_event(event)
+            distribution_nodes[int(value)], _ = distribution_template.log_conditional_of_simple_event(event, ProbabilisticCircuit())
 
         # for every parent event and conditional distribution
         for parent_event, distribution in self.conditional_probability_distributions.items():
@@ -135,7 +135,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
             # encode the parent state as distribution
             parent_distribution, parent_log_probability = (
-                self.parent.forward_message.log_conditional_of_simple_event(parent_event))
+                self.parent.forward_message.log_conditional_of_simple_event(parent_event, ProbabilisticCircuit()))
 
             for child_event_index, child_probability in distribution.probabilities.items():
                 # initialize the product unit
@@ -213,7 +213,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
 
     def forward_pass(self, event: SimpleEvent):
         forward_message, self.forward_probability = (self.joint_distribution_with_parent().
-                                                     log_conditional_of_simple_event(event))
+                                                     log_conditional_of_simple_event(event, ProbabilisticCircuit()))
         self.forward_message = forward_message.marginal(self.variables)
         self.forward_probability = np.exp(self.forward_probability)
 
@@ -224,7 +224,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
         for parent_event, distribution in self.conditional_probability_distributions.items():
             parent_event = SimpleEvent({self.parent.variable: self.parent.variable.domain_type()(parent_event)})
             parent_distribution, parent_log_probability = self.parent.forward_message.log_conditional_of_simple_event(
-                parent_event)
+                parent_event, ProbabilisticCircuit())
 
             if parent_distribution is None:
                 continue

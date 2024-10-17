@@ -73,6 +73,9 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     def representation(self):
         return f"U({self.variable.name} | {self.interval})"
 
+    def __repr__(self):
+        return f"U({self.variable.name})"
+
     def __copy__(self):
         return self.__class__(self.variable, self.interval)
 

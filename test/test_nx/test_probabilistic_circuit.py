@@ -1,7 +1,7 @@
 import unittest
 
 from matplotlib import pyplot as plt
-from random_events.interval import closed, open, closed_open
+from random_events.interval import closed, open, closed_open, SimpleInterval
 from random_events.variable import Integer, Continuous
 from typing_extensions import Union
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
@@ -493,7 +493,41 @@ class ConvolutionTestCase(unittest.TestCase):
         self.assertEqual(len(mode.simple_sets), 1)
 
 
+class ConditioningNestedSumUnitsTestCase(unittest.TestCase):
+    x = Continuous("x")
+    model: ProbabilisticCircuit
+
+    @classmethod
+    def setUpClass(cls):
+        root = SumUnit()
+        c1 = SumUnit()
+        c2 = SumUnit()
+        p_x = UniformDistribution(cls.x, SimpleInterval(0, 1))
+        c1.add_subcircuit(p_x, 1.)
+        c2.add_subcircuit(p_x, 1.)
+        root.add_subcircuit(c1, 0.5)
+        root.add_subcircuit(c2, 0.5)
+        cls.model = root.probabilistic_circuit
+
+    def test_conditioning(self):
+        event = SimpleEvent({self.x: closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
+        # self.model.plot_structure()
+        # plt.show()
+        conditional, prob = self.model.conditional(event)
+        self.assertAlmostEqual(prob, 0.5)
+        self.assertEqual(len(list(conditional.nodes())), 6)
+        self.assertEqual(len(list(conditional.edges())), 6)
+        # conditional.plot_structure()
+        # plt.show()
+
+class ConditioningNestedProductUnitsTestCase(unittest.TestCase):
+    ...
+
+
 class SmallCircuitTestCast(unittest.TestCase):
+    """
+    Testcase for structure changes especially with caching
+    """
 
     x = Continuous("x")
     y = Continuous("y")
@@ -513,8 +547,8 @@ class SmallCircuitTestCast(unittest.TestCase):
         prod2.add_subcircuit(sum3)
         prod2.add_subcircuit(sum5)
 
-        d_x1, d_x2 = DiracDeltaDistribution(cls.x, 0, 1), DiracDeltaDistribution(cls.x, 1, 2)
-        d_y1, d_y2 = DiracDeltaDistribution(cls.y, 2, 3), DiracDeltaDistribution(cls.y, 3, 4)
+        d_x1, d_x2 = UniformDistribution(cls.x, SimpleInterval(0, 1)), UniformDistribution(cls.x,  SimpleInterval(2, 3))
+        d_y1, d_y2 = UniformDistribution(cls.y, SimpleInterval(0, 1)), UniformDistribution(cls.y, SimpleInterval(3, 4))
 
         sum2.add_subcircuit(d_x1, 0.8)
         sum2.add_subcircuit(d_x2, 0.2)
@@ -533,9 +567,18 @@ class SmallCircuitTestCast(unittest.TestCase):
         unique = np.unique(samples, axis=0)
         self.assertEqual(len(unique), 4)
 
-    def test_plot(self):
-        self.model.root.plot_structure()
+    def test_conditioning(self):
+        event = SimpleEvent({self.x: closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
+        conditional, prob = self.model.conditional(event)
+        self.assertAlmostEqual(prob, 0.375)
+        conditional.plot_structure()
         plt.show()
+
+    def test_plot(self):
+        self.model.plot_structure()
+        plt.show()
+        fig = go.Figure(self.model.plot())
+        fig.show()
 
 if __name__ == '__main__':
     unittest.main()

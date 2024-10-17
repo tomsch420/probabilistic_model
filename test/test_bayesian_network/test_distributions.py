@@ -104,7 +104,7 @@ class DistributionTestCase(unittest.TestCase):
         joint_distribution = self.p_yx.joint_distribution_with_parent()
         self.assertIsInstance(joint_distribution, SumUnit)
 
-        likelihoods = joint_distribution.likelihood(np.array([[0, 1], [2, 1]]))
+        likelihoods = joint_distribution.probabilistic_circuit.likelihood(np.array([[0, 1], [2, 1]]))
         self.assertAlmostEqual(likelihoods[0], 0.25)
         self.assertAlmostEqual(likelihoods[1], 0.2 * 0.9)
 
@@ -151,7 +151,7 @@ class CircuitDistributionTestCase(unittest.TestCase):
 
         joint_distribution = self.p_yzx.joint_distribution_with_parent()
         event = SimpleEvent({self.x: YEnum.ZERO, self.y: closed(0, 0.5)}).as_composite_set()
-        self.assertEqual(joint_distribution.probability(event), 0.35)
+        self.assertEqual(joint_distribution.probabilistic_circuit.probability(event), 0.35)
 
 
 if __name__ == '__main__':
