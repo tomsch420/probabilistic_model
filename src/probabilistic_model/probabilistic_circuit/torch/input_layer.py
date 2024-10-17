@@ -13,7 +13,7 @@ from typing_extensions import List, Tuple, Self, Type
 
 from .pc import InputLayer, AnnotatedLayer, SumLayer
 from ..nx.distributions import DiracDeltaDistribution
-from ...probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuitMixin
+from ...probabilistic_circuit.nx.probabilistic_circuit import UnitMixin
 from .utils import remove_rows_and_cols_where_all, create_sparse_tensor_indices_from_row_lengths
 from ...utils import interval_as_array
 
@@ -204,7 +204,7 @@ class DiracDeltaLayer(ContinuousLayer):
         return DiracDeltaDistribution,
 
     @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UnitMixin],
                                                          child_layers: List[AnnotatedLayer]) -> \
             AnnotatedLayer:
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}

@@ -8,7 +8,7 @@ from ..distributions.multinomial import MultinomialDistribution
 from probabilistic_model.probabilistic_circuit.nx.distributions import (SymbolicDistribution as PCSymbolicDistribution)
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit,
-                                                                                ProbabilisticCircuitMixin, SumUnit)
+                                                                                UnitMixin, SumUnit)
 from ..utils import MissingDict
 
 
@@ -257,7 +257,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
 
         return result.probabilistic_circuit
 
-    def from_unit(self, unit: ProbabilisticCircuitMixin) -> Self:
+    def from_unit(self, unit: UnitMixin) -> Self:
         """
         Get the conditional probability table from a probabilistic circuit by mounting all children as conditional
         probability distributions.

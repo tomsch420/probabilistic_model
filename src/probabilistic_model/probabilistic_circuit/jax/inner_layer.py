@@ -23,11 +23,11 @@ from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Sel
 
 from . import shrink_index_array
 from .utils import copy_bcoo, sample_from_sparse_probabilities_csc, sparse_remove_rows_and_cols_where_all
-from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, ProbabilisticCircuitMixin,
+from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, UnitMixin,
                                         ProbabilisticCircuit as NXProbabilisticCircuit)
 
 
-def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
+def inverse_class_of(clazz: Type[UnitMixin]) -> Type[Layer]:
     for subclass in recursive_subclasses(Layer):
         if not inspect.isabstract(subclass):
             if issubclass(clazz, subclass.nx_classes()):
@@ -130,7 +130,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         return tuple()
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        ProbabilisticCircuitMixin]:
+        UnitMixin]:
         """
         Convert the layer to a networkx circuit.
         For every node in this circuit, a corresponding node in the networkx circuit
@@ -161,7 +161,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         raise NotImplementedError
 
     @staticmethod
-    def create_layers_from_nodes(nodes: List[ProbabilisticCircuitMixin], child_layers: List[NXConverterLayer],
+    def create_layers_from_nodes(nodes: List[UnitMixin], child_layers: List[NXConverterLayer],
                                  progress_bar: bool = True) \
             -> List[NXConverterLayer]:
         """
@@ -186,7 +186,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
 
     @classmethod
     @abstractmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UnitMixin],
                                                          child_layers: List[NXConverterLayer],
                                                          progress_bar: bool = True) -> \
             NXConverterLayer:
@@ -634,7 +634,7 @@ class SumLayer(InnerLayer):
         raise NotImplementedError
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        ProbabilisticCircuitMixin]:
+        UnitMixin]:
 
         variables_ = [variables[i] for i in self.variables]
 
@@ -913,7 +913,7 @@ class ProductLayer(InnerLayer):
         return cls(child_layer, edges)
 
     @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UnitMixin],
                                                          child_layers: List[NXConverterLayer],
                                                          progress_bar: bool = True) -> \
             NXConverterLayer:
@@ -950,7 +950,7 @@ class ProductLayer(InnerLayer):
         return NXConverterLayer(layer, nodes, hash_remap)
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        ProbabilisticCircuitMixin]:
+        UnitMixin]:
 
         variables_ = [variables[i] for i in self.variables]
         if progress_bar:
@@ -976,5 +976,5 @@ class NXConverterLayer:
     Class used for conversion from a probabilistic circuit in networkx to a layered circuit in jax.
     """
     layer: Layer
-    nodes: List[ProbabilisticCircuitMixin]
+    nodes: List[UnitMixin]
     hash_remap: Dict[int, int]

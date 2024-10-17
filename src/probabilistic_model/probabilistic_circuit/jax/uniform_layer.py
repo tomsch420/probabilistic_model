@@ -17,7 +17,7 @@ from ..nx.distributions import UniformDistribution
 from .utils import simple_interval_to_open_array, create_bcoo_indices_from_row_lengths
 import tqdm
 
-from ..nx.probabilistic_circuit import ProbabilisticCircuitMixin, ProbabilisticCircuit as NXProbabilisticCircuit
+from ..nx.probabilistic_circuit import UnitMixin, ProbabilisticCircuit as NXProbabilisticCircuit
 
 
 class UniformLayer(ContinuousLayerWithFiniteSupport):
@@ -110,7 +110,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         return cls(data["variable"], jnp.array(data["interval"]))
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        ProbabilisticCircuitMixin]:
+        UnitMixin]:
         variable = variables[self.variable]
 
         if progress_bar:

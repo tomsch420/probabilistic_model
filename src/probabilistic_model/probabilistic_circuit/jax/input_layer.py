@@ -20,7 +20,7 @@ from .inner_layer import InputLayer, NXConverterLayer, SumLayer
 from ..nx.distributions import DiracDeltaDistribution
 import equinox as eqx
 from .utils import simple_interval_to_open_array, remove_rows_and_cols_where_all
-from ..nx.probabilistic_circuit import ProbabilisticCircuitMixin, ProbabilisticCircuit as NXProbabilisticCircuit
+from ..nx.probabilistic_circuit import UnitMixin, ProbabilisticCircuit as NXProbabilisticCircuit
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -284,7 +284,7 @@ class DiracDeltaLayer(ContinuousLayer):
         return self.__class__(self.variable, self.location[~remove_mask], self.density_cap[~remove_mask])
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        ProbabilisticCircuitMixin]:
+        UnitMixin]:
         nx_pc = NXProbabilisticCircuit()
 
         variable = variables[self.variable]

@@ -23,14 +23,14 @@ from typing_extensions import List, Tuple, Type, Dict, Union, Self
 
 from ...error import IntractableError
 from ..nx.probabilistic_circuit import ProbabilisticCircuit, \
-    ProbabilisticCircuitMixin, SumUnit, ProductUnit
+    UnitMixin, SumUnit, ProductUnit
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from .utils import (add_sparse_edges_dense_child_tensor_inplace,
                                        sparse_remove_rows_and_cols_where_all, shrink_index_tensor,
                                        embed_sparse_tensors_in_new_sparse_tensor, create_sparse_tensor_indices_from_row_lengths)
 
 
-def inverse_class_of(clazz: Type[ProbabilisticCircuitMixin]) -> Type[Layer]:
+def inverse_class_of(clazz: Type[UnitMixin]) -> Type[Layer]:
     for subclass in recursive_subclasses(Layer):
         if not inspect.isabstract(subclass):
             if issubclass(clazz, subclass.original_class()):
@@ -202,7 +202,7 @@ class Layer(nn.Module, ProbabilisticModel):
         return child_layers[0].layer
 
     @staticmethod
-    def create_layers_from_nodes(nodes: List[ProbabilisticCircuitMixin], child_layers: List[AnnotatedLayer],
+    def create_layers_from_nodes(nodes: List[UnitMixin], child_layers: List[AnnotatedLayer],
                                  progress_bar: bool = True) \
             -> List[AnnotatedLayer]:
         """
@@ -227,7 +227,7 @@ class Layer(nn.Module, ProbabilisticModel):
 
     @classmethod
     @abstractmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[ProbabilisticCircuitMixin],
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UnitMixin],
                                                          child_layers: List[AnnotatedLayer],
                                                          progress_bar: bool = True) -> \
             AnnotatedLayer:
@@ -1346,5 +1346,5 @@ class ProductLayer(InnerLayer):
 @dataclass
 class AnnotatedLayer:
     layer: Layer
-    nodes: List[ProbabilisticCircuitMixin]
+    nodes: List[UnitMixin]
     hash_remap: Dict[int, int]

@@ -10,14 +10,13 @@ from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
-from sympy.abc import alpha
 
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, TYPE_CHECKING
 
 from probabilistic_model.error import IntractableError
 from probabilistic_model.probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from random_events.utils import SubclassJSONSerializer
-import matplotlib.pyplot as plt
+
 
 if TYPE_CHECKING:
     from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDistribution
@@ -30,13 +29,13 @@ def cache_inference_result(func):
 
     def wrapper(*args, **kwargs):
 
-        self: ProbabilisticCircuitMixin = args[0]
-        return func(*args, **kwargs)
-        # if not self.cache_result:
-        #     return func(*args, **kwargs)
-        # if self.result_of_current_query is None:
-        #     self.result_of_current_query = func(*args, **kwargs)
-        # return self.result_of_current_query
+        self: UnitMixin = args[0]
+
+        if not self.cache_result:
+            return func(*args, **kwargs)
+        if self.result_of_current_query is None:
+            self.result_of_current_query = func(*args, **kwargs)
+        return self.result_of_current_query
 
     return wrapper
 
@@ -73,7 +72,7 @@ def graph_inference_caching_wrapper(func):
     return wrapper
 
 
-class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
+class UnitMixin(ProbabilisticModel, SubclassJSONSerializer):
     """
     Mixin class for all components of a probabilistic circuit.
     """
@@ -99,19 +98,20 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     Flag for caching the result of the current query.
     """
 
-    def __init__(self):
-        self.probabilistic_circuit = ProbabilisticCircuit()
+    def __init__(self, probabilistic_circuit: Optional[ProbabilisticCircuit] = None):
+
+        if probabilistic_circuit is None:
+            probabilistic_circuit = ProbabilisticCircuit()
+
+        self.probabilistic_circuit = probabilistic_circuit
         self.probabilistic_circuit.add_node(self)
 
     @property
-    def subcircuits(self) -> List[ProbabilisticCircuitMixin]:
+    def subcircuits(self) -> List[UnitMixin]:
         """
         :return: The subcircuits of this unit.
         """
         return list(self.probabilistic_circuit.successors(self))
-
-    def support(self) -> Event:
-        return self.support
 
     @abstractmethod
     @cached_property
@@ -130,8 +130,9 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     @cache_result.setter
     def cache_result(self, value: bool):
         """
-        Set the caching of the result flag in this and every sub-circuit.
-        If a sub-circuit has the flag already set to the value, it will not recurse in that sub-circuit.
+        Set the caching of the result flag in this and every subcircuit.
+        If a subcircuit has the flag already set to the value, it will not recurse in that subcircuit.
+
         :param value: The value to set the flag to.
         """
         self._cache_result = value
@@ -141,6 +142,9 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
 
     @property
     def leaves(self) -> List[UnivariateDistribution]:
+        """
+        :return: the leaves of the circuit that are descendants of this node.
+        """
         return [node for node in nx.descendants(self.probabilistic_circuit, self) if
                 self.probabilistic_circuit.out_degree(node) == 0]
 
@@ -154,11 +158,11 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             if leaf.variable in new_variables:
                 leaf.variable = new_variables[leaf.variable]
 
-    def mount(self, other: ProbabilisticCircuitMixin):
+    def mount(self, other: UnitMixin):
         """
         Mount another unit including its descendants. There will be no edge from `self` to `other`.
 
-        :param other: The other circuit or unit to mount.
+        :param other: The other unit to mount.
         """
 
         descendants = nx.descendants(other.probabilistic_circuit, other)
@@ -200,7 +204,14 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return variable_map.__class__(
             {variable: value for variable, value in variable_map.items() if variable in variables})
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[ProbabilisticCircuitMixin], float]:
+    @property
+    def impossible_condition_result(self) -> Tuple[Optional[UnitMixin], float]:
+        """
+        Return the result of an impossible conditional query.
+        """
+        return None, -np.inf
+
+    def log_conditional(self, event: Event) -> Tuple[Optional[UnitMixin], float]:
 
         # skip trivial case
         if event.is_empty():
@@ -219,7 +230,9 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             # reset cache
             self.reset_result_of_current_query()
 
-            conditional, log_probability = self.log_conditional_of_simple_event(simple_event)
+            # add the conditional distribution of the simple event in this circuit
+            conditional, log_probability = self.log_conditional_of_simple_event(simple_event,
+                                                                                result.probabilistic_circuit)
 
             # skip if impossible
             if log_probability == -np.inf:
@@ -231,19 +244,22 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
             result.add_subcircuit(conditional, probability)
 
         if total_probability == 0:
-            return None, -np.inf
+            return self.impossible_condition_result
 
         result.normalize()
 
         return result, np.log(total_probability)
 
     @abstractmethod
-    # @cache_inference_result
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
+    @cache_inference_result
+    def log_conditional_of_simple_event(self, event: SimpleEvent,
+                                        probabilistic_circuit: ProbabilisticCircuit) -> Tuple[Optional[Self], float]:
         """
         Construct the conditional circuit from a simple event.
 
-        :param: The simple event to condition on.
+        :param event: The simple event to condition on.
+        :param probabilistic_circuit: The probabilistic circuit to mount the result into.
+
         :return: the conditional circuit and log(p(event))
         """
         raise NotImplementedError
@@ -251,7 +267,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     def reset_result_of_current_query(self):
         """
         Reset the result of the current query recursively.
-        If a sub-circuit has the result already reset, it will not recurse in that sub-circuit.
+        If a subcircuit has a retested result, it will not recurse in that subcircuit.
         """
         self.result_of_current_query = None
         for subcircuit in self.subcircuits:
@@ -262,6 +278,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         return id(self)
 
     def __eq__(self, other):
+        # TODO isnt hash equal here better?
         return isinstance(other, self.__class__) and self.subcircuits == other.subcircuits
 
     def __copy__(self):
@@ -270,12 +287,11 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     def empty_copy(self) -> Self:
         """
         Creat a copy of this circuit without any subcircuits. Only the parameters should be copied.
-        This is used whenever a new circuit has to be created
-        during inference.
+        This is used whenever a new circuit has to be created during inference.
 
-        :return: A copy of this circuit without any subcircuits.
+        :return: A copy of this circuit without any subcircuits that is not in this units graph.
         """
-        return self.__class__()
+        return self.__class__(probabilistic_circuit=ProbabilisticCircuit())
 
     def simplify(self) -> Self:
         """
@@ -289,6 +305,7 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
     def plot_structure(self):
         """
         Plot the structure of the circuit.
+        # TODO make it more fancy
         """
 
         # create the subgraph with this node as root
@@ -319,15 +336,21 @@ class ProbabilisticCircuitMixin(ProbabilisticModel, SubclassJSONSerializer):
         nx.draw_networkx_labels(subgraph, positions, labels)
         #  plt.show()
 
+    def reset_cached_properties(self):
+        """
+        Reset all cached properties in this circuit.
+        """
+        self.reset_result_of_current_query()
+        for subcircuit in self.subcircuits:
+            subcircuit.reset_cached_properties()
 
-class SumUnit(ProbabilisticCircuitMixin):
+class SumUnit(UnitMixin):
+
+    def __repr__(self):
+        return "+"
 
     @property
-    def representation(self) -> str:
-        return "⊕" if self.is_deterministic() else "+"
-
-    @property
-    def weighted_subcircuits(self) -> List[Tuple[float, 'ProbabilisticCircuitMixin']]:
+    def weighted_subcircuits(self) -> List[Tuple[float, UnitMixin]]:
         """
         :return: The weighted subcircuits of this unit.
         """
@@ -346,9 +369,9 @@ class SumUnit(ProbabilisticCircuitMixin):
         domain = SetElement(name, enum_elements)
         return Symbolic(name, domain)
 
-    def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin, weight: float):
+    def add_subcircuit(self, subcircuit: UnitMixin, weight: float, mount: bool = True):
         """
-        Add a subcircuit to the children of this unit.
+        Add a subcircuit to the subcircuits of this unit.
 
         .. note::
 
@@ -357,8 +380,11 @@ class SumUnit(ProbabilisticCircuitMixin):
 
         :param subcircuit: The subcircuit to add.
         :param weight: The weight of the subcircuit.
+        :param mount: If the subcircuit should be mounted to the pc of this unit.
+
         """
-        self.mount(subcircuit)
+        if mount:
+            self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
 
     @cached_property
@@ -383,6 +409,7 @@ class SumUnit(ProbabilisticCircuitMixin):
             result += weight * subcircuit_likelihood
         return np.log(result)
 
+    @cache_inference_result
     def cdf(self, events: np.array) -> np.array:
         result = np.zeros(len(events))
         for weight, subcircuit in self.weighted_subcircuits:
@@ -395,15 +422,18 @@ class SumUnit(ProbabilisticCircuitMixin):
         return sum([weight * subcircuit.probability_of_simple_event(event) for weight, subcircuit in
                     self.weighted_subcircuits])
 
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
+    @cache_inference_result
+    def log_conditional_of_simple_event(self, event: SimpleEvent,
+                                        probabilistic_circuit: ProbabilisticCircuit) -> Tuple[Optional[Self], float]:
         # initialize result
         result = self.empty_copy()
+        result.probabilistic_circuit = probabilistic_circuit
 
         # for every weighted subcircuit
         for weight, subcircuit in self.weighted_subcircuits:
 
             # condition the subcircuit
-            conditional, subcircuit_log_probability = subcircuit.log_conditional_of_simple_event(event)
+            conditional, subcircuit_log_probability = subcircuit.log_conditional_of_simple_event(event, probabilistic_circuit=probabilistic_circuit)
 
             # skip impossible subcircuits
             if conditional is None:
@@ -415,34 +445,25 @@ class SumUnit(ProbabilisticCircuitMixin):
 
         # check if the result is valid
         total_probability = sum(result.weights)
+
         if total_probability == 0:
-            return None, -np.inf
+            return self.impossible_condition_result
 
         # normalize probabilities
         result.normalize()
 
         return result, np.log(total_probability)
 
+    @cache_inference_result
     def sample(self, amount: int) -> np.array:
         """
         Sample from the sum node using the latent variable interpretation.
         """
         weights, subcircuits = self.weights, self.subcircuits
-
-        # pseudo sample the latent variables by evaluating the events w. r. t. their probabilities (histogram)
-        counts = np.floor(weights * amount).astype(int)
-
-        # if any samples are missing
-        missing_samples = amount - counts.sum()
-        if missing_samples > 0:
-
-            # sample the missing latent states using actual randomness
-            states = np.random.choice(np.arange(len(self.weights)), size=missing_samples, p=weights)
-            unique_values, missing_counts = np.unique(states, return_counts=True)
-            counts[unique_values] += missing_counts
+        counts = np.random.multinomial(amount, pvals=weights)
 
         # sample from the children
-        result = self.subcircuits[0].sample(counts[0])
+        result = self.subcircuits[0].sample(counts[0].item())
         for amount, subcircuit in zip(counts[1:], self.subcircuits[1:]):
             result = np.concatenate((result, subcircuit.sample(amount)))
         return result
@@ -470,7 +491,7 @@ class SumUnit(ProbabilisticCircuitMixin):
 
     @cache_inference_result
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
-
+        # TODO check with multiple parents
         # if this node has no variables that are required in the marginal, remove it.
         if set(self.variables).intersection(set(variables)) == set():
             return None
@@ -496,7 +517,7 @@ class SumUnit(ProbabilisticCircuitMixin):
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         result = cls()
         for weight, subcircuit_data in data["weighted_subcircuits"]:
-            subcircuit = ProbabilisticCircuitMixin.from_json(subcircuit_data)
+            subcircuit = UnitMixin.from_json(subcircuit_data)
             result.mount(subcircuit)
             result.probabilistic_circuit.add_edge(result, subcircuit, weight=weight)
         return result
@@ -599,7 +620,7 @@ class SumUnit(ProbabilisticCircuitMixin):
 
     @cache_inference_result
     def simplify(self) -> Self:
-
+        # TODO check with multiple parents
         # if this has only one child
         if len(self.subcircuits) == 1:
             return self.subcircuits[0].simplify()
@@ -680,7 +701,7 @@ class SumUnit(ProbabilisticCircuitMixin):
 
         return result, maximum_log_likelihood
 
-    def sub_circuit_index_of_samples(self, samples: np.array) -> np.array:
+    def subcircuit_index_of_samples(self, samples: np.array) -> np.array:
         """
         :return: the index of the subcircuit where p(sample) > 0 and None if p(sample) = 0 for all subcircuits.
         """
@@ -691,12 +712,13 @@ class SumUnit(ProbabilisticCircuitMixin):
         return result
 
 
-class ProductUnit(ProbabilisticCircuitMixin):
+class ProductUnit(UnitMixin):
     """
     Decomposable Product Units for Probabilistic Circuits
     """
 
-    representation = "⊗"
+    def __repr__(self):
+        return "⊗"
 
     @property
     def variables(self) -> SortedSet:
@@ -712,13 +734,15 @@ class ProductUnit(ProbabilisticCircuitMixin):
             support &= subcircuit.support
         return support
 
-    def add_subcircuit(self, subcircuit: ProbabilisticCircuitMixin):
+    def add_subcircuit(self, subcircuit: UnitMixin, mount: bool = True):
         """
-        Add a subcircuit to the children of this unit.
+        Add a subcircuit to the subcircuits of this unit.
 
         :param subcircuit: The subcircuit to add.
+        :param mount: If the subcircuit should be mounted to this units pc instance.
         """
-        self.mount(subcircuit)
+        if mount:
+            self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit)
 
     @cache_inference_result
@@ -775,22 +799,25 @@ class ProductUnit(ProbabilisticCircuitMixin):
 
         return mode, log_likelihood
 
-    # @cache_inference_result
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
+    @cache_inference_result
+    def log_conditional_of_simple_event(self, event: SimpleEvent,
+                                        probabilistic_circuit: ProbabilisticCircuit) -> Tuple[Optional[Self], float]:
         # initialize probability
         log_probability = 0.
 
         # create a new node with new circuit attached to it
         resulting_node = self.empty_copy()
+        resulting_node.probabilistic_circuit = probabilistic_circuit
 
         for subcircuit in self.subcircuits:
 
             # get conditional child and probability in pre-order
-            conditional_subcircuit, conditional_log_probability = subcircuit.log_conditional_of_simple_event(event)
+            conditional_subcircuit, conditional_log_probability = (
+                subcircuit.log_conditional_of_simple_event(event, probabilistic_circuit=probabilistic_circuit))
 
             # if any is 0, the whole probability is 0
             if conditional_subcircuit is None:
-                return None, -np.inf
+                return self.impossible_condition_result
 
             # update probability and children
             resulting_node.add_subcircuit(conditional_subcircuit)
@@ -861,7 +888,7 @@ class ProductUnit(ProbabilisticCircuitMixin):
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         result = cls()
         for subcircuit_data in data["subcircuits"]:
-            subcircuit = ProbabilisticCircuitMixin.from_json(subcircuit_data)
+            subcircuit = UnitMixin.from_json(subcircuit_data)
             result.add_subcircuit(subcircuit)
         return result
 
@@ -933,7 +960,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         return nx.is_directed_acyclic_graph(self) and nx.is_weakly_connected(self)
 
-    def add_node(self, node: ProbabilisticCircuitMixin, **attr):
+    def add_node(self, node: UnitMixin, **attr):
 
         # write self as the nodes' circuit
         node.probabilistic_circuit = self
@@ -946,7 +973,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             self.add_node(node, **attr)
 
     @property
-    def root(self) -> ProbabilisticCircuitMixin:
+    def root(self) -> UnitMixin:
         """
         The root of the circuit is the node with in-degree 0.
         This is the output node, that will perform the final computation.
@@ -1039,10 +1066,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         result = ProbabilisticCircuit()
-        hash_remap: Dict[int, ProbabilisticCircuitMixin] = dict()
+        hash_remap: Dict[int, UnitMixin] = dict()
 
         for hash_, node_data in data["hash_to_node_map"].items():
-            node = ProbabilisticCircuitMixin.from_json(node_data)
+            node = UnitMixin.from_json(node_data)
             hash_remap[int(hash_)] = node
             result.add_node(node)
 

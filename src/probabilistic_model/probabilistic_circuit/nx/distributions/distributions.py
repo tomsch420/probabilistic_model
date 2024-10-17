@@ -14,15 +14,15 @@ from probabilistic_model.distributions.distributions import (ContinuousDistribut
                                                              IntegerDistribution as PMIntegerDistribution,
                                                              DiscreteDistribution as PMDiscreteDistribution,
                                                              UnivariateDistribution as PMUnivariateDistribution)
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuitMixin, cache_inference_result,
-                                                                                SumUnit)
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (UnitMixin, cache_inference_result,
+                                                                                SumUnit, ProbabilisticCircuit)
 from probabilistic_model.distributions.uniform import UniformDistribution as PMUniformDistribution
 from probabilistic_model.distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
                                                         TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
 from probabilistic_model.utils import MissingDict
 
 
-class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin, ABC):
+class UnivariateDistribution(PMUnivariateDistribution, UnitMixin, ABC):
 
     def is_deterministic(self) -> bool:
         return True
@@ -32,11 +32,16 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
         return SortedSet([self.variable])
 
     def __hash__(self):
-        return ProbabilisticCircuitMixin.__hash__(self)
+        return UnitMixin.__hash__(self)
 
     # @cache_inference_result
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Self], float]:
-        return super().log_conditional(event.as_composite_set())
+    def log_conditional_of_simple_event(self, event: SimpleEvent,
+                                        probabilistic_circuit: ProbabilisticCircuit) -> Tuple[Optional[Self], float]:
+        result, log_prob = super().log_conditional(event.as_composite_set())
+        if log_prob == -np.inf:
+            return self.impossible_condition_result
+        result.probabilistic = probabilistic_circuit
+        return result, log_prob
 
     # @cache_inference_result
     def simplify(self) -> Self:
@@ -46,7 +51,7 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
         return self.__copy__()
 
 
-class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin, ABC):
+class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, UnitMixin, ABC):
 
     def log_conditional_from_interval(self, interval: Interval) -> Tuple[SumUnit, float]:
         result = SumUnit()
@@ -68,7 +73,7 @@ class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, P
                                       conditional.density_cap), probability
 
 
-class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, ProbabilisticCircuitMixin, ABC):
+class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, UnitMixin, ABC):
 
     def as_deterministic_sum(self) -> SumUnit:
         """

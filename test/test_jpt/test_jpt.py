@@ -387,11 +387,11 @@ class BayesianJPTTestCase(unittest.TestCase):
         cls.model_species = model_species.marginal([cls.species], simplify_if_univariate=False)
 
         subcircuit_indices = np.zeros((len(df), 3))
-        subcircuit_indices[:, 0] = cls.model_sl_sw.sub_circuit_index_of_samples(df[["sepal length (cm)",
+        subcircuit_indices[:, 0] = cls.model_sl_sw.subcircuit_index_of_samples(df[["sepal length (cm)",
                                                                                     "sepal width (cm)"]].values)
-        subcircuit_indices[:, 1] = cls.model_pl_pw.sub_circuit_index_of_samples(df[["petal length (cm)",
+        subcircuit_indices[:, 1] = cls.model_pl_pw.subcircuit_index_of_samples(df[["petal length (cm)",
                                                                                     "petal width (cm)"]].values)
-        subcircuit_indices[:, 2] = cls.model_species.sub_circuit_index_of_samples(df[["species"]].values)
+        subcircuit_indices[:, 2] = cls.model_species.subcircuit_index_of_samples(df[["species"]].values)
 
         cls.subcircuit_indices = pd.DataFrame(subcircuit_indices, columns=["sl_sw", "pl_pw", "species"])
 

@@ -10,14 +10,14 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 
 
 class ShowMixin:
-    model: Union[ProbabilisticCircuit, ProbabilisticCircuitMixin]
+    model: Union[ProbabilisticCircuit, UnitMixin]
 
-    def show(self, model: Optional[Union[ProbabilisticCircuit, ProbabilisticCircuitMixin]] = None):
+    def show(self, model: Optional[Union[ProbabilisticCircuit, UnitMixin]] = None):
 
         if model is None:
             model = self.model
 
-        if isinstance(model, ProbabilisticCircuitMixin):
+        if isinstance(model, UnitMixin):
             model = model.probabilistic_circuit
 
         pos = nx.planar_layout(model)
