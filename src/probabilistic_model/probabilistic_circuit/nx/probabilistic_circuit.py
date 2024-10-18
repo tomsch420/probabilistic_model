@@ -328,7 +328,6 @@ class UnitMixin(SubclassJSONSerializer):
         return id(self)
 
     def __eq__(self, other):
-        # TODO isnt hash equal here better?
         return isinstance(other, self.__class__) and self.subcircuits == other.subcircuits
 
     def __copy__(self):
@@ -345,8 +344,8 @@ class UnitMixin(SubclassJSONSerializer):
 
     def simplify(self) -> Self:
         """
-        Simplify the circuit by removing nodes and redirected edges that have no impact.
-        Essentially, this method transform the circuit into an alternating order of sum and product units.
+        Simplify the circuit by removing nodes and redirected edges that have no impact in-place.
+        Essentially, this method transforms the circuit into an alternating order of sum and product units.
 
         :return: The simplified circuit.
         """
@@ -669,45 +668,45 @@ class SumUnit(UnitMixin):
             proxy_product_node.add_subcircuit(own_subcircuit)
             proxy_product_node.add_subcircuit(other_subcircuit)
 
-    @cache_inference_result
-    def simplify(self) -> Self:
-        # TODO check with multiple parents
+    def simplify(self):
+
         # if this has only one child
         if len(self.subcircuits) == 1:
-            return self.subcircuits[0].simplify()
 
-        # create empty copy
-        result = self.empty_copy()
+            # redirect every incoming edge to the child
+            incoming_edges = list(self.probabilistic_circuit.in_edges(self, data=True))
+            for parent, _, data in incoming_edges:
+                self.probabilistic_circuit.add_edge(parent, self.subcircuits[0], **data)
+
+            # remove this node
+            self.probabilistic_circuit.remove_node(self)
+
+            return
 
         # for every subcircuit
         for weight, subcircuit in self.weighted_subcircuits:
 
             # if the weight is 0, skip this subcircuit
             if weight == 0:
-                continue
-
-            # simplify the subcircuit
-            simplified_subcircuit = subcircuit.simplify()
+                # remove the edge
+                self.probabilistic_circuit.remove_edge(self, subcircuit)
 
             # if the simplified subcircuit is of the same type as this
-            if type(simplified_subcircuit) is type(self):
+            if type(subcircuit) is type(self):
 
                 # type hinting
-                simplified_subcircuit: Self
+                subcircuit: Self
 
                 # mount the children of that circuit directly
-                for sub_weight, sub_subcircuit in simplified_subcircuit.weighted_subcircuits:
+                for sub_weight, sub_subcircuit in subcircuit.weighted_subcircuits:
                     new_weight = sub_weight * weight
-                    if new_weight > 0:
-                        result.add_subcircuit(sub_subcircuit, new_weight)
 
-            # if this cannot be simplified
-            else:
+                    # add an edge to that subcircuit
+                    self.add_subcircuit(sub_subcircuit, new_weight, mount=False)
 
-                # mount the simplified subcircuit
-                result.add_subcircuit(simplified_subcircuit, weight)
+                    # remove the old node
+                    self.probabilistic_circuit.remove_node(subcircuit)
 
-        return result
 
     def normalize(self):
         """
@@ -952,37 +951,31 @@ class ProductUnit(UnitMixin):
             result.add_subcircuit(copied_subcircuit)
         return result
 
-    @cache_inference_result
-    def simplify(self) -> Self:
+    def simplify(self):
+
         # if this has only one child
         if len(self.subcircuits) == 1:
-            return self.subcircuits[0].simplify()
+            # connect the parents of this with the children of this
+            for parent in self.probabilistic_circuit.predecessors(self):
+                self.probabilistic_circuit.add_edge(parent, self.subcircuits[0])
 
-        # create empty copy
-        result = self.empty_copy()
+            # remove this node
+            self.probabilistic_circuit.remove_node(self)
+            return
 
         # for every subcircuit
         for subcircuit in self.subcircuits:
 
-            # simplify the subcircuit
-            simplified_subcircuit = subcircuit.simplify()
-
             # if the simplified subcircuit is of the same type as this
-            if type(simplified_subcircuit) is type(self):
+            if type(subcircuit) is type(self):
 
                 # type hinting
-                simplified_subcircuit: Self
+                subcircuit: Self
 
                 # mount the children of that circuit directly
-                for sub_subcircuit in simplified_subcircuit.subcircuits:
-                    result.add_subcircuit(sub_subcircuit)
+                for sub_subcircuit in subcircuit.subcircuits:
+                    subcircuit.add_subcircuit(sub_subcircuit, mount=False)
 
-            # if this cannot be simplified
-            else:
-                # mount the simplified subcircuit
-                result.add_subcircuit(simplified_subcircuit)
-
-        return result
 
 
 class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerializer):
@@ -1087,9 +1080,14 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         return self.root.moment(order, center)
 
-    @graph_inference_caching_wrapper
-    def simplify(self) -> Self:
-        return self.root.simplify().probabilistic_circuit
+    def simplify(self):
+        """
+        Simplify the circuit inplace.
+        """
+        bfs_layers = list(nx.bfs_layers(self, self.root))
+        for layer in reversed(bfs_layers):
+            for node in layer:
+                node.simplify()
 
     @property
     def support(self) -> Event:
@@ -1108,6 +1106,18 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def __eq__(self, other: 'ProbabilisticCircuit'):
         return self.root == other.root
+
+    def __copy__(self):
+        result = self.__class__()
+        new_node_map = {node: node.__copy__() for node in self.nodes}
+        result.add_nodes_from(new_node_map.values())
+        new_unweighted_edges = [(new_node_map[source], new_node_map[target]) for source, target in self.unweighted_edges]
+        new_weighted_edges = [(new_node_map[source], new_node_map[target], weight)
+                              for source, target, weight in self.weighted_edges]
+        result.add_edges_from(new_unweighted_edges)
+        result.add_weighted_edges_from(new_weighted_edges)
+        return result
+
 
     def to_json(self) -> Dict[str, Any]:
 

@@ -269,11 +269,6 @@ class MountedInferenceTestCase(unittest.TestCase):
         self.assertGreater(len(traces), 0)
         # go.Figure(mixture.plot(), mixture.plotly_layout()).show()
 
-    def test_simplify(self):
-        simplified = self.model.simplify()
-        self.assertEqual(len(simplified.probabilistic_circuit.nodes()), 7)
-        self.assertEqual(len(simplified.probabilistic_circuit.edges()), 6)
-
 
 class ComplexMountedInferenceTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
@@ -556,9 +551,19 @@ class ConditioningNestedProductUnitsTestCase(unittest.TestCase):
         self.assertEqual(len(list(conditional.edges())), 6)
         self.assertEqual(event.simple_sets[0][self.z], conditional.support.simple_sets[0][self.z])
 
-    def test_conditioning_with_orphans(self):
-        self.model.plot_structure()
-        plt.show()
+    def test_copy(self):
+        copy = self.model.__copy__()
+        self.assertEqual(self.model, copy)
+        copy.root.add_subcircuit(UniformDistribution(self.x, SimpleInterval(0, 1)), 0.5)
+        self.assertNotEqual(self.model, copy)
+
+    def test_simplify(self):
+        event = SimpleEvent({self.y: open_closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
+        conditional, prob = self.model.conditional(event)
+        conditional.simplify()
+        self.assertEqual(len(list(conditional.nodes())), 6)
+        self.assertEqual(len(list(conditional.edges())), 5)
+
 
 
 class SmallCircuitTestCast(unittest.TestCase):

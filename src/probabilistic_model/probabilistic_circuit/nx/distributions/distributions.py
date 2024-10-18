@@ -45,9 +45,8 @@ class UnivariateDistribution(PMUnivariateDistribution, UnitMixin, ABC):
 
         return result, log_prob
 
-    # @cache_inference_result
     def simplify(self) -> Self:
-        return self.__copy__()
+        ...
 
     def empty_copy(self) -> Self:
         return self.__copy__()
