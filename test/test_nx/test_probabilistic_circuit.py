@@ -293,13 +293,10 @@ class ComplexMountedInferenceTestCase(unittest.TestCase):
         next_model.mount_with_interaction_terms(model, transition_model)
         self.model = next_model
 
-    @unittest.skip("This test is not working since the caching removal.")
     def test_simplify(self):
-        simplified = self.model.probabilistic_circuit.simplify().root
-        print(self.model.probabilistic_circuit)
-        print(simplified.probabilistic_circuit)
-        self.assertEqual(len(simplified.probabilistic_circuit.nodes()), len(self.model.probabilistic_circuit.nodes))
-        self.assertEqual(len(simplified.probabilistic_circuit.edges()), len(self.model.probabilistic_circuit.edges))
+        simplified = self.model.probabilistic_circuit.__copy__().simplify()
+        self.assertEqual(len(simplified.nodes()), len(self.model.probabilistic_circuit.nodes))
+        self.assertEqual(len(simplified.edges()), len(self.model.probabilistic_circuit.edges))
 
     def test_sample_not_equal(self):
         samples = self.model.sample(10)

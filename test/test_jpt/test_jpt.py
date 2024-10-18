@@ -466,7 +466,8 @@ class BayesianJPTTestCase(unittest.TestCase):
         complex_event = SimpleEvent(
             {self.species: singleton(0), self.sl: closed(4.5, 5.5)}).as_composite_set()
         pc = bayesian_network.as_probabilistic_circuit()
-        pc_m = pc.marginal([v for v in pc.variables if not v.name.endswith(".latent")]).simplify()
+        pc_m = pc.marginal([v for v in pc.variables if not v.name.endswith(".latent")])
+        pc_m = pc_m.simplify()
         self.assertEqual(pc_m.variables, SortedSet([self.pl, self.pw, self.sl, self.sw, self.species]))
 
         self.assertAlmostEqual(pc_m.probability(complex_event), 0.2333333)

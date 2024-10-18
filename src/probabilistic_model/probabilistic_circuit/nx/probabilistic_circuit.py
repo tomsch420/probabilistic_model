@@ -955,9 +955,10 @@ class ProductUnit(UnitMixin):
 
         # if this has only one child
         if len(self.subcircuits) == 1:
-            # connect the parents of this with the children of this
-            for parent in self.probabilistic_circuit.predecessors(self):
-                self.probabilistic_circuit.add_edge(parent, self.subcircuits[0])
+            # redirect every incoming edge to the child
+            incoming_edges = list(self.probabilistic_circuit.in_edges(self, data=True))
+            for parent, _, data in incoming_edges:
+                self.probabilistic_circuit.add_edge(parent, self.subcircuits[0], **data)
 
             # remove this node
             self.probabilistic_circuit.remove_node(self)
@@ -1080,7 +1081,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         return self.root.moment(order, center)
 
-    def simplify(self):
+    def simplify(self) -> Self:
         """
         Simplify the circuit inplace.
         """
@@ -1088,6 +1089,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         for layer in reversed(bfs_layers):
             for node in layer:
                 node.simplify()
+        return self
 
     @property
     def support(self) -> Event:

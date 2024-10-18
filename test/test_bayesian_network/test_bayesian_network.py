@@ -168,7 +168,8 @@ class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
         plt.show()
 
     def test_as_probabilistic_circuit(self):
-        circuit = self.bayesian_network.as_probabilistic_circuit().simplify()
+        circuit = self.bayesian_network.as_probabilistic_circuit()
+        circuit.simplify()
         self.assertEqual(circuit.probability(circuit.universal_simple_event().as_composite_set()), 1.)
         event = SimpleEvent({self.x: Set(XEnum.ZERO, XEnum(1)), self.y: closed(1.5, 2)})
         self.assertAlmostEqual(0.075, circuit.probability(event.as_composite_set()))
