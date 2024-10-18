@@ -869,6 +869,7 @@ class ProductUnit(UnitMixin):
 
             # if any is 0, the whole probability is 0
             if conditional_subcircuit is None:
+                probabilistic_circuit.remove_node(resulting_node)
                 return self.impossible_condition_result
 
             # update probability and children
@@ -1050,12 +1051,24 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def log_mode(self) -> Tuple[Event, float]:
         return self.root.log_mode()
 
+    def remove_unreachable_nodes(self, root: UnitMixin):
+        """
+        Remove all nodes that are not reachable from the root.
+        """
+        reachable_nodes = nx.descendants(self, root)
+        unreachable_nodes = set(self.nodes)  - (reachable_nodes | {root})
+        self.remove_nodes_from(unreachable_nodes)
+
     @graph_inference_caching_wrapper
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         new_circuit = self.__class__()
         conditional, log_probability = self.root.log_conditional(event, new_circuit)
         if conditional is None:
             return conditional, log_probability
+
+        # clean up unreachable nodes
+        new_circuit.remove_unreachable_nodes(conditional)
+
         return conditional.probabilistic_circuit, log_probability
 
     @graph_inference_caching_wrapper

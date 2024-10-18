@@ -1,7 +1,7 @@
 import unittest
 
 from matplotlib import pyplot as plt
-from random_events.interval import closed, open, closed_open, SimpleInterval
+from random_events.interval import closed, open, closed_open, SimpleInterval, open_closed
 from random_events.variable import Integer, Continuous
 from typing_extensions import Union
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
@@ -520,7 +520,45 @@ class ConditioningNestedSumUnitsTestCase(unittest.TestCase):
         # plt.show()
 
 class ConditioningNestedProductUnitsTestCase(unittest.TestCase):
-    ...
+
+    x, y, z = Continuous("x"), Continuous("y"), Continuous("z")
+    model: ProbabilisticCircuit
+
+    @classmethod
+    def setUpClass(cls):
+        dx = UniformDistribution(cls.x, SimpleInterval(0, 1))
+        dy1 = UniformDistribution(cls.y, SimpleInterval(0, 1))
+        dy2 = UniformDistribution(cls.y, SimpleInterval(2, 3))
+        dz1 = UniformDistribution(cls.z, SimpleInterval(0, 1))
+        dz2 = UniformDistribution(cls.z, SimpleInterval(2, 3))
+
+        p1 = ProductUnit()
+        p1.add_subcircuit(dx)
+        p1.add_subcircuit(dy1)
+        p1.add_subcircuit(dz1)
+
+        p2 = ProductUnit()
+        p2.add_subcircuit(dx)
+        p2.add_subcircuit(dy2)
+        p2.add_subcircuit(dz2)
+
+        root = SumUnit()
+        root.add_subcircuit(p1, 0.5)
+        root.add_subcircuit(p2, 0.5)
+
+        cls.model = root.probabilistic_circuit
+
+    def test_conditioning_with_multiple_parents_no_orphans(self):
+        event = SimpleEvent({self.z: open_closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
+        conditional, prob = self.model.conditional(event)
+        self.assertAlmostEqual(prob, 0.25)
+        self.assertEqual(len(list(conditional.nodes())), 7)
+        self.assertEqual(len(list(conditional.edges())), 6)
+        self.assertEqual(event.simple_sets[0][self.z], conditional.support.simple_sets[0][self.z])
+
+    def test_conditioning_with_orphans(self):
+        self.model.plot_structure()
+        plt.show()
 
 
 class SmallCircuitTestCast(unittest.TestCase):

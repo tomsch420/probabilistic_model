@@ -240,8 +240,7 @@ class BreastCancerTestCase(unittest.TestCase, ShowMixin):
 
         df["malignant"] = target
         cls.data = df
-
-        variables = infer_variables_from_dataframe(cls.data, scale_continuous_types=False)
+        variables = infer_variables_from_dataframe(cls.data, scale_continuous_types=False, min_samples_per_quantile=600)
 
         cls.model = JPT(variables, min_samples_leaf=0.4)
         cls.model.fit(cls.data)
