@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import itertools
 import math
-from abc import abstractmethod, ABC
-from functools import cached_property
+from abc import abstractmethod
 
 import networkx as nx
 import numpy as np
@@ -65,8 +64,10 @@ class Unit(SubclassJSONSerializer):
         return list(self.probabilistic_circuit.predecessors(self))
 
     @abstractmethod
-    @cached_property
-    def support(self) -> Event:
+    def support(self):
+        """
+        Calculate the support of this unit.
+        """
         raise NotImplementedError
 
     @property
@@ -304,6 +305,8 @@ class Unit(SubclassJSONSerializer):
         for subcircuit in self.subcircuits:
             subcircuit.reset_cached_properties()
 
+    def log_likelihood(self, *args, **kwargs):
+        raise NotImplementedError
 
 class InnerUnit(Unit):
     """
@@ -371,6 +374,10 @@ class LeafUnit(Unit):
     def probability_of_simple_event(self, event: SimpleEvent):
         self.result_of_current_query = self.distribution.probability_of_simple_event(event)
 
+    def support(self):
+        self.result_of_current_query = self.distribution.support
+
+
 class SumUnit(InnerUnit):
 
     def __repr__(self):
@@ -418,12 +425,11 @@ class SumUnit(InnerUnit):
         return sum([weight * subcircuit.result_of_current_query(*args, **kwargs)
                     for weight, subcircuit in self.weighted_subcircuits])
 
-    @cached_property
-    def support(self) -> Event:
-        support = self.subcircuits[0].support
+    def support(self):
+        support = self.subcircuits[0].result_of_current_query
         for subcircuit in self.subcircuits[1:]:
-            support |= subcircuit.support
-        return support
+            support |= subcircuit.result_of_current_query
+        self.result_of_current_query = support
 
     @property
     def weights(self) -> np.array:
@@ -432,13 +438,9 @@ class SumUnit(InnerUnit):
         """
         return np.array([weight for weight, _ in self.weighted_subcircuits])
 
-    def log_likelihood(self, events: np.array) -> np.array:
-        result = np.zeros(len(events))
-        for weight, subcircuit in self.weighted_subcircuits:
-            subcircuit_likelihood = np.exp(subcircuit.log_likelihood(events))
-            result += weight * subcircuit_likelihood
-        self.result_of_current_query = np.log(result)
-
+    def log_likelihood(self):
+        self.result_of_current_query = np.log(np.sum([weight * np.exp(subcircuit.result_of_current_query)
+                         for weight, subcircuit in self.weighted_subcircuits], axis=0))
      
     def cdf(self, events: np.array) -> np.array:
         result = np.zeros(len(events))
@@ -762,12 +764,11 @@ class ProductUnit(Unit):
             result = result.union(subcircuit.variables)
         return result
 
-    @cached_property
-    def support(self) -> Event:
-        support = self.subcircuits[0].support
+    def support(self):
+        support = self.subcircuits[0].result_of_current_query
         for subcircuit in self.subcircuits[1:]:
-            support &= subcircuit.support
-        return support
+            support &= subcircuit.result_of_current_query
+        self.result_of_current_query = support
 
     def add_subcircuit(self, subcircuit: Unit, mount: bool = True):
         """
@@ -780,13 +781,8 @@ class ProductUnit(Unit):
             self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit)
 
-    def log_likelihood(self, events: np.array) -> np.array:
-        result = np.zeros(len(events))
-        for subcircuit in self.subcircuits:
-            result += subcircuit.result_of_current_query
-        self.result_of_current_query = result
-        return result
-
+    def log_likelihood(self):
+        self.result_of_current_query = np.sum([subcircuit.result_of_current_query for subcircuit in self.subcircuits])
      
     def cdf(self, events: np.array) -> np.array:
         variables = self.variables
@@ -1028,7 +1024,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
           for unit in layer:
               if unit.is_leaf:
                   unit.log_likelihood(events[:, [variable_to_index_map[variable] for variable in unit.variables]])
-              unit.log_likelihood(events)
+              else:
+                unit.log_likelihood()
         return self.root.result_of_current_query
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
@@ -1082,7 +1079,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     @property
     def support(self) -> Event:
-        return self.root.support
+        [node.support() for layer in reversed(self.layers) for node in layer]
+        return self.root.result_of_current_query
 
     def is_decomposable(self) -> bool:
         """
