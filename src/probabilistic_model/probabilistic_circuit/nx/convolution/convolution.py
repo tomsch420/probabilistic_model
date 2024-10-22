@@ -1,7 +1,7 @@
 from random_events.interval import SimpleInterval
 
 from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import UniformDistribution, GaussianDistribution, TruncatedGaussianDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import UnitMixin
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import Unit
 from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import DiracDeltaDistribution
 
 
@@ -9,15 +9,15 @@ class Convolution:
     """
     Abstract class to implement convolutions from distributions of independent variables."""
 
-    distribution: UnitMixin
+    distribution: Unit
     """
     The distribution that is the left side of the addition
     """
 
-    def __init__(self, distribution: UnitMixin):
+    def __init__(self, distribution: Unit):
         self.distribution = distribution
 
-    def convolve_with_dirac_delta(self, other: DiracDeltaDistribution) -> UnitMixin:
+    def convolve_with_dirac_delta(self, other: DiracDeltaDistribution) -> Unit:
         """
         Convolve this distribution with a dirac delta.
 
@@ -25,7 +25,7 @@ class Convolution:
         """
         raise NotImplementedError
 
-    def convolve_with_gaussian(self, other: GaussianDistribution) -> UnitMixin:
+    def convolve_with_gaussian(self, other: GaussianDistribution) -> Unit:
         """
         Convolve this distribution with a gaussian.
 
