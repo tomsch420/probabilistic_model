@@ -1,28 +1,15 @@
 from __future__ import annotations
 
-from abc import ABC
-
 import numpy as np
 from random_events.interval import SimpleInterval, Interval
 from random_events.product_algebra import SimpleEvent
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.variable import Variable
-from sortedcontainers import SortedSet
-from sympy.plotting.intervalmath import interval
-from typing_extensions import Tuple, Optional, Self
+from typing_extensions import Optional
 
-from ....distributions.distributions import (ContinuousDistribution as PMContinuousDistribution,
-                                                             DiracDeltaDistribution as PMDiracDeltaDistribution,
-                                                             SymbolicDistribution as PMSymbolicDistribution,
-                                                             IntegerDistribution as PMIntegerDistribution,
-                                                             DiscreteDistribution as PMDiscreteDistribution,
-                                                             UnivariateDistribution as PMUnivariateDistribution)
-from ..probabilistic_circuit import Unit, SumUnit, ProbabilisticCircuit, LeafUnit
-from ....distributions.uniform import UniformDistribution as PMUniformDistribution
-from ....distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
-                                                        TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
-from probabilistic_model.probabilistic_model import ProbabilisticModel
 from probabilistic_model.utils import MissingDict
+from ..probabilistic_circuit import SumUnit, LeafUnit
+from ....distributions.distributions import (ContinuousDistribution as PMContinuousDistribution)
 
 
 class UnivariateLeaf(LeafUnit):
@@ -31,32 +18,29 @@ class UnivariateLeaf(LeafUnit):
     def variable(self) -> Variable:
         return self.distribution.variables[0]
 
-
     def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
         return self.univariate_log_conditional_of_simple_event_in_place(event[self.variable])
-
 
     def univariate_log_conditional_of_simple_event_in_place(self, event: AbstractCompositeSet):
         raise NotImplementedError
 
 
 class UnivariateContinuousLeaf(UnivariateLeaf):
-
-    distribution: PMContinuousDistribution
+    distribution: Optional[PMContinuousDistribution]
 
     def univariate_log_conditional_of_simple_event_in_place(self, event: Interval):
 
         event = self.distribution.univariate_support & event
 
         if event.is_empty():
-            self.probabilistic_circuit.remove_node(self)
+            self.result_of_current_query = -np.inf
+            self.distribution = None
             return None
 
         # if it is a simple truncation
         if len(event.simple_sets) == 1:
-            self.distribution, self.result_of_current_query = self.distribution.log_conditional_from_simple_interval(event.simple_sets[0])
-            if self.distribution is None:
-                self.probabilistic_circuit.remove_node(self)
+            self.distribution, self.result_of_current_query = self.distribution.log_conditional_from_simple_interval(
+                event.simple_sets[0])
             return self
 
         total_probability = 0.
@@ -65,7 +49,8 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
         result = SumUnit(self.probabilistic_circuit)
 
         for simple_interval in event.simple_sets:
-            current_conditional, current_log_probability = self.distribution.log_conditional_from_simple_interval(simple_interval)
+            current_conditional, current_log_probability = self.distribution.log_conditional_from_simple_interval(
+                simple_interval)
             current_probability = np.exp(current_log_probability)
 
             if current_probability == 0:
@@ -77,8 +62,9 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
 
         # if the event is impossible
         if total_probability == 0:
-            self.probabilistic_circuit.remove_node(result)
-            return self.impossible_condition_result
+            self.result_of_current_query = -np.inf
+            self.distribution = None
+            return None
 
         # reroute the parent to the new sum unit
         self.connect_incoming_edges_to(result)
@@ -88,7 +74,7 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
 
         # update result
         result.normalize()
-        result.result_of_current_query = total_probability
+        result.result_of_current_query = np.log(total_probability)
 
         return result
 
@@ -129,4 +115,3 @@ class DiscreteDistribution(UnivariateLeaf):
                 element = element.lower
             probabilities[int(element)] = probability
         return cls(variable, probabilities)
-

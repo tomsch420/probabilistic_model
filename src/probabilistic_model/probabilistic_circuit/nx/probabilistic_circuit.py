@@ -13,7 +13,6 @@ from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable
 
-from probabilistic_model.error import IntractableError
 from probabilistic_model.probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 
 
@@ -181,15 +180,6 @@ class Unit(SubclassJSONSerializer):
         result.normalize()
         return result
 
-    @abstractmethod
-    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent) -> Self:
-        """
-        Calculate the conditional circuit from a simple event in-place.
-
-        :param event: The simple event to condition on.
-        """
-        raise NotImplementedError
-
     def log_mode(self):
         raise NotImplementedError
 
@@ -220,17 +210,6 @@ class Unit(SubclassJSONSerializer):
         """
         raise NotImplementedError()
 
-    def reset_cached_properties(self):
-        """
-        Reset all cached properties in this circuit.
-        """
-        self.reset_result_of_current_query()
-        for subcircuit in self.subcircuits:
-            subcircuit.reset_cached_properties()
-
-    def log_likelihood(self, *args, **kwargs):
-        raise NotImplementedError
-
     def sample(self, *args, **kwargs):
         """
         Draw samples from the circuit.
@@ -253,7 +232,7 @@ class LeafUnit(Unit):
     Class for Leaf units.
     """
 
-    distribution: ProbabilisticModel
+    distribution: Optional[ProbabilisticModel]
     """
     The distribution contained in this leaf unit.
     """
@@ -440,13 +419,6 @@ class SumUnit(InnerUnit):
         """
         return np.array([weight for weight, _ in self.weighted_subcircuits])
 
-    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent) -> Optional[Self]:
-        if len(self.subcircuits) == 0:
-            self.probabilistic_circuit.remove_node(self)
-            return None
-        self.log_forward()
-        self.normalize()
-        return self
 
     def sample(self) -> np.array:
         weights, subcircuits = self.weights, self.subcircuits
@@ -654,18 +626,18 @@ class ProductUnit(InnerUnit):
     Decomposable Product Units for Probabilistic Circuits
     """
 
+    def __repr__(self):
+        return "⨯"
+
     def forward(self, *args, **kwargs):
-        self.result_of_current_query = math.prod([subcircuit.result_of_current_query(*args, **kwargs)
+        self.result_of_current_query = math.prod([subcircuit.result_of_current_query
                                                   for subcircuit in self.subcircuits])
 
     def log_forward(self, *args, **kwargs):
-        self.result_of_current_query = np.sum([subcircuit.result_of_current_query(*args, **kwargs)
+        self.result_of_current_query = np.sum([subcircuit.result_of_current_query
                                                for subcircuit in self.subcircuits], axis=0)
 
     moment_forward = log_forward
-
-    def __repr__(self):
-        return "∗"
 
     @property
     def variables(self) -> SortedSet:
@@ -691,14 +663,6 @@ class ProductUnit(InnerUnit):
             self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit)
 
-    def probability_of_simple_event(self, event: SimpleEvent) -> float:
-        result = 1.
-        for subcircuit in self.subcircuits:
-            result *= subcircuit.probability_of_simple_event(event)
-            if result == 0:
-                return 0.
-        return result
-
     def is_decomposable(self):
         for index, subcircuit in enumerate(self.subcircuits):
             variables = subcircuit.variables
@@ -707,34 +671,12 @@ class ProductUnit(InnerUnit):
                     return False
         return True
 
-    def log_mode(self) -> Tuple[Event, float]:
-        ...
-
-    def log_conditional_of_simple_event(self, event: SimpleEvent,
-                                        probabilistic_circuit: ProbabilisticCircuit) -> Tuple[Optional[Self], float]:
-        # initialize probability
-        log_probability = 0.
-
-        # create a new node with new circuit attached to it
-        resulting_node = self.empty_copy()
-        probabilistic_circuit.add_node(resulting_node)
-
-        for subcircuit in self.subcircuits:
-
-            # get conditional child and probability in pre-order
-            conditional_subcircuit, conditional_log_probability = (
-                subcircuit.log_conditional_of_simple_event(event, probabilistic_circuit=probabilistic_circuit))
-
-            # if any is 0, the whole probability is 0
-            if conditional_subcircuit is None:
-                probabilistic_circuit.remove_node(resulting_node)
-                return self.impossible_condition_result
-
-            # update probability and children
-            resulting_node.add_subcircuit(conditional_subcircuit)
-            log_probability += conditional_log_probability
-
-        return resulting_node, log_probability
+    def log_mode(self):
+        arg_log_max, log_max = self.subcircuits[0].result_of_current_query
+        for subcircuit in self.subcircuits[1:]:
+            arg_log_max = arg_log_max.intersection_with(subcircuit.result_of_current_query[0])
+            log_max += subcircuit.result_of_current_query[1]
+        self.result_of_current_query = arg_log_max, log_max
 
     def __copy__(self):
         return self.empty_copy()
@@ -759,6 +701,13 @@ class ProductUnit(InnerUnit):
                 # mount the children of that circuit directly
                 for sub_subcircuit in subcircuit.subcircuits:
                     subcircuit.add_subcircuit(sub_subcircuit, mount=False)
+
+    def sample(self, *args, **kwargs):
+        for start_index, amount in self.result_of_current_query:
+            for subcircuit in self.subcircuits:
+                if subcircuit.result_of_current_query is None:
+                    subcircuit.result_of_current_query = []
+                subcircuit.result_of_current_query.append([start_index, amount])
 
 
 class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerializer):
@@ -870,18 +819,27 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         self.remove_nodes_from(unreachable_nodes)
 
     def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
-        new_root = None
         for layer in reversed(self.layers):
             for unit in layer:
-                new_root = unit.log_conditional_in_place(event)
+                if unit.is_leaf:
+                    unit: LeafUnit
+                    unit.log_conditional_in_place(event)
+                else:
+                    unit: InnerUnit
+                    unit.log_forward()
+        root = self.root
 
-        if new_root is None:
+        [self.remove_node(node) for layer in reversed(self.layers) for node in layer
+         if node.result_of_current_query == -np.inf]
+
+        self.normalize()
+
+        if root in self.nodes:
+            self.remove_unreachable_nodes(root)
+            return self, root.result_of_current_query
+        else:
             return None, -np.inf
 
-        # clean up unreachable nodes
-        self.remove_unreachable_nodes(new_root)
-
-        return self, new_root.result_of_current_query
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
@@ -899,7 +857,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                     result = unit.marginal()
         if result is not None:
             self.remove_unreachable_nodes(result)
-        return self
+            return self
+        else:
+            return None
 
     def sample(self, amount: int) -> np.array:
         variable_to_index_map = self.variable_to_index_map
@@ -930,7 +890,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                     unit.moment(order, center, variable_to_index_map)
                 else:
                     unit: InnerUnit
-                    unit.forward()
+                    unit.moment_forward()
         return MomentType({variable: moment for variable, moment in zip(variable_to_index_map.keys(),
                                                                         self.root.result_of_current_query)})
 
@@ -938,10 +898,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         Simplify the circuit inplace.
         """
-        bfs_layers = list(nx.bfs_layers(self, self.root))
-        for layer in reversed(bfs_layers):
-            for node in layer:
-                node.simplify()
+        [node.simplify() for layer in reversed(self.layers) for node in layer]
         return self
 
     @property
@@ -1060,6 +1017,12 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         # check for determinism of every node
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
+
+    def normalize(self):
+        """
+        Normalize every sum node of this circuit in-place.
+        """
+        [node.normalize() for node in self.nodes if isinstance(node, SumUnit)]
 
     def add_edges_and_nodes_from_circuit(self, other: Self):
         """
