@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import math
 from abc import abstractmethod
+import random
 
 import networkx as nx
 import numpy as np
@@ -226,6 +227,10 @@ class Unit(SubclassJSONSerializer):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def moment(self, *args, **kwargs):
+        raise NotImplementedError
+
 
 class LeafUnit(Unit):
     """
@@ -241,6 +246,9 @@ class LeafUnit(Unit):
                  probabilistic_circuit: Optional[ProbabilisticCircuit] = None):
         super().__init__(probabilistic_circuit)
         self.distribution = distribution
+
+    def __repr__(self):
+        return repr(self.distribution)
 
     @property
     def variables(self) -> SortedSet:
@@ -342,10 +350,6 @@ class InnerUnit(Unit):
     def log_forward(self, *args, **kwargs):
         raise NotImplementedError
 
-    @abstractmethod
-    def moment_forward(self):
-        raise NotImplementedError
-
     def marginal(self, *args, **kwargs) -> Optional[Self]:
         if len(self.subcircuits) == 0:
             self.probabilistic_circuit.remove_node(self)
@@ -408,7 +412,7 @@ class SumUnit(InnerUnit):
         self.result_of_current_query = np.log(np.sum([weight * np.exp(subcircuit.result_of_current_query)
                                                       for weight, subcircuit in self.weighted_subcircuits], axis=0))
 
-    moment_forward = forward
+    moment = forward
 
     def support(self):
         support = self.subcircuits[0].result_of_current_query
@@ -423,8 +427,7 @@ class SumUnit(InnerUnit):
         """
         return np.array([weight for weight, _ in self.weighted_subcircuits])
 
-
-    def sample(self) -> np.array:
+    def sample(self, *args, **kwargs) -> np.array:
         weights, subcircuits = self.weights, self.subcircuits
 
         # for every sampling request
@@ -436,8 +439,6 @@ class SumUnit(InnerUnit):
 
             # add the sampling requests to the subcircuits
             for count, subcircuit in zip(counts, subcircuits):
-                if subcircuit.result_of_current_query is None:
-                    subcircuit.result_of_current_query = []
                 subcircuit.result_of_current_query.append((start_index + total, count))
                 total += count
 
@@ -641,7 +642,7 @@ class ProductUnit(InnerUnit):
         self.result_of_current_query = np.sum([subcircuit.result_of_current_query
                                                for subcircuit in self.subcircuits], axis=0)
 
-    moment_forward = log_forward
+    moment = log_forward
 
     @property
     def variables(self) -> SortedSet:
@@ -709,8 +710,6 @@ class ProductUnit(InnerUnit):
     def sample(self, *args, **kwargs):
         for start_index, amount in self.result_of_current_query:
             for subcircuit in self.subcircuits:
-                if subcircuit.result_of_current_query is None:
-                    subcircuit.result_of_current_query = []
                 subcircuit.result_of_current_query.append([start_index, amount])
 
 
@@ -846,23 +845,12 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return self, root.result_of_current_query
 
-
-
-
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
         return result.log_conditional_in_place(event)
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
-        result = None
-        for layer in reversed(self.layers):
-            for unit in layer:
-                if unit.is_leaf:
-                    unit: LeafUnit
-                    result = unit.marginal(variables)
-                else:
-                    unit: InnerUnit
-                    result = unit.marginal()
+        result = [node.marginal(variables) for layer in reversed(self.layers) for node in layer][-1]
         if result is not None:
             self.remove_unreachable_nodes(result)
             return self
@@ -870,35 +858,27 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             return None
 
     def sample(self, amount: int) -> np.array:
+
+        # initialize all results
+        for node in self.nodes:
+            node.result_of_current_query = []
+
         variable_to_index_map = self.variable_to_index_map
 
         # initialize the sample arguments
-        self.root.result_of_current_query = [(0, amount)]
+        self.root.result_of_current_query.append((0, amount))
 
         # initialize the samples
         samples = np.full((amount, len(variable_to_index_map)), np.nan)
 
         # forward through the circuit to sample
-        for layer in self.layers:
-            for unit in layer:
-                if unit.is_leaf:
-                    unit: LeafUnit
-                    unit.sample(samples, variable_to_index_map)
-                else:
-                    unit: InnerUnit
-                    unit.sample()
+        [node.sample(samples, variable_to_index_map) for layer in self.layers for node in layer]
+
         return samples
 
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         variable_to_index_map = self.variable_to_index_map
-        for layer in reversed(self.layers):
-            for unit in layer:
-                if unit.is_leaf:
-                    unit: LeafUnit
-                    unit.moment(order, center, variable_to_index_map)
-                else:
-                    unit: InnerUnit
-                    unit.moment_forward()
+        [node.moment(order, center, variable_to_index_map) for layer in reversed(self.layers) for node in layer]
         return MomentType({variable: moment for variable, moment in zip(variable_to_index_map.keys(),
                                                                         self.root.result_of_current_query)})
 
@@ -1045,14 +1025,14 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def plot_structure(self):
         """
         Plot the structure of the circuit.
-        # TODO make it more fancy
+        # TODO use
         """
 
         # create the subgraph with this node as root
-        subgraph = nx.subgraph(self, list(nx.descendants(self, self.root)) + [self])
+        subgraph = nx.subgraph(self, list(nx.descendants(self, self.root)) + [self.root])
 
         # do a layer-wise BFS
-        layers = list(nx.bfs_layers(subgraph, [self]))
+        layers = self.layers
 
         # calculate the positions of the nodes
         maximum_layer_width = max([len(layer) for layer in layers])
@@ -1073,4 +1053,3 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         nx.draw_networkx_nodes(subgraph, positions)
         labels = {node: repr(node) for node in subgraph.nodes}
         nx.draw_networkx_labels(subgraph, positions, labels)
-        #  plt.show()
