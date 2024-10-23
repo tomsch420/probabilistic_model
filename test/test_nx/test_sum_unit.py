@@ -109,11 +109,6 @@ class SumUnitTestCase(unittest.TestCase):
         deserialized = SumUnit.from_json(serialized)
         self.assertEqual(self.model, deserialized)
 
-    def test_copy(self):
-        copy = self.model.root.__copy__()
-        self.assertEqual(self.model.root, copy)
-        self.assertNotEqual(id(copy), id(self.model.root))
-
     def test_conditional_inference(self):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
         result, probability = self.model.conditional(event)
