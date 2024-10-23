@@ -74,10 +74,8 @@ class SumUnitTestCase(unittest.TestCase):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
         result, probability = self.model.conditional(event)
         self.assertAlmostEqual(probability, 0.3)
-        self.assertEqual(len(list(result.nodes())), 2)
-        self.assertIsInstance(result.root, SumUnit)
-        self.assertEqual(len(result.root.weighted_subcircuits), 1)
-        self.assertEqual(result.root.weighted_subcircuits[0][0], 1)
+        self.assertEqual(len(list(result.nodes())), 1)
+        self.assertIsInstance(result.root, LeafUnit)
 
     def test_conditional_impossible(self):
         event = SimpleEvent({self.x: closed(5, 6)}).as_composite_set()

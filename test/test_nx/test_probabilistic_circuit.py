@@ -9,11 +9,8 @@ from probabilistic_model.probabilistic_circuit.nx.convolution.convolution import
                                                                                   GaussianDistributionConvolution,
                                                                                   TruncatedGaussianDistributionConvolution,
                                                                                   DiracDeltaDistributionConvolution)
-from probabilistic_model.probabilistic_circuit.nx.distributions import (ContinuousDistribution,
-                                                                        UniformDistribution,
-                                                                        GaussianDistribution,
-                                                                        DiracDeltaDistribution,
-                                                                        TruncatedGaussianDistribution)
+from probabilistic_model.probabilistic_circuit.nx.distributions import  UnivariateContinuousLeaf
+from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 
 import plotly.graph_objects as go
@@ -37,8 +34,8 @@ class MinimalGraphCircuitTestCase(unittest.TestCase):
     def setUp(self):
         model = ProbabilisticCircuit()
 
-        u1 = UniformDistribution(self.real, closed(0, 1).simple_sets[0])
-        u2 = UniformDistribution(self.real, closed(3, 5).simple_sets[0])
+        u1 = UnivariateContinuousLeaf(UniformDistribution(self.real, closed(0, 1).simple_sets[0]))
+        u2 = UnivariateContinuousLeaf(UniformDistribution(self.real, closed(3, 5).simple_sets[0]))
         model.add_node(u1)
         model.add_node(u2)
 

@@ -201,7 +201,7 @@ class Unit(SubclassJSONSerializer):
         """
         return self.__class__()
 
-    def simplify(self) -> Self:
+    def simplify(self):
         """
         Simplify the circuit by removing nodes and redirected edges that have no impact in-place.
         Essentially, this method transforms the circuit into an alternating order of sum and product units.
@@ -269,6 +269,10 @@ class LeafUnit(Unit):
 
     def support(self):
         self.result_of_current_query = self.distribution.support
+
+    def simplify(self):
+        if self.distribution is None:
+            self.probabilistic_circuit.remove_node(self)
 
     def __copy__(self):
         return self.__class__(self.distribution.__copy__())
@@ -832,13 +836,17 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         [self.remove_node(node) for layer in reversed(self.layers) for node in layer
          if node.result_of_current_query == -np.inf]
 
+        if root not in self.nodes:
+            return None, -np.inf
+
+        # clean the circuit up
+        self.remove_unreachable_nodes(root)
+        self.simplify()
         self.normalize()
 
-        if root in self.nodes:
-            self.remove_unreachable_nodes(root)
-            return self, root.result_of_current_query
-        else:
-            return None, -np.inf
+        return self, root.result_of_current_query
+
+
 
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
