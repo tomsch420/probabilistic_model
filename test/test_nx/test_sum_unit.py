@@ -23,9 +23,8 @@ class NormalizationTestCase(unittest.TestCase):
         sum_unit.normalize()
         self.assertAlmostEqual(sum_unit.weights[0], 0.5 / 0.8)
         self.assertAlmostEqual(sum_unit.weights[1], 0.3 / 0.8)
-        # TODO comment this in
-        # traces = sum_unit.probabilistic_circuit.plot()
-        # self.assertGreater(len(traces), 0) # go.Figure(traces, sum_unit.probabilistic_circuit.plotly_layout()).show()
+        traces = sum_unit.probabilistic_circuit.plot()
+        self.assertGreater(len(traces), 0) # go.Figure(traces, sum_unit.probabilistic_circuit.plotly_layout()).show()
 
 
 class SumUnitTestCase(unittest.TestCase):

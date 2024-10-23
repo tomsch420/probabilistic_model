@@ -440,13 +440,6 @@ class SumUnit(InnerUnit):
         """
         return np.array([weight for weight, _ in self.weighted_subcircuits])
 
-    def cdf(self, events: np.array) -> np.array:
-        result = np.zeros(len(events))
-        for weight, subcircuit in self.weighted_subcircuits:
-            subcircuit_cdf = subcircuit.cdf(events)
-            result += weight * subcircuit_cdf
-        return result
-
     def log_conditional_of_simple_event_in_place(self, event: SimpleEvent) -> Optional[Self]:
         if len(self.subcircuits) == 0:
             self.probabilistic_circuit.remove_node(self)
@@ -698,15 +691,6 @@ class ProductUnit(InnerUnit):
             self.mount(subcircuit)
         self.probabilistic_circuit.add_edge(self, subcircuit)
 
-    def cdf(self, events: np.array) -> np.array:
-        variables = self.variables
-        result = np.zeros(len(events))
-        for subcircuit in self.subcircuits:
-            subcircuit_variables = subcircuit.variables
-            variable_indices_in_events = np.array([variables.index(variable) for variable in subcircuit_variables])
-            result += subcircuit.cdf(events[:, variable_indices_in_events])
-        return result
-
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         result = 1.
         for subcircuit in self.subcircuits:
@@ -848,6 +832,18 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 else:
                     unit: InnerUnit
                     unit.log_forward()
+        return self.root.result_of_current_query
+
+    def cdf(self, events: np.array) -> np.array:
+        variable_to_index_map = self.variable_to_index_map
+        for layer in reversed(self.layers):
+            for unit in layer:
+                unit: LeafUnit
+                if unit.is_leaf:
+                    unit.cdf(events[:, [variable_to_index_map[variable] for variable in unit.variables]])
+                else:
+                    unit: InnerUnit
+                    unit.forward()
         return self.root.result_of_current_query
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
@@ -1064,9 +1060,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         # check for determinism of every node
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
-
-    def cdf(self, events: np.array) -> np.array:
-        return self.root.cdf(events)
 
     def add_edges_and_nodes_from_circuit(self, other: Self):
         """
