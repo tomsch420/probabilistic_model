@@ -7,8 +7,8 @@ from random_events.interval import closed, closed_open
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.probabilistic_circuit.nx.distributions import DiracDeltaDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UniformDistribution
+from probabilistic_model.distributions import UniformDistribution, DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit
 from random_events.utils import SubclassJSONSerializer
 
@@ -131,9 +131,9 @@ class InductionStepTestCase(unittest.TestCase):
         data = np.random.normal(0, 1, 500).tolist()
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        self.assertLessEqual(len(distribution.subcircuits),
+        self.assertLessEqual(len(distribution.root.subcircuits),
                              int(len(data) / self.induction_step.nyga_distribution.min_samples_per_quantile))
-        self.assertAlmostEqual(sum(distribution.weights), 1.)
+        self.assertAlmostEqual(sum(distribution.root.weights), 1.)
 
     def test_domain(self):
         np.random.seed(69)
@@ -149,7 +149,7 @@ class InductionStepTestCase(unittest.TestCase):
         data = np.random.normal(0, 1, 100)
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        fig = go.Figure(distribution.probabilistic_circuit.plot())
+        fig = go.Figure(distribution.plot())
         self.assertIsNotNone(fig)
         # fig.show()
 
@@ -157,9 +157,8 @@ class InductionStepTestCase(unittest.TestCase):
         data = [1., 1.]
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        self.assertEqual(len(distribution.probabilistic_circuit.nodes), 2)
-        self.assertEqual(distribution.weighted_subcircuits[0][0], 1.)
-        self.assertIsInstance(distribution.subcircuits[0], DiracDeltaDistribution)
+        self.assertEqual(len(distribution.nodes), 1)
+        self.assertIsInstance(distribution.root.distribution, DiracDeltaDistribution)
 
     def test_serialization(self):
         np.random.seed(69)
@@ -169,62 +168,28 @@ class InductionStepTestCase(unittest.TestCase):
         serialized = distribution.to_json()
         deserialized = SubclassJSONSerializer.from_json(serialized)
         self.assertIsInstance(deserialized, NygaDistribution)
-        self.assertEqual(distribution, deserialized)
-
-    def test_equality_and_copy(self):
-        np.random.seed(69)
-        data = np.random.normal(0, 1, 100).tolist()
-        distribution = self.induction_step.nyga_distribution
-        distribution.fit(data)
-        distribution_ = distribution.__copy__()
-        self.assertEqual(distribution, distribution_)
+        self.assertEqual(distribution.root, deserialized.root)
 
     def test_from_mixture_of_uniform_distributions(self):
-        u1 = UniformDistribution(self.variable, closed(0, 5).simple_sets[0])
-        u2 = UniformDistribution(self.variable, closed(2, 3).simple_sets[0])
+        u1 = UnivariateContinuousLeaf(UniformDistribution(self.variable, closed(0, 5).simple_sets[0]))
+        u2 = UnivariateContinuousLeaf(UniformDistribution(self.variable, closed(2, 3).simple_sets[0]))
         sum_unit = SumUnit()
-        e1 = (sum_unit, u1, 0.5)
-        e2 = (sum_unit, u2, 0.5)
-        sum_unit.probabilistic_circuit.add_weighted_edges_from([e1, e2])
-        distribution = NygaDistribution.from_uniform_mixture(sum_unit)
+        sum_unit.add_subcircuit(u1, 0.5)
+        sum_unit.add_subcircuit(u2, 0.5)
+        distribution = NygaDistribution.from_uniform_mixture(sum_unit.probabilistic_circuit)
 
         solution_by_hand = NygaDistribution(self.variable)
-        solution_by_hand.probabilistic_circuit = ProbabilisticCircuit()
+        root_of_solution = SumUnit(solution_by_hand)
         leaf_1 = UniformDistribution(self.variable, closed_open(0, 2).simple_sets[0])
         leaf_2 = UniformDistribution(self.variable, closed_open(2, 3).simple_sets[0])
         leaf_3 = UniformDistribution(self.variable, closed(3, 5).simple_sets[0])
 
-        e1 = (solution_by_hand, leaf_1, 0.2)
-        e2 = (solution_by_hand, leaf_2, 0.6)
-        e3 = (solution_by_hand, leaf_3, 0.2)
+        root_of_solution.add_subcircuit(UnivariateContinuousLeaf(leaf_1), 0.2)
+        root_of_solution.add_subcircuit(UnivariateContinuousLeaf(leaf_2), 0.6)
+        root_of_solution.add_subcircuit(UnivariateContinuousLeaf(leaf_3), 0.2)
 
-        solution_by_hand.probabilistic_circuit.add_weighted_edges_from([e1, e2, e3])
         self.assertEqual(len(distribution.leaves), 3)
-        self.assertEqual(distribution.probabilistic_circuit, solution_by_hand.probabilistic_circuit)
-
-    def test_deep_mount(self):
-        np.random.seed(69)
-        n1 = NygaDistribution(self.variable)
-        data = np.random.normal(0, 1, 100)
-        n2 = NygaDistribution(self.variable, min_likelihood_improvement=1.1, min_samples_per_quantile=40)
-        n2.fit(data)
-        n1.mount(n2)
-        self.assertEqual(len(n1.probabilistic_circuit.nodes), 4)
-
-
-class NygaDistributionTestCase(unittest.TestCase):
-    x: Continuous = Continuous("x")
-    model: NygaDistribution
-
-    def setUp(self) -> None:
-        self.model = NygaDistribution(self.x)
-        self.model.add_subcircuit(UniformDistribution(self.x, closed(-1.5, -0.5).simple_sets[0]), 0.5)
-        self.model.add_subcircuit(UniformDistribution(self.x, closed(0.5, 1.5).simple_sets[0]), 0.5)
-
-    def test_plot(self):
-        fig = go.Figure(self.model.probabilistic_circuit.plot())
-        self.assertIsNotNone(fig)
-        # fig.show()
+        self.assertEqual(distribution.root, solution_by_hand.root)
 
 
 class FittedNygaDistributionTestCase(unittest.TestCase):
@@ -239,7 +204,7 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
         self.data = data
 
     def test_plot(self):
-        fig = go.Figure(self.model.probabilistic_circuit.plot())
+        fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
 
     def test_likelihood(self):

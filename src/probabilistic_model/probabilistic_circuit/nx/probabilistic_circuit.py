@@ -722,6 +722,12 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         super().__init__(None)
         nx.DiGraph.__init__(self)
 
+    @classmethod
+    def from_other(cls, other: Self) -> Self:
+        result = cls()
+        result.add_edges_and_nodes_from_circuit(other)
+        return result
+
     @property
     def variables(self) -> SortedSet:
         return self.root.variables
@@ -941,8 +947,12 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return result
 
     @classmethod
+    def parameters_from_json(cls, data: Dict[str, Any]) -> Self:
+        return cls()
+
+    @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
-        result = ProbabilisticCircuit()
+        result = cls.parameters_from_json(data)
         hash_remap: Dict[int, Unit] = dict()
 
         for hash_, node_data in data["hash_to_node_map"].items():
@@ -1040,9 +1050,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         # TODO use
         """
 
-        # create the subgraph with this node as root
-        subgraph = nx.subgraph(self, list(nx.descendants(self, self.root)) + [self.root])
-
         # do a layer-wise BFS
         layers = self.layers
 
@@ -1057,11 +1064,11 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 positions[node] = (depth, position)
 
         # draw the edges
-        alpha_for_edges = [subgraph.get_edge_data(*edge)["weight"] if subgraph.get_edge_data(*edge) else 1.
-                           for edge in subgraph.edges]
-        nx.draw_networkx_edges(subgraph, positions, alpha=alpha_for_edges)
+        alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1.
+                           for edge in self.edges]
+        nx.draw_networkx_edges(self, positions, alpha=alpha_for_edges)
 
         # draw the nodes and labels
-        nx.draw_networkx_nodes(subgraph, positions)
-        labels = {node: repr(node) for node in subgraph.nodes}
-        nx.draw_networkx_labels(subgraph, positions, labels)
+        nx.draw_networkx_nodes(self, positions)
+        labels = {node: repr(node) for node in self.nodes}
+        nx.draw_networkx_labels(self, positions, labels)
