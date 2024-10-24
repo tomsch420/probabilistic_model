@@ -169,14 +169,16 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         """
         result = []
 
-        unique_types = set(type(node) for node in nodes)
+        unique_types = set(type(node) if not node.is_leaf else type(node.distribution) for node in nodes)
         for unique_type in unique_types:
-            nodes_of_current_type = [node for node in nodes if isinstance(node, unique_type)]
+            nodes_of_current_type = [node for node in nodes if (isinstance(node, unique_type) if not node.is_leaf
+                                                                else isinstance(node.distribution, unique_type))]
 
             if nodes[0].is_leaf:
-                unique_type = type(nodes[0].distribution)
+                unique_type = type(nodes_of_current_type[0].distribution)
 
             layer_type = inverse_class_of(unique_type)
+            print(unique_type, layer_type)
             scopes = [tuple(node.variables) for node in nodes_of_current_type]
             unique_scopes = set(scopes)
             for scope in unique_scopes:

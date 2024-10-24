@@ -20,15 +20,12 @@ class UnivariateLeaf(LeafUnit):
     def variable(self) -> Variable:
         return self.distribution.variables[0]
 
-    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
-        return self.univariate_log_conditional_of_simple_event_in_place(event[self.variable])
-
-    def univariate_log_conditional_of_simple_event_in_place(self, event: AbstractCompositeSet):
-        raise NotImplementedError
-
 
 class UnivariateContinuousLeaf(UnivariateLeaf):
     distribution: Optional[ContinuousDistribution]
+
+    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
+        return self.univariate_log_conditional_of_simple_event_in_place(event[self.variable])
 
     def univariate_log_conditional_of_simple_event_in_place(self, event: Interval):
 
@@ -84,9 +81,6 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
 class UnivariateDiscreteLeaf(UnivariateLeaf):
 
     distribution: Optional[DiscreteDistribution]
-
-    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
-        self.distribution, self.result_of_current_query = self.distribution.log_conditional(event.as_composite_set())
 
     def as_deterministic_sum(self) -> SumUnit:
         """
