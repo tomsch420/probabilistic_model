@@ -34,22 +34,6 @@ def interval_as_array(interval: Interval) -> np.ndarray:
     return np.array([simple_interval_as_array(simple_interval) for simple_interval in interval.simple_sets])
 
 
-def type_converter(abstract_type: Type, package: types.ModuleType):
-    """
-    Convert a type to a different type from a target sub-package that inherits from this type.
-
-    :param abstract_type: The type to convert
-    :param package: The sub-package to search in for that type
-
-    :return: The converted type
-    """
-    for subclass in recursive_subclasses(abstract_type):
-        if subclass.__module__.startswith(package.__name__):
-            return subclass
-
-    raise ValueError("Could not find type {} in package {}".format(abstract_type, package))
-
-
 class MissingDict(defaultdict):
     """
     A defaultdict that returns the default value when the key is missing and does **not** add the key to the dict.

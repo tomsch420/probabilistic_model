@@ -3,7 +3,6 @@ from __future__ import annotations
 import itertools
 import math
 from abc import abstractmethod
-import random
 
 import networkx as nx
 import numpy as np
@@ -14,7 +13,7 @@ from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable
 
-from probabilistic_model.probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
+from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 
 
 class Unit(SubclassJSONSerializer):
@@ -133,53 +132,6 @@ class Unit(SubclassJSONSerializer):
         :return: The result of an impossible conditional query.
         """
         return None, -np.inf
-
-    def log_conditional_in_place(self, event: Event) -> Optional[Self]:
-        """
-        Construct the conditional circuit from an event.
-        The event is not required to be a disjoint union of simple events.
-
-        However, if it is not a disjoint union, the probability of the event is not correct,
-        but the conditional distribution is.
-
-        :param event: The event to condition on.
-        :return: The root of the conditional circuit.
-        """
-
-        # skip trivial case
-        if event.is_empty():
-            self.probabilistic_circuit.remove_node(self)
-            return None
-
-        # if the event is easy, don't create a proxy node
-        elif len(event.simple_sets) == 1:
-            result = self.log_conditional_of_simple_event_in_place(event.simple_sets[0])
-            return result
-
-        # create a conditional circuit for every simple event
-        conditional_circuits = [
-            self.probabilistic_circuit.__copy__().root.log_conditional_of_simple_event_in_place(simple_event)
-            for simple_event in event.simple_sets]
-
-        # clear this circuit
-        [self.probabilistic_circuit.remove_node(node) for node in self.probabilistic_circuit.nodes]
-
-        # filtered out impossible conditionals
-        conditional_circuits = [conditional for conditional in conditional_circuits if conditional is not None]
-
-        # if all conditionals are impossible
-        if len(conditional_circuits) == 0:
-            return None
-
-        # create a new sum unit
-        result = SumUnit(self.probabilistic_circuit)
-
-        # add the conditionals to the sum unit
-        [result.add_subcircuit(conditional, np.exp(conditional.result_of_current_query)) for conditional in
-         conditional_circuits]
-        result.log_forward()
-        result.normalize()
-        return result
 
     def log_mode(self):
         raise NotImplementedError
@@ -598,7 +550,8 @@ class SumUnit(InnerUnit):
         # for every unique combination of subcircuits
         for subcircuit_a, subcircuit_b in itertools.combinations(self.subcircuits, 2):
             # check if they intersect
-            if not subcircuit_a.result_of_current_query.intersection_with(subcircuit_b.result_of_current_query).is_empty():
+            if not subcircuit_a.result_of_current_query.intersection_with(
+                    subcircuit_b.result_of_current_query).is_empty():
                 return False
 
         # if none intersect, the subcircuit is deterministic
@@ -609,12 +562,11 @@ class SumUnit(InnerUnit):
                       self.weighted_subcircuits]
         log_max = max(log_maxima)
         arg_log_maxima = [subcircuit.result_of_current_query[0] for lm, subcircuit in zip(log_maxima, self.subcircuits)
-                       if lm == log_max]
+                          if lm == log_max]
         arg_log_max = arg_log_maxima[0]
-        for event in  arg_log_maxima[1:]:
+        for event in arg_log_maxima[1:]:
             arg_log_max |= event
         self.result_of_current_query = (arg_log_max, log_max)
-
 
     def subcircuit_index_of_samples(self, samples: np.array) -> np.array:
         """
@@ -829,12 +781,12 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         unreachable_nodes = set(self.nodes) - (reachable_nodes | {root})
         self.remove_nodes_from(unreachable_nodes)
 
-    def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
+    def log_conditional_of_simple_event_in_place(self, simple_event: SimpleEvent) -> Optional[Self]:
         for layer in reversed(self.layers):
             for unit in layer:
                 if unit.is_leaf:
                     unit: LeafUnit
-                    unit.log_conditional_in_place(event)
+                    unit.log_conditional_of_simple_event_in_place(event)
                 else:
                     unit: InnerUnit
                     unit.log_forward()
@@ -852,6 +804,55 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         self.normalize()
 
         return self, root.result_of_current_query
+
+
+    def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
+        """
+        Construct the conditional circuit from an event.
+        The event is not required to be a disjoint union of simple events.
+
+        However, if it is not a disjoint union, the probability of the event is not correct,
+        but the conditional distribution is.
+
+        :param event: The event to condition on.
+        :return: The root of the conditional circuit.
+        """
+
+        # skip trivial case
+        if event.is_empty():
+            self.remove_node(self)
+            return None, -np.inf
+
+        # if the event is easy, don't create a proxy node
+        elif len(event.simple_sets) == 1:
+            result = self.log_conditional_of_simple_event_in_place(event.simple_sets[0])
+            return result
+
+        # create a conditional circuit for every simple event
+        conditional_circuits = [
+            self.probabilistic_circuit.__copy__().root.log_conditional_of_simple_event_in_place(simple_event)
+            for simple_event in event.simple_sets]
+
+        # clear this circuit
+        [self.probabilistic_circuit.remove_node(node) for node in self.probabilistic_circuit.nodes]
+
+        # filtered out impossible conditionals
+        conditional_circuits = [conditional for conditional in conditional_circuits if conditional is not None]
+
+        # if all conditionals are impossible
+        if len(conditional_circuits) == 0:
+            return None
+
+        # create a new sum unit
+        result = SumUnit(self.probabilistic_circuit)
+
+        # add the conditionals to the sum unit
+        [result.add_subcircuit(conditional, np.exp(conditional.result_of_current_query)) for conditional in
+         conditional_circuits]
+        result.log_forward()
+        result.normalize()
+        return result
+
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
@@ -1057,7 +1058,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         nodes_to_keep = list(nx.descendants(self, node)) + [node]
         return nx.subgraph(self, nodes_to_keep)
-
 
     def plot_structure(self):
         """

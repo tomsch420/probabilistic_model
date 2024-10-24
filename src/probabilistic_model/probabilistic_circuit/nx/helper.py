@@ -1,9 +1,10 @@
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous, Integer, Symbolic
 
+from .distributions import UnivariateContinuousLeaf, UnivariateDiscreteLeaf
 from .probabilistic_circuit import ProductUnit, SumUnit, ProbabilisticCircuit
 from ...utils import MissingDict
-from .distributions import UniformDistribution, SymbolicDistribution, IntegerDistribution
+from ...distributions import UniformDistribution, SymbolicDistribution, IntegerDistribution
 import plotly.graph_objects as go
 
 
@@ -43,19 +44,22 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
             distribution = SumUnit()
             for assignment_ in assignment:
                 u = UniformDistribution(variable, assignment_)
-                distribution.add_subcircuit(u, 1 / u.pdf_value())
+                distribution.add_subcircuit(UnivariateContinuousLeaf(u), 1 / u.pdf_value())
             distribution.normalize()
 
         # create uniform distribution for symbolic variables
         elif isinstance(variable, Symbolic):
             distribution = SymbolicDistribution(variable, MissingDict(float, {value: 1 / len(assignment.simple_sets) for
                                                                               value in assignment}))
+            distribution = UnivariateDiscreteLeaf(distribution)
 
         # create uniform distribution for integer variables
         elif isinstance(variable, Integer):
             distribution = IntegerDistribution(variable,
                                                MissingDict(float, {value.lower: 1 / len(assignment.simple_sets) for
                                                                    value in assignment}))
+            distribution = UnivariateDiscreteLeaf(distribution)
+
         else:
             raise NotImplementedError
 

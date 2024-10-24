@@ -12,14 +12,13 @@ from jax.experimental.sparse import BCOO
 from random_events.interval import closed
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
 from probabilistic_model.probabilistic_circuit.jax import SumLayer, UniformLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import DiracDeltaDistribution
+from probabilistic_model.distributions import DiracDeltaDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.helper import uniform_measure_of_event
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
                                                                                 ProbabilisticCircuit as NXProbabilisticCircuit)
@@ -47,8 +46,10 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         prod2.add_subcircuit(sum3)
         prod2.add_subcircuit(sum5)
 
-        d_x1, d_x2 = DiracDeltaDistribution(cls.x, 0, 1), DiracDeltaDistribution(cls.x, 1, 2)
-        d_y1, d_y2 = DiracDeltaDistribution(cls.y, 2, 3), DiracDeltaDistribution(cls.y, 3, 4)
+        d_x1 = UnivariateContinuousLeaf(DiracDeltaDistribution(cls.x, 0, 1))
+        d_x2 = UnivariateContinuousLeaf(DiracDeltaDistribution(cls.x, 1, 2))
+        d_y1 = UnivariateContinuousLeaf(DiracDeltaDistribution(cls.y, 2, 3))
+        d_y2 = UnivariateContinuousLeaf(DiracDeltaDistribution(cls.y, 3, 4))
 
         sum2.add_subcircuit(d_x1, 0.8)
         sum2.add_subcircuit(d_x2, 0.2)
@@ -116,7 +117,7 @@ class JPTIntegrationTestCase(unittest.TestCase):
         variables = infer_variables_from_dataframe(df, min_samples_per_quantile=100)
         jpt = JPT(variables, min_samples_leaf=0.1)
         jpt.fit(df)
-        cls.jpt = jpt.probabilistic_circuit
+        cls.jpt = jpt
 
     def test_from_jpt(self):
         model = ProbabilisticCircuit.from_nx(self.jpt, False)
