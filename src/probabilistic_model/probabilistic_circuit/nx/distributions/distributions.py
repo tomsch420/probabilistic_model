@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import networkx as nx
 import numpy as np
 from random_events.interval import SimpleInterval, Interval
 from random_events.product_algebra import SimpleEvent
 from random_events.sigma_algebra import AbstractCompositeSet
-from random_events.variable import Variable
+from random_events.variable import Variable, Integer
 from typing_extensions import Optional
 
-from probabilistic_model.utils import MissingDict
-from ..probabilistic_circuit import SumUnit, LeafUnit
-from ....distributions.distributions import (ContinuousDistribution as PMContinuousDistribution)
+from ....utils import MissingDict
+from ..probabilistic_circuit import SumUnit, LeafUnit, ProbabilisticCircuit
+from ....distributions.distributions import (ContinuousDistribution, DiscreteDistribution, IntegerDistribution,
+                                             SymbolicDistribution)
 
 
 class UnivariateLeaf(LeafUnit):
@@ -26,7 +28,7 @@ class UnivariateLeaf(LeafUnit):
 
 
 class UnivariateContinuousLeaf(UnivariateLeaf):
-    distribution: Optional[PMContinuousDistribution]
+    distribution: Optional[ContinuousDistribution]
 
     def univariate_log_conditional_of_simple_event_in_place(self, event: Interval):
 
@@ -79,22 +81,28 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
         return result
 
 
-class DiscreteDistribution(UnivariateLeaf):
+class UnivariateDiscreteLeaf(UnivariateLeaf):
+
+    distribution: Optional[DiscreteDistribution]
+
+    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
+        self.distribution, self.result_of_current_query = self.distribution.log_conditional(event.as_composite_set())
 
     def as_deterministic_sum(self) -> SumUnit:
         """
-        Convert this distribution to a deterministic sum unit that encodes the same distribution.
-        The result has as many children as the domain of the variable and each child encodes the value of the variable.
+        Convert this distribution to a deterministic sum unit that encodes the same distribution in-place.
+        The result has as many children as the probability dictionary of this distribution.
+        Each child encodes the value of the variable.
 
-        :return: A deterministic sum unit that encodes the same distribution.
+        :return: The deterministic sum unit that encodes the same distribution.
         """
-        result = SumUnit()
+        result = SumUnit(self.probabilistic_circuit)
 
-        for event in self.variable.domain.simple_sets:
-            event = SimpleEvent({self.variable: event}).as_composite_set()
-            conditional, probability = self.conditional(event)
-            result.add_subcircuit(conditional, probability)
-
+        for element, probability in self.distribution.probabilities.items():
+            result.add_subcircuit(UnivariateDiscreteLeaf(self.distribution.__class__(self.variable, {element: 1.}),
+                                                         self.probabilistic_circuit), probability, mount=False)
+        self.connect_incoming_edges_to(result)
+        self.probabilistic_circuit.remove_node(self)
         return result
 
     @classmethod
@@ -109,9 +117,15 @@ class DiscreteDistribution(UnivariateLeaf):
         variable = sum_unit.variables[0]
         probabilities = MissingDict(float)
 
-        for element in sum_unit.support.simple_sets[0][variable].simple_sets:
-            probability = sum_unit.probability_of_simple_event(SimpleEvent({variable: element}))
+        circuit_encoding_only_the_sum_unit = sum_unit.probabilistic_circuit.subgraph_of(sum_unit)
+
+        for element in circuit_encoding_only_the_sum_unit.support.simple_sets[0][variable].simple_sets:
+            probability = circuit_encoding_only_the_sum_unit.probability_of_simple_event(
+                SimpleEvent({variable: element}))
             if isinstance(element, SimpleInterval):
                 element = element.lower
             probabilities[int(element)] = probability
-        return cls(variable, probabilities)
+
+        distribution_class = IntegerDistribution if isinstance(variable, Integer) else SymbolicDistribution
+        distribution = distribution_class(variable, probabilities)
+        return cls(distribution)

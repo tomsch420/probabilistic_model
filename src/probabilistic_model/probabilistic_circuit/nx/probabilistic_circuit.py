@@ -780,6 +780,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         for layer in reversed(self.layers):
             for unit in layer:
                 if unit.is_leaf:
+                    unit: LeafUnit
                     unit.log_likelihood(events[:, [variable_to_index_map[variable] for variable in unit.variables]])
                 else:
                     unit: InnerUnit
@@ -1021,6 +1022,17 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         self.add_nodes_from(other.nodes)
         self.add_edges_from(other.unweighted_edges)
         self.add_weighted_edges_from(other.weighted_edges)
+
+    def subgraph_of(self, node: Unit) -> Self:
+        """
+        Create a subgraph with a node as root.
+
+        :param node: The root of the subgraph.
+        :return: The subgraph.
+        """
+        nodes_to_keep = list(nx.descendants(self, node)) + [node]
+        return nx.subgraph(self, nodes_to_keep)
+
 
     def plot_structure(self):
         """
