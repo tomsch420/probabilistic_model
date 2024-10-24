@@ -178,7 +178,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
                 unique_type = type(nodes_of_current_type[0].distribution)
 
             layer_type = inverse_class_of(unique_type)
-            print(unique_type, layer_type)
+
             scopes = [tuple(node.variables) for node in nodes_of_current_type]
             unique_scopes = set(scopes)
             for scope in unique_scopes:
