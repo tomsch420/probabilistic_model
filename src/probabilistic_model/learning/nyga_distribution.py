@@ -335,7 +335,7 @@ class NygaDistribution(ProbabilisticCircuit):
     The minimal number of samples per quantile.
     """
 
-    def __init__(self, variable: Continuous, min_samples_per_quantile: Optional[int] = 1,
+    def __init__(self, variable: Optional[Continuous] = None, min_samples_per_quantile: Optional[int] = 1,
                  min_likelihood_improvement: Optional[float] = 0.1):
         super().__init__()
         self.variable = variable
@@ -405,6 +405,9 @@ class NygaDistribution(ProbabilisticCircuit):
                 "min_samples_per_quantile": self.min_samples_per_quantile,
                 "min_likelihood_improvement": self.min_likelihood_improvement}
 
+    def empty_copy(self) -> Self:
+        return self.__class__(self.variable, self.min_samples_per_quantile, self.min_likelihood_improvement)
+
     @classmethod
     def from_uniform_mixture(cls, mixture: ProbabilisticCircuit) -> Self:
         """
@@ -414,6 +417,9 @@ class NygaDistribution(ProbabilisticCircuit):
         :param mixture: An arbitrary, univariate mixture of uniform distributions
         :return: A Nyga Distribution describing the same function.
         """
+
+        assert len(mixture.variables) == 1, "Can only convert univariate circuits to nyga distributions."
+
         variable: Continuous = mixture.variables[0]
         result = cls(variable)
         root = SumUnit(result)

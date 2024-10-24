@@ -106,21 +106,19 @@ class UnivariateDiscreteLeaf(UnivariateLeaf):
         return result
 
     @classmethod
-    def from_sum_unit(cls, sum_unit: SumUnit):
+    def from_mixture(cls, mixture: ProbabilisticCircuit):
         """
-        Create a discrete distribution from a sum unit.
+        Create a discrete distribution from a univariate mixture.
 
-        :param sum_unit: The sum unit to create the distribution from.
+        :param mixture: The mixture to create the distribution from.
         :return: The discrete distribution.
         """
-        assert len(sum_unit.variables) == 1, "Can only convert unidimensional sum units to discrete distributions."
-        variable = sum_unit.variables[0]
+        assert len(mixture.variables) == 1, "Can only convert univariate sum units to discrete distributions."
+        variable = mixture.variables[0]
         probabilities = MissingDict(float)
 
-        circuit_encoding_only_the_sum_unit = sum_unit.probabilistic_circuit.subgraph_of(sum_unit)
-
-        for element in circuit_encoding_only_the_sum_unit.support.simple_sets[0][variable].simple_sets:
-            probability = circuit_encoding_only_the_sum_unit.probability_of_simple_event(
+        for element in mixture.support.simple_sets[0][variable].simple_sets:
+            probability = mixture.probability_of_simple_event(
                 SimpleEvent({variable: element}))
             if isinstance(element, SimpleInterval):
                 element = element.lower

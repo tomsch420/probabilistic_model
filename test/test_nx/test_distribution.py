@@ -80,7 +80,7 @@ class DiscreteDistributionTestCase(unittest.TestCase):
 
     def test_from_deterministic_sum(self):
         self.integer_distribution.root.as_deterministic_sum()
-        result = UnivariateDiscreteLeaf.from_sum_unit(self.integer_distribution.root)
+        result = UnivariateDiscreteLeaf.from_mixture(self.integer_distribution)
         self.assertIsInstance(result, UnivariateDiscreteLeaf)
         self.assertIsInstance(result.distribution, IntegerDistribution)
         self.assertEqual(result.distribution.probabilities, MissingDict(float, {0: 0.1, 1: 0.2, 2: 0.7}))

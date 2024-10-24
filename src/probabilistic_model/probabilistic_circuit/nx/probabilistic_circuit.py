@@ -324,6 +324,7 @@ class LeafUnit(Unit):
         distribution = SubclassJSONSerializer.from_json(data["distribution"])
         return cls(distribution)
 
+
 class InnerUnit(Unit):
     """
     Class for inner units
@@ -856,13 +857,17 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         result = self.__copy__()
         return result.log_conditional_in_place(event)
 
-    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+    def marginal_in_place(self, variables: Iterable[Variable]) -> Optional[Self]:
         result = [node.marginal(variables) for layer in reversed(self.layers) for node in layer][-1]
         if result is not None:
             self.remove_unreachable_nodes(result)
             return self
         else:
             return None
+
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        result = self.__copy__()
+        return result.marginal_in_place(variables)
 
     def sample(self, amount: int) -> np.array:
 
@@ -915,8 +920,18 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def __eq__(self, other: 'ProbabilisticCircuit'):
         return self.root == other.root
 
+    def empty_copy(self) -> Self:
+        """
+        Create a copy of this circuit without any nodes.
+        Only the parameters should be copied.
+        This is used whenever a new circuit has to be created during inference.
+
+        :return: A copy of this circuit without any subcircuits that is not in this units graph.
+        """
+        return self.__class__()
+
     def __copy__(self):
-        result = self.__class__()
+        result = self.empty_copy()
         new_node_map = {node: node.__copy__() for node in self.nodes}
         result.add_nodes_from(new_node_map.values())
         new_unweighted_edges = [(new_node_map[source], new_node_map[target]) for source, target in

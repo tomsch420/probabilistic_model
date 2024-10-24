@@ -2,43 +2,25 @@ import math
 from collections import deque
 from typing import Tuple, Union, Optional, List, Iterable, Dict, Any
 
-from random_events.interval import closed_open, closed
-from typing_extensions import Self
-
 import numpy as np
 import pandas as pd
-
-from random_events.product_algebra import VariableMap, Event, SimpleEvent
-from random_events.variable import Variable
-from .variables import Continuous, Integer, Symbolic, ScaledContinuous
-from ..nyga_distribution import NygaDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import (DiracDeltaDistribution,
-                                                                                      SymbolicDistribution,
-                                                                                      IntegerDistribution, UnivariateDistribution)
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit,
-                                                                                ProductUnit as PMProductUnit)
+import plotly.graph_objects as go
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
-import plotly.graph_objects as go
+from random_events.product_algebra import VariableMap
+from random_events.variable import Variable
+from typing_extensions import Self
 
+from .variables import Continuous, Integer, Symbolic, ScaledContinuous
+from ..nyga_distribution import NygaDistribution
+from ...distributions import (DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution, UnivariateDistribution)
+from ...probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
+from ...probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
+                                                               ProbabilisticCircuit)
 from ...utils import MissingDict
 
 
-class ProductUnit(PMProductUnit):
-
-    sample_indices: List[int]
-    """
-    The indices of the samples of the training dataset that are used to fit a product unit.
-    """
-
-    total_samples: int
-    """
-    The number of samples that are used to form this product unit.
-    """
-
-
-class JPT(SumUnit):
-
+class JPT(ProbabilisticCircuit):
     targets: Tuple[Variable, ...]
     """
     The variables to optimize for.
@@ -211,7 +193,7 @@ class JPT(SumUnit):
         :param data: The data to fit the model to.
         :return: The fitted model.
         """
-
+        root = SumUnit(self)
         preprocessed_data = self.preprocess_data(data)
 
         self.total_samples = len(preprocessed_data)
@@ -239,7 +221,7 @@ class JPT(SumUnit):
         """
 
         number_of_samples = end - start
-
+        root = self.root
         # if the inducing in this step results in inadmissible nodes, skip the impurity calculation
         if depth >= self.max_depth or number_of_samples < 2 * self.min_samples_leaf:
             max_gain = -float("inf")
@@ -251,9 +233,8 @@ class JPT(SumUnit):
 
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
-            self.mount(leaf_node)
             weight = number_of_samples / len(data)
-            self.probabilistic_circuit.add_edge(self, leaf_node, weight=weight)
+            root.add_subcircuit(leaf_node, weight)
 
             if self.keep_sample_indices:
                 leaf_node.sample_indices = self.indices[start:end]
@@ -270,32 +251,6 @@ class JPT(SumUnit):
         # append the new induction steps
         self.c45queue.append((data, start, start + split_pos + 1, new_depth))
         self.c45queue.append((data, start + split_pos + 1, end, new_depth))
-
-    def get_split_value(self, data: np.ndarray, start: int) -> Tuple[Event, Event]:
-        """
-        Get the split value from the impurity and data.
-        Return events describing the split.
-
-        :param data: The data to calculate the split value from.
-        :param start: The starting index in the data.
-
-        :return: The splitting events left and right.
-        """
-        return
-        split_position = self.impurity.best_split_pos
-        split_variable_index = self.impurity.best_var
-        split_variable = self.variables[split_variable_index]
-
-        if not isinstance(split_variable, Symbolic):
-            split_value = (data[self.indices[start + split_position], split_variable_index] +
-                           data[self.indices[start + split_position + 1], split_variable_index]) / 2
-            left_event = SimpleEvent({split_variable: closed_open(-np.inf, split_value)}).as_composite_set()
-            right_event = SimpleEvent({split_variable: closed(split_value, np.inf)}).as_composite_set()
-        else:
-            split_value = int(data[self.indices[start + split_position], split_variable_index])
-            left_event = EncodedEvent({split_variable: split_value}).decode()
-            right_event = Event() - left_event
-        return left_event, right_event
 
     def create_leaf_node(self, data: np.ndarray) -> ProductUnit:
         """
@@ -314,21 +269,23 @@ class JPT(SumUnit):
                                                 min_samples_per_quantile=variable.min_samples_per_quantile)
                 distribution.fit(data[:, index])
 
-                if isinstance(distribution.subcircuits[0], DiracDeltaDistribution):
-                    distribution.subcircuits[0].density_cap = 1/variable.minimal_distance
+                if isinstance(distribution.root, DiracDeltaDistribution):
+                    distribution.root.density_cap = 1 / variable.minimal_distance
+                distribution = distribution.root
 
             elif isinstance(variable, Symbolic):
                 distribution = SymbolicDistribution(variable, probabilities=MissingDict(float))
                 distribution.fit(data[:, index])
+                distribution = UnivariateDiscreteLeaf(distribution)
 
             elif isinstance(variable, Integer):
                 distribution = IntegerDistribution(variable, probabilities=MissingDict(float))
                 distribution.fit(data[:, index])
+                distribution = UnivariateDiscreteLeaf(distribution)
             else:
                 raise ValueError(f"Variable {variable} is not supported.")
 
-            result.mount(distribution)
-            result.probabilistic_circuit.add_edge(result, distribution)
+            result.add_subcircuit(distribution)
 
         return result
 
@@ -369,7 +326,13 @@ class JPT(SumUnit):
                         n_num_vars_total, numeric_features, symbolic_features, symbols, max_variances,
                         dependency_indices)
 
-    def plot(self, sample_amount: int = 5000) -> go.Figure:
+    def plot(self, number_of_samples: int = 1000) -> List:
+        try:
+            super().plot()
+        except NotImplementedError:
+            return self.plot_univariate_distributions()
+
+    def plot_univariate_distributions(self, sample_amount: int = 5000) -> List:
         """
         Plot the model.
         """
@@ -394,8 +357,8 @@ class JPT(SumUnit):
                                     row=child_index + 1,
                                     col=distribution_index + 1)
 
-        figure.update_layout(height=300*len(self.subcircuits), width=600*len(self.variables),
-                             title=f"Joint Probability Tree over {len(self.variables)} variables",)
+        figure.update_layout(height=300 * len(self.subcircuits), width=600 * len(self.variables),
+                             title=f"Joint Probability Tree over {len(self.variables)} variables", )
 
         return figure
 
@@ -431,18 +394,25 @@ class JPT(SumUnit):
         return result
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
-        sum_unit = SumUnit._from_json(data)
-        variables = [Variable.from_json(variable) for variable in data["variables_from_init"]]
-        result = cls(variables, min_samples_leaf=data["_min_samples_leaf"],
-                     min_impurity_improvement=data["min_impurity_improvement"],
-                     max_leaves=data["max_leaves"], max_depth=data["max_depth"])
-        for weight, subcircuit in sum_unit.weighted_subcircuits:
-            result.mount(subcircuit)
-            result.probabilistic_circuit.add_edge(result, subcircuit, weight=weight)
+    def parameters_from_json(cls, data: Dict[str, Any]) -> Self:
+        variable_from_init = [Variable.from_json(variable) for variable in data["variables_from_init"]]
+        name_to_variable_map = {variable.name: variable for variable in variable_from_init}
+        targets = [name_to_variable_map[name] for name in data["targets"]]
+        features = [name_to_variable_map[name] for name in data["features"]]
+        _min_samples_leaf = data["_min_samples_leaf"]
+        min_impurity_improvement = data["min_impurity_improvement"]
+        max_leaves = data["max_leaves"]
+        max_depth = data["max_depth"]
+        dependencies = VariableMap({name_to_variable_map[name]: [name_to_variable_map[dep_name] for dep_name
+                                                                 in dep_names] for name, dep_names
+                                    in data["dependencies"].items()})
+        result = cls(variables=variable_from_init, targets=targets, features=features,
+                     min_samples_leaf=_min_samples_leaf, min_impurity_improvement=min_impurity_improvement,
+                     max_leaves=max_leaves, max_depth=max_depth, dependencies=dependencies)
+        result.total_samples = data["total_samples"]
         return result
 
-    def marginal(self, variables: Iterable[Variable], simplify_if_univariate=True, as_deterministic_sum=False) \
+    def marginal(self, variables: Iterable[Variable], simplify_if_univariate=True) \
             -> Optional[Self]:
         """
         Marginalize the model to the given variables.
@@ -450,10 +420,12 @@ class JPT(SumUnit):
         :param simplify_if_univariate: If the result is univariate, simplify it to a univariate distribution.
         :param as_deterministic_sum: If the result is univariate and discrete, return it as a deterministic sum
         instead of the distribution itself.
+
         :return: The marginal JPT.
         """
         result = super().marginal(variables)
 
+        # if no simplification is needed
         if result is None or len(result.variables) > 1 or not simplify_if_univariate:
             return result
 
@@ -463,15 +435,7 @@ class JPT(SumUnit):
             distribution = NygaDistribution.from_uniform_mixture(result)
 
         elif isinstance(variable, (Integer, Symbolic)):
-            if isinstance(variable, Symbolic):
-                distribution = SymbolicDistribution.from_sum_unit(result)
-            elif isinstance(variable, Integer):
-                distribution = IntegerDistribution.from_sum_unit(result)
-            else:
-                raise NotImplementedError(f"Variable {variable} is not supported.")
-            if as_deterministic_sum:
-                distribution = distribution.as_deterministic_sum()
+            distribution = UnivariateDiscreteLeaf.from_mixture(result).probabilistic_circuit
         else:
             raise NotImplementedError(f"Variable {variable} not supported.")
-
         return distribution
