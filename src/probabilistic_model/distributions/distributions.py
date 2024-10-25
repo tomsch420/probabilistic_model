@@ -315,14 +315,15 @@ class DiscreteDistribution(UnivariateDistribution):
             self.probabilities[key] /= total
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-
         # construct event
         condition = self.composite_set_from_event(event)
+        return self.log_conditional_of_composite_set(condition)
 
+    def log_conditional_of_composite_set(self, event: AbstractCompositeSet) -> Tuple[Optional[Self], float]:
         # calculate new probabilities
         new_probabilities = MissingDict(float)
         for x, p_x in self.probabilities.items():
-            if x in condition:
+            if x in event:
                 new_probabilities[x] = p_x
 
         # if the event is impossible, return None and 0

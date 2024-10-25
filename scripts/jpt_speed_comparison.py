@@ -1,4 +1,5 @@
 import json
+import networkx as nx
 
 from random_events.interval import closed
 from random_events.product_algebra import VariableMap, SimpleEvent
@@ -56,7 +57,6 @@ variables = infer_variables_from_dataframe(df, min_samples_per_quantile=min_samp
 if not load_from_disc:
     nx_model = JPT(variables, min_samples_leaf=min_samples_leaf)
     nx_model.fit(df)
-    nx_model = nx_model.probabilistic_circuit
     jax_model = ProbabilisticCircuit.from_nx(nx_model, True)
     if save_to_disc:
         with open(nx_model_path, "w") as f:
@@ -110,9 +110,9 @@ event = SimpleEvent(VariableMap({variable: closed(0, 0.1) | closed(0.2, 0.3) | c
 # ll = jax_model.log_likelihood(samples)
 # assert (ll > -jnp.inf).all()
 
-times_nx, times_jax = eval_performance(nx_model.log_likelihood, (data, ), compiled_ll_jax, (data_jax, ), 20, 2)
+# times_nx, times_jax = eval_performance(nx_model.log_likelihood, (data, ), compiled_ll_jax, (data_jax, ), 5, 0)
 # times_nx, times_jax = eval_performance(nx_model.probability_of_simple_event, (event,), jax_model.probability_of_simple_event, (event,), 20, 10)
-# times_nx, times_jax = eval_performance(nx_model.sample, (10000, ), jax_model.sample, (10000,), 1, 0)
+times_nx, times_jax = eval_performance(nx_model.sample, (10000, ), jax_model.sample, (10000,), 10, 5)
 
 time_jax = np.mean(times_jax), np.std(times_jax)
 time_nx = np.mean(times_nx), np.std(times_nx)

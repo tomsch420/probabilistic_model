@@ -91,8 +91,9 @@ class Unit(SubclassJSONSerializer):
         :param new_variables: A map that maps the variables that should be replaced to their new variable.
         """
         for leaf in self.leaves:
-            if leaf.variable in new_variables:
-                leaf.variable = new_variables[leaf.variable]
+            for variable in leaf.variables:
+                if variable in new_variables:
+                    leaf.distribution.variable = new_variables[leaf.variable]
 
     def connect_incoming_edges_to(self, other: Unit):
         """
