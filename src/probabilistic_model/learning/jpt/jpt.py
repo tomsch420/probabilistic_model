@@ -326,9 +326,10 @@ class JPT(ProbabilisticCircuit):
                         n_num_vars_total, numeric_features, symbolic_features, symbols, max_variances,
                         dependency_indices)
 
-    def plot(self, number_of_samples: int = 1000) -> List:
+
+    def plot(self, number_of_samples: int = 1000, surface=True) -> List:
         try:
-            super().plot()
+            return super().plot(number_of_samples, surface)
         except NotImplementedError:
             return self.plot_univariate_distributions()
 

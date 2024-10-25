@@ -66,12 +66,12 @@ class SmallCircuitTestCast(unittest.TestCase):
         self.assertAlmostEqual(prob, 0.375)
         conditional.plot_structure()
         # plt.show()
-    #
-    # def test_plot(self):
-    #     self.model.plot_structure()
-    #     plt.show()
-    #     fig = go.Figure(self.model.plot(600))
-    #     fig.show()
+
+    def test_plot(self):
+        self.model.plot_structure()
+        # plt.show()
+        fig = go.Figure(self.model.plot(600, surface=True))
+        # fig.show()
 
 
 if __name__ == '__main__':

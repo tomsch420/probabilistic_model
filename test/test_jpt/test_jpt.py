@@ -13,15 +13,17 @@ from jpt.trees import JPT as OldJPT
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
 from random_events.set import SetElement
-from random_events.variable import Variable
+from random_events.variable import Variable, Continuous
 
+from probabilistic_model.distributions import GaussianDistribution
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_circuit.nx.distributions import IntegerDistribution, \
-    SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit
+    SymbolicDistribution, UnivariateContinuousLeaf
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
+    ProductUnit
 
 
 class SymbolEnum(SetElement):
@@ -310,3 +312,38 @@ class MNISTTestCase(unittest.TestCase):
         model_ = JPT.from_json(model_)
         self.assertEqual(model, model_)
         file.close()
+
+import plotly.graph_objects as go
+
+
+class GaussianJPTTestCase(unittest.TestCase):
+
+    x: Continuous
+    y: Continuous
+
+    data: pd.DataFrame
+    multivariate_normal: ProbabilisticCircuit
+
+    @classmethod
+    def setUpClass(cls):
+        np.random.seed(69)
+
+        prod = ProductUnit()
+        prod.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(Continuous("x"), 2, 4)))
+        prod.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(Continuous("y"), 2, 4)))
+        cls.multivariate_normal = prod.probabilistic_circuit
+        samples = cls.multivariate_normal.sample(1000)
+        cls.data = pd.DataFrame(samples, columns=[v.name for v in cls.multivariate_normal.variables])
+
+        cls.x, cls.y = infer_variables_from_dataframe(cls.data, scale_continuous_types=False,
+                                                      min_samples_per_quantile=20)
+
+    def test_plot_2d_jpt(self):
+        model = JPT([self.x, self.y], min_samples_leaf=0.9)
+        model.fit(self.data)
+        fig = go.Figure(model.plot(500, surface=True), model.plotly_layout())
+        # fig.show()
+
+    def test_plot_2d_gaussian(self):
+        fig = go.Figure(self.multivariate_normal.plot(500, surface=True), self.multivariate_normal.plotly_layout())
+        # fig.show()
