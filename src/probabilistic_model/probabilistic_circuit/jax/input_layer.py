@@ -1,26 +1,25 @@
 from __future__ import annotations
+
 from abc import ABC
 from typing import List, Dict, Any
 
+import equinox as eqx
 import jax
 import numpy as np
 import tqdm
 from jax import numpy as jnp
-from jax.experimental.array_api import reshape
-from jax.experimental.sparse import BCOO, BCSR
+from jax.experimental.sparse import BCOO
 from random_events.interval import Interval, SimpleInterval
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Type, Self, Union, Optional
 
-from . import create_bcoo_indices_from_row_lengths, create_bcsr_indices_from_row_lengths, \
-    embed_sparse_array_in_nan_array
 from .inner_layer import InputLayer, NXConverterLayer, SumLayer
-from ..nx.distributions import DiracDeltaDistribution
-import equinox as eqx
 from .utils import simple_interval_to_open_array, remove_rows_and_cols_where_all
-from ..nx.probabilistic_circuit import UnitMixin, ProbabilisticCircuit as NXProbabilisticCircuit
+from ..nx.distributions import UnivariateContinuousLeaf
+from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit
+from ...distributions import DiracDeltaDistribution
 
 
 class ContinuousLayer(InputLayer, ABC):
@@ -28,7 +27,7 @@ class ContinuousLayer(InputLayer, ABC):
     Abstract base class for continuous univariate input units.
     """
 
-    def probability_of_simple_event(self, event:SimpleEvent) -> jax.Array:
+    def probability_of_simple_event(self, event: SimpleEvent) -> jax.Array:
         interval: Interval = list(event.values())[self.variables[0]]
         return self.probability_of_interval(interval)
 
@@ -44,7 +43,8 @@ class ContinuousLayer(InputLayer, ABC):
         lower_bound_cdf = self.cdf_of_nodes_single(points[0])
         return upper_bound_cdf - lower_bound_cdf
 
-    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[Optional[Union[Self, DiracDeltaLayer]], jax.Array]:
+    def log_conditional_of_simple_event(self, event: SimpleEvent) -> Tuple[
+        Optional[Union[Self, DiracDeltaLayer]], jax.Array]:
         if event.is_empty():
             return self.impossible_condition_result
 
@@ -112,14 +112,13 @@ class ContinuousLayer(InputLayer, ABC):
         summed_exp_stacked_log_probabilities = jnp.sum(exp_stacked_log_probabilities, axis=1)
         total_log_probabilities = jnp.log(summed_exp_stacked_log_probabilities)  # shape: (#nodes, 1)
 
-
         # create new input layer
         possible_layers = [layer for layer in layers if layer is not None]
         input_layer = possible_layers[0]
         input_layer = input_layer.merge_with(possible_layers[1:])
 
         # remove the rows that are entirely -inf and normalize weights
-        bcoo_data = remove_rows_and_cols_where_all(exp_stacked_log_probabilities/
+        bcoo_data = remove_rows_and_cols_where_all(exp_stacked_log_probabilities /
                                                    summed_exp_stacked_log_probabilities.reshape(-1, 1),
                                                    0)
 
@@ -191,7 +190,6 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
 
 
 class DiracDeltaLayer(ContinuousLayer):
-
     location: jax.Array = eqx.field(static=True)
     """
     The locations of the Dirac delta distributions.
@@ -226,17 +224,17 @@ class DiracDeltaLayer(ContinuousLayer):
         return DiracDeltaDistribution,
 
     @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[DiracDeltaDistribution],
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UnivariateContinuousLeaf],
                                                          child_layers: List[NXConverterLayer],
                                                          progress_bar: bool = True) -> \
             NXConverterLayer:
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
-        locations = jnp.array([node.location for node in nodes], dtype=jnp.float32)
-        density_caps = jnp.array([node.density_cap for node in nodes], dtype=jnp.float32)
+        locations = jnp.array([node.distribution.location for node in nodes], dtype=jnp.float32)
+        density_caps = jnp.array([node.distribution.density_cap for node in nodes], dtype=jnp.float32)
         result = cls(nodes[0].probabilistic_circuit.variables.index(nodes[0].variable), locations, density_caps)
         return NXConverterLayer(result, nodes, hash_remap)
 
-    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index=0):
         values = self.location.repeat(frequencies).reshape(-1, 1)
         result[start_index:start_index + len(values), self.variables] = values
 
@@ -278,13 +276,13 @@ class DiracDeltaLayer(ContinuousLayer):
 
     def merge_with(self, others: List[Self]) -> Self:
         return self.__class__(self.variable, jnp.concatenate([self.location] + [other.location for other in others]),
-                                jnp.concatenate([self.density_cap] + [other.density_cap for other in others]))
+                              jnp.concatenate([self.density_cap] + [other.density_cap for other in others]))
 
     def remove_nodes(self, remove_mask: jax.Array) -> Self:
         return self.__class__(self.variable, self.location[~remove_mask], self.density_cap[~remove_mask])
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        UnitMixin]:
+        Unit]:
         nx_pc = NXProbabilisticCircuit()
 
         variable = variables[self.variable]
@@ -292,9 +290,8 @@ class DiracDeltaLayer(ContinuousLayer):
         if progress_bar:
             progress_bar.set_postfix_str(f"Creating Dirac Delta distributions for variable {variable.name}")
 
-        nodes = [DiracDeltaDistribution(variable, location.item(), density_cap.item()) for location, density_cap in
-                 zip(self.location, self.density_cap)]
+        nodes = [UnivariateContinuousLeaf(DiracDeltaDistribution(variable, location.item(), density_cap.item()))
+                 for location, density_cap in zip(self.location, self.density_cap)]
         progress_bar.update(self.number_of_nodes)
         nx_pc.add_nodes_from(nodes)
         return nodes
-

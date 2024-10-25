@@ -8,13 +8,14 @@ import numpy as np
 import plotly.graph_objects as go
 from random_events.interval import closed, closed_open
 from random_events.product_algebra import SimpleEvent
-from random_events.variable import Continuous
+from random_events.variable import Continuous, Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Self
 
-from probabilistic_model.probabilistic_circuit.nx.distributions import DiracDeltaDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit)
+from probabilistic_model.distributions import DiracDeltaDistribution, UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit
 from ..constants import *
+from ..probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 
 
 @dataclasses.dataclass
@@ -313,12 +314,13 @@ class InductionStep:
 
             # mount a uniform distribution
             distribution = self.create_uniform_distribution()
-            self.nyga_distribution.add_subcircuit(distribution, weight)
+            distribution = UnivariateContinuousLeaf(distribution)
+            self.nyga_distribution.root.add_subcircuit(distribution, weight)
 
             return []
 
 
-class NygaDistribution(SumUnit):
+class NygaDistribution(ProbabilisticCircuit):
     """
     A Nyga distribution is a deterministic mixture of uniform distributions.
     """
@@ -333,36 +335,12 @@ class NygaDistribution(SumUnit):
     The minimal number of samples per quantile.
     """
 
-    @property
-    def subcircuits(self) -> List[UniformDistribution]:
-        return super().subcircuits
-
-    @property
-    def weighted_subcircuits(self) -> List[Tuple[float, UniformDistribution]]:
-        return super().weighted_subcircuits
-
-    def log_pdf(self, x: np.array) -> np.array:
-        return SumUnit.log_likelihood(self, x.reshape(-1, 1))[:, 0]
-
-    def cdf(self, x: np.array) -> np.array:
-        result = np.zeros(len(x))
-        for weight, subcircuit in self.weighted_subcircuits:
-            result += weight * subcircuit.cdf(x)
-        return result
-
-    def __init__(self, variable: Continuous, min_samples_per_quantile: Optional[int] = 1,
+    def __init__(self, variable: Optional[Continuous] = None, min_samples_per_quantile: Optional[int] = 1,
                  min_likelihood_improvement: Optional[float] = 0.1):
         super().__init__()
         self.variable = variable
         self.min_samples_per_quantile = min_samples_per_quantile
         self.min_likelihood_improvement = min_likelihood_improvement
-
-    @property
-    def variables(self) -> SortedSet:
-        if len(self.subcircuits) > 0:
-            return self.subcircuits[0].variables
-        else:
-            return SortedSet([self.variable])
 
     def fit(self, data: np.array, weights: Optional[np.array] = None) -> Self:
         """
@@ -372,7 +350,6 @@ class NygaDistribution(SumUnit):
         :param weights: The optional weights of the data points.
 
         :return: The fitted distribution.
-
         """
 
         # make the data unique and sort it
@@ -382,8 +359,10 @@ class NygaDistribution(SumUnit):
         if len(sorted_unique_data) == 1:
             # mount a dirac delta distribution and return
             distribution = DiracDeltaDistribution(self.variable, sorted_unique_data[0])
-            self.probabilistic_circuit.add_edge(self, distribution, weight=1)
+            distribution = UnivariateContinuousLeaf(distribution, self)
             return self
+
+        root = SumUnit(self)
 
         # if the weights are not given
         if weights is None:
@@ -413,56 +392,54 @@ class NygaDistribution(SumUnit):
         self.normalize()
         return self
 
-    def empty_copy(self) -> Self:
-        return NygaDistribution(self.variable, min_samples_per_quantile=self.min_samples_per_quantile,
-                                min_likelihood_improvement=self.min_likelihood_improvement)
+    @classmethod
+    def parameters_from_json(cls, data: Dict[str, Any]) -> Self:
+        variable = Variable.from_json(data["variable"])
+        min_samples_per_quantile = data["min_samples_per_quantile"]
+        min_likelihood_improvement = data["min_likelihood_improvement"]
+        return cls(variable, min_samples_per_quantile, min_likelihood_improvement)
 
     def to_json(self) -> Dict[str, Any]:
-        """
-        Create a json representation of the distribution.
-        """
-        result = super().to_json()
-        result["min_samples_per_quantile"] = self.min_samples_per_quantile
-        result["min_likelihood_improvement"] = self.min_likelihood_improvement
-        return result
+        return {**super().to_json(),
+                "variable": self.variable.to_json(),
+                "min_samples_per_quantile": self.min_samples_per_quantile,
+                "min_likelihood_improvement": self.min_likelihood_improvement}
+
+    def empty_copy(self) -> Self:
+        return self.__class__(self.variable, self.min_samples_per_quantile, self.min_likelihood_improvement)
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
-        smooth_sum_unit = SumUnit()._from_json(data)
-        result = cls(None, min_samples_per_quantile=data["min_samples_per_quantile"],
-                     min_likelihood_improvement=data["min_likelihood_improvement"])
-        for weight, subcircuit in smooth_sum_unit.weighted_subcircuits:
-            result.mount(subcircuit)
-            result.probabilistic_circuit.add_edge(result, subcircuit, weight=weight)
-        return result
-
-    @classmethod
-    def from_uniform_mixture(cls, mixture: SumUnit) -> Self:
+    def from_uniform_mixture(cls, mixture: ProbabilisticCircuit) -> Self:
         """
         Construct a Nyga Distribution from a mixture of uniform distributions.
         The mixture does not have to be deterministic.
+
         :param mixture: An arbitrary, univariate mixture of uniform distributions
         :return: A Nyga Distribution describing the same function.
         """
+
+        assert len(mixture.variables) == 1, "Can only convert univariate circuits to nyga distributions."
+
         variable: Continuous = mixture.variables[0]
         result = cls(variable)
+        root = SumUnit(result)
 
-        all_mixture_points = set()
+        all_mixture_points = []
         for leaf in mixture.leaves:
-            leaf: UniformDistribution
-            all_mixture_points.add(leaf.interval.lower)
-            all_mixture_points.add(leaf.interval.upper)
+            leaf: UnivariateContinuousLeaf
+            all_mixture_points += [leaf.distribution.interval.lower, leaf.distribution.interval.upper]
 
-        all_mixture_points = sorted(list(all_mixture_points))
+        all_mixture_points = list(sorted(set(all_mixture_points)))
 
         for index, (lower, upper) in enumerate(zip(all_mixture_points[:-1], all_mixture_points[1:])):
             if index == len(all_mixture_points) - 2:
                 interval = closed(lower, upper)
             else:
                 interval = closed_open(lower, upper)
-            leaf = UniformDistribution(variable, interval.simple_sets[0])
+            distribution = UniformDistribution(variable, interval.simple_sets[0])
+            leaf = UnivariateContinuousLeaf(distribution)
             weight = mixture.probability_of_simple_event(SimpleEvent({variable: interval}))
-            result.probabilistic_circuit.add_edge(result, leaf, weight=weight)
+            root.add_subcircuit(leaf, weight)
 
         return result
 
@@ -472,9 +449,9 @@ class NygaDistribution(SumUnit):
         """
         x_values = []
         y_values = []
-        for weight, subcircuit in self.weighted_subcircuits:
-            interval = subcircuit.interval
-            height = weight * subcircuit.pdf_value()
+        for weight, subcircuit in self.root.weighted_subcircuits:
+            interval = subcircuit.distribution.interval
+            height = weight * subcircuit.distribution.pdf_value()
             x_values += [interval.lower, interval.upper, None]
             y_values += [height, height, None]
         return go.Scatter(x=x_values, y=y_values, mode="lines", name=PDF_TRACE_NAME,
@@ -485,8 +462,8 @@ class NygaDistribution(SumUnit):
         Create a plotly trace for the cumulative distribution function.
         """
         x_values = []
-        for subcircuit in self.subcircuits:
-            x_values += [subcircuit.interval.lower, subcircuit.interval.upper]
+        for subcircuit in self.root.subcircuits:
+            x_values += [subcircuit.distribution.interval.lower, subcircuit.distribution.interval.upper]
         x_values = sorted(x_values)
         y_values = self.cdf(np.array(x_values).reshape(-1, 1))
         return go.Scatter(x=x_values, y=y_values, mode="lines", name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))
@@ -496,14 +473,11 @@ class NygaDistribution(SumUnit):
         Plot the distribution with PDF, CDF, Expectation and Mode.
         """
         traces = [self.pdf_trace(), self.cdf_trace()]
-        mode, maximum_likelihood = self.probabilistic_circuit.mode()
+        mode, maximum_likelihood = self.mode()
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
-        mode_trace = self.probabilistic_circuit.univariate_mode_traces(mode, height)
-        self.reset_result_of_current_query()
+        mode_trace = self.univariate_mode_traces(mode, height)
 
         traces.extend(mode_trace)
-        self.reset_result_of_current_query()
-
-        traces.append(self.probabilistic_circuit.univariate_expectation_trace(height))
+        traces.append(self.univariate_expectation_trace(height))
 
         return traces

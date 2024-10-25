@@ -5,8 +5,8 @@ from random_events.product_algebra import SimpleEvent, Event
 from random_events.variable import Symbolic, Variable
 from typing_extensions import Self, Any, Iterable, List, Optional, Tuple, Dict
 
-from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProductUnit, SumUnit)
+from ..probabilistic_circuit.nx.distributions.distributions import SymbolicDistribution, UnivariateDiscreteLeaf
+from ..probabilistic_circuit.nx.probabilistic_circuit import (ProductUnit, SumUnit)
 from ..probabilistic_model import ProbabilisticModel
 from random_events.utils import SubclassJSONSerializer
 from ..utils import MissingDict
@@ -180,7 +180,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
                 distribution = SymbolicDistribution(variable, weights)
 
                 # mount the distribution to the product unit
-                product_unit.add_subcircuit(distribution)
+                product_unit.add_subcircuit(UnivariateDiscreteLeaf(distribution))
 
             # calculate the probability of the current state
             probability = self.likelihood(np.array([event]))[0]

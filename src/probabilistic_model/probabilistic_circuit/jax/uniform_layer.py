@@ -3,21 +3,19 @@ from typing import List, Dict, Any, Optional
 import jax
 import numpy as np
 import random_events
+import tqdm
 from jax import numpy as jnp
-from jax.experimental.sparse import BCOO
 from random_events.interval import SimpleInterval
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
-from sqlalchemy.sql.functions import random
 from typing_extensions import Type, Tuple, Self
 
 from .inner_layer import NXConverterLayer
 from .input_layer import ContinuousLayerWithFiniteSupport
-from ..nx.distributions import UniformDistribution
-from .utils import simple_interval_to_open_array, create_bcoo_indices_from_row_lengths
-import tqdm
-
-from ..nx.probabilistic_circuit import UnitMixin, ProbabilisticCircuit as NXProbabilisticCircuit
+from .utils import simple_interval_to_open_array
+from ..nx.distributions import UnivariateContinuousLeaf
+from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit
+from ...distributions import UniformDistribution
 
 
 class UniformLayer(ContinuousLayerWithFiniteSupport):
@@ -49,7 +47,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         return jax.vmap(self.log_likelihood_of_nodes_single)(x)
 
     @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UniformDistribution],
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UnivariateContinuousLeaf],
                                                          child_layers: List[NXConverterLayer],
                                                          progress_bar: bool = True) -> \
             NXConverterLayer:
@@ -57,14 +55,14 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
 
         variable = nodes[0].variable
 
-        intervals = jnp.vstack([simple_interval_to_open_array(node.interval) for node in
-                                 (tqdm.tqdm(nodes, desc=f"Creating uniform layer for variable {variable.name}")
-                                  if progress_bar else nodes)])
+        intervals = jnp.vstack([simple_interval_to_open_array(node.distribution.interval) for node in
+                                (tqdm.tqdm(nodes, desc=f"Creating uniform layer for variable {variable.name}")
+                                 if progress_bar else nodes)])
 
         result = cls(nodes[0].probabilistic_circuit.variables.index(variable), intervals)
         return NXConverterLayer(result, nodes, hash_remap)
 
-    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index = 0):
+    def sample_from_frequencies(self, frequencies: np.array, result: np.array, start_index=0):
         # sample from U(0,1)
         standard_uniform_samples = np.random.uniform(size=(sum(frequencies), 1))
 
@@ -110,18 +108,19 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
         return cls(data["variable"], jnp.array(data["interval"]))
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        UnitMixin]:
+        Unit]:
         variable = variables[self.variable]
 
         if progress_bar:
             progress_bar.set_postfix_str(f"Creating Uniform distributions for variable {variable.name}")
 
         nx_pc = NXProbabilisticCircuit()
-        nodes = [UniformDistribution(variable=variable,
-                                     interval=random_events.interval.SimpleInterval(lower.item(), upper.item(),
-                                                                                    random_events.interval.Bound.OPEN,
-                                                                                    random_events.interval.Bound.OPEN))
-                 for lower, upper in self.interval]
+        nodes = [UnivariateContinuousLeaf(
+            UniformDistribution(variable=variable,
+                                interval=random_events.interval.SimpleInterval(lower.item(), upper.item(),
+                                                                               random_events.interval.Bound.OPEN,
+                                                                               random_events.interval.Bound.OPEN)))
+            for lower, upper in self.interval]
 
         if progress_bar:
             progress_bar.update(self.number_of_nodes)

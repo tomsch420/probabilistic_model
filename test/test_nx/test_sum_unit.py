@@ -5,7 +5,8 @@ from random_events.interval import closed
 from random_events.variable import Continuous
 from typing_extensions import Union
 
-from probabilistic_model.probabilistic_circuit.nx.distributions import (UniformDistribution)
+from probabilistic_model.distributions.uniform import UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 import plotly.graph_objects as go
 
@@ -14,8 +15,8 @@ class NormalizationTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
 
     def test_normalization(self):
-        u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
-        u2 = UniformDistribution(self.x, closed(3, 4).simple_sets[0])
+        u1 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
+        u2 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]))
         sum_unit = SumUnit()
         sum_unit.add_subcircuit(u1, 0.5)
         sum_unit.add_subcircuit(u2, 0.3)
@@ -31,8 +32,8 @@ class SumUnitTestCase(unittest.TestCase):
     model: ProbabilisticCircuit
 
     def setUp(self):
-        u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
-        u2 = UniformDistribution(self.x, closed(3, 4).simple_sets[0])
+        u1 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
+        u2 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]))
 
         model = SumUnit()
         model.add_subcircuit(u1, 0.6)
@@ -73,10 +74,8 @@ class SumUnitTestCase(unittest.TestCase):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
         result, probability = self.model.conditional(event)
         self.assertAlmostEqual(probability, 0.3)
-        self.assertEqual(len(list(result.nodes())), 2)
-        self.assertIsInstance(result.root, SumUnit)
-        self.assertEqual(len(result.root.weighted_subcircuits), 1)
-        self.assertEqual(result.root.weighted_subcircuits[0][0], 1)
+        self.assertEqual(len(list(result.nodes())), 1)
+        self.assertIsInstance(result.root, LeafUnit)
 
     def test_conditional_impossible(self):
         event = SimpleEvent({self.x: closed(5, 6)}).as_composite_set()
@@ -106,11 +105,6 @@ class SumUnitTestCase(unittest.TestCase):
         serialized = self.model.to_json()
         deserialized = SumUnit.from_json(serialized)
         self.assertEqual(self.model, deserialized)
-
-    def test_copy(self):
-        copy = self.model.root.__copy__()
-        self.assertEqual(self.model.root, copy)
-        self.assertNotEqual(id(copy), id(self.model.root))
 
     def test_conditional_inference(self):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()

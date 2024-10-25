@@ -65,6 +65,7 @@ from probabilistic_model.bayesian_network.bayesian_network import *
 from probabilistic_model.bayesian_network.distributions import *
 from random_events.set import *
 from random_events.variable import *
+from probabilistic_model.distributions import *
 from probabilistic_model.probabilistic_circuit.nx.distributions import *
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from random_events.interval import *
@@ -127,8 +128,8 @@ bn.add_edge(cpd_success, cpd_mood)
 # create P(X, Y | ObjectPosition)
 cpd_xy = ConditionalProbabilisticCircuit([x, y])
 product_unit = ProductUnit()
-product_unit.add_subcircuit(GaussianDistribution(x, 0, 1))
-product_unit.add_subcircuit(GaussianDistribution(y, 0, 1))
+product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(x, 0, 1)))
+product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(y, 0, 1)))
 default_circuit = product_unit.probabilistic_circuit
 
 cpd_xy.conditional_probability_distributions[int(ObjectPosition.LEFT)] = default_circuit.conditional(SimpleEvent({x: closed(-np.inf, -0.5)}).as_composite_set())[0]

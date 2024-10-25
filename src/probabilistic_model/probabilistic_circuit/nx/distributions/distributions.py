@@ -1,142 +1,124 @@
 from __future__ import annotations
 
-from abc import ABC
-
+import networkx as nx
 import numpy as np
 from random_events.interval import SimpleInterval, Interval
 from random_events.product_algebra import SimpleEvent
-from sortedcontainers import SortedSet
-from typing_extensions import Tuple, Optional, Self
+from random_events.sigma_algebra import AbstractCompositeSet
+from random_events.variable import Variable, Integer
+from typing_extensions import Optional
 
-from probabilistic_model.distributions.distributions import (ContinuousDistribution as PMContinuousDistribution,
-                                                             DiracDeltaDistribution as PMDiracDeltaDistribution,
-                                                             SymbolicDistribution as PMSymbolicDistribution,
-                                                             IntegerDistribution as PMIntegerDistribution,
-                                                             DiscreteDistribution as PMDiscreteDistribution,
-                                                             UnivariateDistribution as PMUnivariateDistribution)
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (UnitMixin, cache_inference_result,
-                                                                                SumUnit, ProbabilisticCircuit)
-from probabilistic_model.distributions.uniform import UniformDistribution as PMUniformDistribution
-from probabilistic_model.distributions.gaussian import (GaussianDistribution as PMGaussianDistribution,
-                                                        TruncatedGaussianDistribution as PMTruncatedGaussianDistribution)
-from probabilistic_model.utils import MissingDict
+from ....utils import MissingDict
+from ..probabilistic_circuit import SumUnit, LeafUnit, ProbabilisticCircuit
+from ....distributions.distributions import (ContinuousDistribution, DiscreteDistribution, IntegerDistribution,
+                                             SymbolicDistribution)
 
 
-class UnivariateDistribution(PMUnivariateDistribution, UnitMixin, ABC):
-
-    def is_deterministic(self) -> bool:
-        return True
+class UnivariateLeaf(LeafUnit):
 
     @property
-    def variables(self) -> SortedSet:
-        return SortedSet([self.variable])
-
-    def __hash__(self):
-        return UnitMixin.__hash__(self)
-
-    @cache_inference_result
-    def log_conditional_of_simple_event(self, event: SimpleEvent,
-                                        probabilistic_circuit: ProbabilisticCircuit) -> Tuple[Optional[Self], float]:
-        result, log_prob = super().log_conditional(event.as_composite_set())
-        if log_prob == -np.inf:
-            return self.impossible_condition_result
-
-        probabilistic_circuit.add_edges_and_nodes_from_circuit(result.probabilistic_circuit)
-
-        return result, log_prob
-
-    def simplify(self) -> Self:
-        ...
-
-    def empty_copy(self) -> Self:
-        return self.__copy__()
+    def variable(self) -> Variable:
+        return self.distribution.variables[0]
 
 
-class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, UnitMixin, ABC):
+class UnivariateContinuousLeaf(UnivariateLeaf):
+    distribution: Optional[ContinuousDistribution]
 
-    def log_conditional_from_interval(self, interval: Interval) -> Tuple[SumUnit, float]:
-        result = SumUnit()
+    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
+        return self.univariate_log_conditional_of_simple_event_in_place(event[self.variable])
+
+    def univariate_log_conditional_of_simple_event_in_place(self, event: Interval):
+
+        event = self.distribution.univariate_support & event
+
+        if event.is_empty():
+            self.result_of_current_query = -np.inf
+            self.distribution = None
+            return None
+
+        # if it is a simple truncation
+        if len(event.simple_sets) == 1:
+            self.distribution, self.result_of_current_query = self.distribution.log_conditional_from_simple_interval(
+                event.simple_sets[0])
+            return self
+
         total_probability = 0.
 
-        for simple_interval in interval.simple_sets:
-            current_conditional, current_log_probability = self.log_conditional_from_simple_interval(simple_interval)
+        # calculate the conditional distribution as sum unit
+        result = SumUnit(self.probabilistic_circuit)
+
+        for simple_interval in event.simple_sets:
+            current_conditional, current_log_probability = self.distribution.log_conditional_from_simple_interval(
+                simple_interval)
             current_probability = np.exp(current_log_probability)
-            result.add_subcircuit(current_conditional, current_probability)
+
+            if current_probability == 0:
+                continue
+
+            current_conditional = self.__class__(current_conditional, self.probabilistic_circuit)
+            result.add_subcircuit(current_conditional, current_probability, mount=False)
             total_probability += current_probability
 
+        # if the event is impossible
+        if total_probability == 0:
+            self.result_of_current_query = -np.inf
+            self.distribution = None
+            return None
+
+        # reroute the parent to the new sum unit
+        self.connect_incoming_edges_to(result)
+
+        # remove this node
+        self.probabilistic_circuit.remove_node(self)
+
+        # update result
         result.normalize()
-
-        return result, np.log(total_probability)
-
-    def log_conditional_from_singleton(self, interval: SimpleInterval) -> Tuple[DiracDeltaDistribution, float]:
-        conditional, probability = super().log_conditional_from_singleton(interval)
-        return DiracDeltaDistribution(conditional.variable, conditional.location,
-                                      conditional.density_cap), probability
-
-
-class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, UnitMixin, ABC):
-
-    def as_deterministic_sum(self) -> SumUnit:
-        """
-        Convert this distribution to a deterministic sum unit that encodes the same distribution.
-        The result has as many children as the domain of the variable and each child encodes the value of the variable.
-
-        :return: A deterministic sum unit that encodes the same distribution.
-        """
-        result = SumUnit()
-
-        for event in self.variable.domain.simple_sets:
-            event = SimpleEvent({self.variable: event}).as_composite_set()
-            conditional, probability = self.conditional(event)
-            result.add_subcircuit(conditional, probability)
+        result.result_of_current_query = np.log(total_probability)
 
         return result
 
-    @classmethod
-    def from_sum_unit(cls, sum_unit: SumUnit):
-        """
-        Create a discrete distribution from a sum unit.
 
-        :param sum_unit: The sum unit to create the distribution from.
+class UnivariateDiscreteLeaf(UnivariateLeaf):
+
+    distribution: Optional[DiscreteDistribution]
+
+    def as_deterministic_sum(self) -> SumUnit:
+        """
+        Convert this distribution to a deterministic sum unit that encodes the same distribution in-place.
+        The result has as many children as the probability dictionary of this distribution.
+        Each child encodes the value of the variable.
+
+        :return: The deterministic sum unit that encodes the same distribution.
+        """
+        result = SumUnit(self.probabilistic_circuit)
+
+        for element, probability in self.distribution.probabilities.items():
+            result.add_subcircuit(UnivariateDiscreteLeaf(self.distribution.__class__(self.variable,
+                                                                                     MissingDict(float, {element: 1.})),
+                                                         self.probabilistic_circuit), probability, mount=False)
+        self.connect_incoming_edges_to(result)
+        self.probabilistic_circuit.remove_node(self)
+        return result
+
+    @classmethod
+    def from_mixture(cls, mixture: ProbabilisticCircuit):
+        """
+        Create a discrete distribution from a univariate mixture.
+
+        :param mixture: The mixture to create the distribution from.
         :return: The discrete distribution.
         """
-        assert len(sum_unit.variables) == 1, "Can only convert unidimensional sum units to discrete distributions."
-        variable = sum_unit.variables[0]
+        assert len(mixture.variables) == 1, "Can only convert univariate sum units to discrete distributions."
+        variable = mixture.variables[0]
         probabilities = MissingDict(float)
 
-        for element in sum_unit.support.simple_sets[0][variable].simple_sets:
-            probability = sum_unit.probability_of_simple_event(SimpleEvent({variable: element}))
+        for element in mixture.support.simple_sets[0][variable].simple_sets:
+            probability = mixture.probability_of_simple_event(
+                SimpleEvent({variable: element}))
             if isinstance(element, SimpleInterval):
                 element = element.lower
             probabilities[int(element)] = probability
-        return cls(variable, probabilities)
 
-
-class DiracDeltaDistribution(ContinuousDistribution, PMDiracDeltaDistribution):
-    ...
-
-
-class UniformDistribution(ContinuousDistribution, PMUniformDistribution):
-    ...
-
-
-class GaussianDistribution(ContinuousDistribution, PMGaussianDistribution):
-
-    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> (
-            Tuple)[TruncatedGaussianDistribution, float]:
-        conditional, log_probability = (PMGaussianDistribution.
-                                        log_conditional_from_non_singleton_simple_interval(self, interval))
-        return TruncatedGaussianDistribution(conditional.variable, conditional.interval,
-                                             conditional.location, conditional.scale), log_probability
-
-
-class TruncatedGaussianDistribution(GaussianDistribution, ContinuousDistribution, PMTruncatedGaussianDistribution):
-    ...
-
-
-class IntegerDistribution(DiscreteDistribution, PMIntegerDistribution):
-    ...
-
-
-class SymbolicDistribution(DiscreteDistribution, PMSymbolicDistribution):
-    ...
+        distribution_class = IntegerDistribution if isinstance(variable, Integer) else SymbolicDistribution
+        distribution = distribution_class(variable, probabilities)
+        return cls(distribution)

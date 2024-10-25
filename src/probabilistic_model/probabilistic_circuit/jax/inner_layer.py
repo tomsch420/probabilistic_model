@@ -23,11 +23,11 @@ from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Sel
 
 from . import shrink_index_array
 from .utils import copy_bcoo, sample_from_sparse_probabilities_csc, sparse_remove_rows_and_cols_where_all
-from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, UnitMixin,
+from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, Unit,
                                         ProbabilisticCircuit as NXProbabilisticCircuit)
 
 
-def inverse_class_of(clazz: Type[UnitMixin]) -> Type[Layer]:
+def inverse_class_of(clazz: Type[Unit]) -> Type[Layer]:
     for subclass in recursive_subclasses(Layer):
         if not inspect.isabstract(subclass):
             if issubclass(clazz, subclass.nx_classes()):
@@ -130,7 +130,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         return tuple()
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        UnitMixin]:
+        Unit]:
         """
         Convert the layer to a networkx circuit.
         For every node in this circuit, a corresponding node in the networkx circuit
@@ -161,7 +161,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         raise NotImplementedError
 
     @staticmethod
-    def create_layers_from_nodes(nodes: List[UnitMixin], child_layers: List[NXConverterLayer],
+    def create_layers_from_nodes(nodes: List[Unit], child_layers: List[NXConverterLayer],
                                  progress_bar: bool = True) \
             -> List[NXConverterLayer]:
         """
@@ -169,10 +169,16 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         """
         result = []
 
-        unique_types = set(type(node) for node in nodes)
+        unique_types = set(type(node) if not node.is_leaf else type(node.distribution) for node in nodes)
         for unique_type in unique_types:
-            nodes_of_current_type = [node for node in nodes if isinstance(node, unique_type)]
+            nodes_of_current_type = [node for node in nodes if (isinstance(node, unique_type) if not node.is_leaf
+                                                                else isinstance(node.distribution, unique_type))]
+
+            if nodes[0].is_leaf:
+                unique_type = type(nodes_of_current_type[0].distribution)
+
             layer_type = inverse_class_of(unique_type)
+
             scopes = [tuple(node.variables) for node in nodes_of_current_type]
             unique_scopes = set(scopes)
             for scope in unique_scopes:
@@ -186,7 +192,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
 
     @classmethod
     @abstractmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UnitMixin],
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[Unit],
                                                          child_layers: List[NXConverterLayer],
                                                          progress_bar: bool = True) -> \
             NXConverterLayer:
@@ -634,7 +640,7 @@ class SumLayer(InnerLayer):
         raise NotImplementedError
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        UnitMixin]:
+        Unit]:
 
         variables_ = [variables[i] for i in self.variables]
 
@@ -913,7 +919,7 @@ class ProductLayer(InnerLayer):
         return cls(child_layer, edges)
 
     @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[UnitMixin],
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[Unit],
                                                          child_layers: List[NXConverterLayer],
                                                          progress_bar: bool = True) -> \
             NXConverterLayer:
@@ -923,8 +929,8 @@ class ProductLayer(InnerLayer):
 
         edge_indices = []
         edge_values = []
-
-        progress_bar = tqdm.tqdm(total=number_of_nodes, desc="Assembling Product Layer")
+        if progress_bar:
+            progress_bar = tqdm.tqdm(total=number_of_nodes, desc="Assembling Product Layer")
         # for every node in the nodes for this layer
         for node_index, node in enumerate(nodes):
 
@@ -950,7 +956,7 @@ class ProductLayer(InnerLayer):
         return NXConverterLayer(layer, nodes, hash_remap)
 
     def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        UnitMixin]:
+        Unit]:
 
         variables_ = [variables[i] for i in self.variables]
         if progress_bar:
@@ -976,5 +982,5 @@ class NXConverterLayer:
     Class used for conversion from a probabilistic circuit in networkx to a layered circuit in jax.
     """
     layer: Layer
-    nodes: List[UnitMixin]
+    nodes: List[Unit]
     hash_remap: Dict[int, int]

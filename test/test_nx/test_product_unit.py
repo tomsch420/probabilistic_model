@@ -2,18 +2,10 @@ import unittest
 
 from random_events.interval import closed, open, closed_open
 from random_events.variable import Integer, Continuous
-from typing_extensions import Union
-from probabilistic_model.distributions.multinomial import MultinomialDistribution
-from probabilistic_model.probabilistic_circuit.nx.convolution.convolution import (UniformDistributionConvolution,
-                                                                                  GaussianDistributionConvolution,
-                                                                                  TruncatedGaussianDistributionConvolution,
-                                                                                  DiracDeltaDistributionConvolution)
-from probabilistic_model.probabilistic_circuit.nx.distributions import (ContinuousDistribution,
-                                                                        UniformDistribution,
-                                                                        GaussianDistribution,
-                                                                        DiracDeltaDistribution,
-                                                                        TruncatedGaussianDistribution)
+
+from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
+from probabilistic_model.distributions.uniform import UniformDistribution
 
 import plotly.graph_objects as go
 
@@ -24,8 +16,8 @@ class ProductUnitTestCase(unittest.TestCase):
     model: ProbabilisticCircuit
 
     def setUp(self):
-        u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
-        u2 = UniformDistribution(self.y, closed(3, 4).simple_sets[0])
+        u1 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
+        u2 = UnivariateContinuousLeaf(UniformDistribution(self.y, closed(3, 4).simple_sets[0]))
 
         product_unit = ProductUnit()
         product_unit.add_subcircuit(u1)
@@ -102,8 +94,8 @@ class ProductUnitTestCase(unittest.TestCase):
         self.assertEqual(self.model, deserialized)
 
     def test_copy(self):
-        copy = self.model.root.__copy__()
-        self.assertEqual(self.model.root, copy)
+        copy = self.model.__copy__()
+        self.assertEqual(self.model, copy)
         self.assertNotEqual(id(copy), id(self.model))
 
     def test_sample_not_equal(self):
