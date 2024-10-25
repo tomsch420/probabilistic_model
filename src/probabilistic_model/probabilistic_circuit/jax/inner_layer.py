@@ -929,8 +929,8 @@ class ProductLayer(InnerLayer):
 
         edge_indices = []
         edge_values = []
-
-        progress_bar = tqdm.tqdm(total=number_of_nodes, desc="Assembling Product Layer")
+        if progress_bar:
+            progress_bar = tqdm.tqdm(total=number_of_nodes, desc="Assembling Product Layer")
         # for every node in the nodes for this layer
         for node_index, node in enumerate(nodes):
 

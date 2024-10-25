@@ -339,6 +339,9 @@ class DiscreteDistribution(UnivariateDistribution):
     def __copy__(self) -> Self:
         return self.__class__(self.variable, self.probabilities)
 
+    def __repr__(self):
+        return f"P({self.variable.name})"
+
     def sample(self, amount: int) -> np.array:
         sample_space = np.array(list(self.probabilities.keys()))
         sample_probabilities = np.array([value for value in self.probabilities.values()])

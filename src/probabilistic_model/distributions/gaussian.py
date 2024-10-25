@@ -104,6 +104,9 @@ class GaussianDistribution(ContinuousDistribution):
     def representation(self):
         return f"N({self.variable.name} | {self.location}, {self.scale})"
 
+    def __repr__(self):
+        return f"N({self.variable.name})"
+
     def __copy__(self):
         return self.__class__(self.variable, self.location, self.scale)
 
