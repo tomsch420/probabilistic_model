@@ -208,9 +208,9 @@ from random_events.variable import Continuous
 from random_events.interval import *
 
 import plotly.graph_objects as go
-
-from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import GaussianDistribution, TruncatedGaussianDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit
+from probabilistic_model.distributions import *
+from probabilistic_model.probabilistic_circuit.nx.distributions import *
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 import numpy as np
 
 ```
@@ -220,14 +220,15 @@ import numpy as np
 x = Continuous("X")
 
 model = SumUnit()
-model.add_subcircuit(GaussianDistribution(x, 0, 0.5), 0.1)
-model.add_subcircuit(GaussianDistribution(x, 1, 2), 0.9)
+model.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(x, 0, 0.5)), 0.1)
+model.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(x, 1, 2)), 0.9)
+model = model.probabilistic_circuit
 
-wrong_mode, wrong_max_likelihood = model.subcircuits[1].mode()
+wrong_mode, wrong_max_likelihood = model.root.subcircuits[1].distribution.mode()
 wrong_max_likelihood = model.likelihood(np.array([[wrong_mode.simple_sets[0][x].simple_sets[0].lower]]))[0]
 mode_trace = model.univariate_mode_traces(wrong_mode, wrong_max_likelihood)
 
-wrong_mode, wrong_max_likelihood = model.subcircuits[0].mode()
+wrong_mode, wrong_max_likelihood = model.root.subcircuits[0].distribution.mode()
 wrong_max_likelihood = model.likelihood(np.array([[wrong_mode.simple_sets[0][x].simple_sets[0].lower]]))[0]
 mode_trace += model.univariate_mode_traces(wrong_mode, wrong_max_likelihood)
 
@@ -240,8 +241,9 @@ The next figure shows that if we truncated the children of the sum node to a dis
 
 ```{code-cell} ipython3
 model = SumUnit()
-model.add_subcircuit(TruncatedGaussianDistribution(x, open_closed(-np.inf, 0.5).simple_sets[0], 0, 0.5), 0.1)
-model.add_subcircuit(TruncatedGaussianDistribution(x, open(0.5, np.inf).simple_sets[0], 1, 2), 0.9)
+model.add_subcircuit(UnivariateContinuousLeaf(TruncatedGaussianDistribution(x, open_closed(-np.inf, 0.5).simple_sets[0], 0, 0.5)), 0.1)
+model.add_subcircuit(UnivariateContinuousLeaf(TruncatedGaussianDistribution(x, open(0.5, np.inf).simple_sets[0], 1, 2)), 0.9)
+model = model.probabilistic_circuit
 fig = go.Figure(model.plot(), model.plotly_layout())
 fig.show()
 ```

@@ -126,9 +126,9 @@ class TutorialJPT(JPT):
         """
 
         number_of_samples = end - start
-
+        root = self.root
         # if the inducing in this step results in inadmissible nodes, skip the impurity calculation
-        if depth >= self.max_depth or number_of_samples < self.min_samples_leaf:
+        if depth >= self.max_depth or number_of_samples < 2 * self.min_samples_leaf:
             max_gain = -float("inf")
         else:
             max_gain = self.impurity.compute_best_split(start, end)
@@ -138,9 +138,8 @@ class TutorialJPT(JPT):
 
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
-            self.mount(leaf_node)
             weight = number_of_samples / len(data)
-            self.probabilistic_circuit.add_edge(self, leaf_node, weight=weight)
+            root.add_subcircuit(leaf_node, weight)
 
             if self.keep_sample_indices:
                 leaf_node.sample_indices = self.indices[start:end]
@@ -163,6 +162,7 @@ class TutorialJPT(JPT):
         trace_data[:, other_axis_index] = np.array([minimal_value, maximal_value]).T
         self.fig.add_trace(go.Scatter(x=trace_data[:, 0], y=trace_data[:, 1], mode="lines", name="Decision Criterion"))
         
+
         # increase the depth
         new_depth = depth + 1
 
