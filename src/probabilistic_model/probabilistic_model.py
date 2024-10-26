@@ -416,7 +416,7 @@ class ProbabilisticModel(abc.ABC):
         :param number_of_samples: The number of samples to draw.
         :return: The traces.
         """
-        samples = self.sample(math.ceil(math.sqrt(number_of_samples)))
+        samples = self.sample(number_of_samples)
         likelihood = self.likelihood(samples)
         expectation = self.expectation(self.variables)
         likelihood_trace = go.Scatter(x=samples[:, 0], y=samples[:, 1], mode="markers", marker=dict(color=likelihood),
@@ -432,8 +432,8 @@ class ProbabilisticModel(abc.ABC):
         :param number_of_samples: The number of samples to draw.
         :return: The traces.
         """
+        samples = self.sample(math.ceil(math.sqrt(number_of_samples)))
         support = self.support
-        samples = self.sample(number_of_samples)
         likelihood = self.likelihood(samples)
         max_likelihood = max(likelihood)
 
