@@ -50,7 +50,6 @@ variable = Continuous("x")
 if not load_from_disc:
     nx_model = NygaDistribution(variable, min_samples_per_quantile=min_samples_per_quantile)
     nx_model.fit(data)
-    nx_model = nx_model.probabilistic_circuit
     jax_model = ProbabilisticCircuit.from_nx(nx_model, True)
     if save_to_disc:
         with open(nx_model_path, "w") as f:

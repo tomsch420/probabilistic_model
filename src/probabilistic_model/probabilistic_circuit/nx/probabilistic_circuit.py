@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import math
 from abc import abstractmethod
+import random
 
 import networkx as nx
 import numpy as np
@@ -387,6 +388,7 @@ class SumUnit(InnerUnit):
     def sample(self, *args, **kwargs) -> np.array:
         weights, subcircuits = self.weights, self.subcircuits
 
+        subcircuit_indices = list(range(len(subcircuits)))
         # for every sampling request
         for start_index, amount in self.result_of_current_query:
 
@@ -394,8 +396,13 @@ class SumUnit(InnerUnit):
             counts = np.random.multinomial(amount, pvals=weights)
             total = 0
 
+            # shuffle the order to sample from the subcircuits to avoid bias
+            random.shuffle(subcircuit_indices)
+
             # add the sampling requests to the subcircuits
-            for count, subcircuit in zip(counts, subcircuits):
+            for index in subcircuit_indices:
+                subcircuit = subcircuits[index]
+                count = counts[index]
                 subcircuit.result_of_current_query.append((start_index + total, count))
                 total += count
 
