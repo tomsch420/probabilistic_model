@@ -189,6 +189,6 @@ They are ordered in the same way as they are induced in the distribution.
 Finally, we plot resulting leaf distributions.
 
 ```{code-cell} ipython3
-figure = model.plot()
-figure
+figure = go.Figure(model.plot(1000, surface=True))
+figure.show()
 ```
