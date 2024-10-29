@@ -14,6 +14,7 @@ from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable
 
+from ...error import IntractableError
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 
 
@@ -781,6 +782,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return self.root.result_of_current_query
 
     def log_mode(self) -> Tuple[Event, float]:
+        if not self.is_deterministic():
+            raise IntractableError("The circuit is not deterministic.")
         [unit.log_mode() for layer in reversed(self.layers) for unit in layer]
         return self.root.result_of_current_query
 

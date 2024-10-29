@@ -126,7 +126,6 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
 
         nll = loss(self.cc, self.data)
         ll_og = self.cc.circuit.log_likelihood_of_nodes(self.data[:, self.cc.circuit_columns])
-        print(-ll_og.mean())
 
         optim = optax.adamw(0.01)
         opt_state = optim.init(eqx.filter(self.cc, eqx.is_inexact_array))
