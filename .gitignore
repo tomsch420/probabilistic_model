@@ -4,3 +4,6 @@ doc/build
 src/probabilistic_model.egg-info
 build
 doc/_build
+
+mlruns
+mlartifacts
