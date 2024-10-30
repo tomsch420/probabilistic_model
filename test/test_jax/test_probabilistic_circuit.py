@@ -159,11 +159,12 @@ class LearningTestCase(unittest.TestCase):
         model = self.sum_layer
         for _ in tqdm.trange(100):
             loss_value, grads = eqx.filter_value_and_grad(loss)(model, self.data)
-
             grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)[0][0]
             self.assertTrue(jnp.all(jnp.isfinite(grads_of_sum_layer)))
 
-            updates, opt_state = optim.update(grads, opt_state, model)
+            updates, opt_state = optim.update(
+                grads, opt_state, eqx.filter(model, eqx.is_inexact_array)
+            )
             model = eqx.apply_updates(model, updates)
 
         weights = jnp.exp(model.log_weights[0].data)
