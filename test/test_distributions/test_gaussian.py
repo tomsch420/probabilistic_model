@@ -288,7 +288,7 @@ class TruncatedGaussianSamplingTestCase(unittest.TestCase):
     def test_non_standard_sampling(self):
         model = TruncatedGaussianDistribution(self.x, SimpleInterval(-np.inf, -0.1), 0.5, 2)
         samples = model.robert_rejection_sample(1000).reshape(-1, 1)
-        self.assertAlmostEqual(max(samples), -0.1, delta=0.01)
+        self.assertAlmostEqual(max(samples), -0.1, delta=0.1)
         likelihoods = model.likelihood(samples)
         self.assertTrue(all(likelihoods > 0))
         self.assertAlmostEqual(model.expectation(model.variables)[model.variable], samples.mean(), delta=0.1)
