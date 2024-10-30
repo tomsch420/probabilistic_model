@@ -13,7 +13,6 @@ import tqdm
 from jax import numpy as jnp, tree_flatten
 from jax.experimental.sparse import BCOO, bcoo_concatenate
 from jaxtyping import Int
-from keras.src.legacy.backend import variable
 from random_events.product_algebra import SimpleEvent
 from random_events.utils import recursive_subclasses, SubclassJSONSerializer
 from random_events.variable import Variable
@@ -304,6 +303,7 @@ class InnerLayer(Layer, ABC):
         Clean up the layer by removing orphans in the child layers.
         """
         raise NotImplementedError
+
 
 class InputLayer(Layer, ABC):
     """

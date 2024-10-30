@@ -2,10 +2,8 @@
 pyjpt
 pandas
 graphviz
-scikit-learn==1.5.0
+scikit-learn
 matplotlib
 jax
 jaxtyping
 equinox
-flax
-torch
