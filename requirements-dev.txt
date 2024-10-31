@@ -8,3 +8,4 @@ jax
 jaxtyping
 equinox
 mlflow
+optax
