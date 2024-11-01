@@ -14,6 +14,8 @@ from .constants import *
 from .error import IntractableError, UndefinedOperationError
 import tqdm
 
+from .utils import neighbouring_points
+
 # Type definitions
 FullEvidenceType = np.array  # [Union[float, int, SetElement]]
 
@@ -326,46 +328,48 @@ class ProbabilisticModel(abc.ABC):
         """
 
         # sample for the plot
-        samples = np.sort(self.sample(number_of_samples), axis=0)
-        likelihood = self.likelihood(samples)
+        samples = self.sample(number_of_samples)[:, 0]
+
+        # prepare pdf trace
+        supporting_interval: Interval = self.support.simple_sets[0][self.variables[0]]
+
+        # add border points to samples
+        for simple_interval in supporting_interval.simple_sets:
+            simple_interval: SimpleInterval
+            lower, upper = simple_interval.lower, simple_interval.upper
+            if lower > -np.inf:
+                samples = np.concatenate((samples, neighbouring_points(lower)))
+            if upper < np.inf:
+                samples = np.concatenate((samples, neighbouring_points(upper)))
+
+        samples = np.sort(samples)
+        lowest = samples[0]
+        highest = samples[-1]
+        size = highest - lowest
+        samples = np.concatenate((np.array([lowest - size * 0.05]), samples, np.array([highest + size * 0.05])))
+
+        # add cdf trace if implemented
+        try:
+            cdf = self.cdf(samples.reshape(-1, 1))
+            cdf_trace = [go.Scatter(x=samples, y=cdf, mode="lines", legendgroup="CDF",
+                                    name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))]
+        except UndefinedOperationError:
+            cdf_trace = []
+
+        pdf = self.likelihood(samples.reshape(-1, 1))
+        pdf_trace = go.Scatter(x=samples, y=pdf, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
+                               line=dict(color=PDF_TRACE_COLOR))
 
         # plot the mode if possible
         try:
             mode, maximum_likelihood = self.mode()
         except IntractableError:
-            mode, maximum_likelihood = None, max(likelihood)
-
+            mode, maximum_likelihood = None, max(pdf)
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
-
-        # prepare pdf trace
-        x_and_likelihood = np.concatenate((samples, likelihood.reshape(-1, 1)), axis=1)
-        x_values = []
-        y_values = []
-        supporting_interval: Interval = self.support.simple_sets[0][self.variables[0]]
-
-        # add pdf trace for non-zero areas
-        for simple_interval in supporting_interval.simple_sets:
-            simple_interval: SimpleInterval
-            filtered = x_and_likelihood[(x_and_likelihood[:, 0] >= simple_interval.lower) &
-                                        (x_and_likelihood[:, 0] <= simple_interval.upper)]
-            x_values += [simple_interval.lower] + filtered[:, 0].tolist() + [simple_interval.upper]
-            y_values += [None] + filtered[:, 1].tolist() + [None]
-
-        # add cdf trace if implemented
-        cdf_x_values = np.array(samples)
-        try:
-            cdf_y_values = self.cdf(cdf_x_values)
-            cdf_trace = [go.Scatter(x=cdf_x_values[:, 0], y=cdf_y_values, mode="lines", legendgroup="CDF",
-                                    name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))]
-        except UndefinedOperationError:
-            cdf_trace = []
-
-        pdf_trace = go.Scatter(x=x_values, y=y_values, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
-                               line=dict(color=PDF_TRACE_COLOR))
-
         mode_traces = self.univariate_mode_traces(mode, height)
+
         return ([pdf_trace, self.univariate_expectation_trace(height)] + mode_traces +
-                self.univariate_complement_of_support_trace(min(samples)[0], max(samples)[0]) + cdf_trace)
+                self.univariate_complement_of_support_trace(min(samples), max(samples)) + cdf_trace)
 
     def univariate_expectation_trace(self, height: float) -> go.Scatter:
         """

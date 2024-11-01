@@ -206,6 +206,10 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
     def test_plot(self):
         fig = go.Figure(self.model.plot())
         self.assertIsNotNone(fig)
+        # fig.show()
+
+    def test_determinism(self):
+        self.assertTrue(self.model.is_deterministic())
 
     def test_likelihood(self):
         likelihood = self.model.log_likelihood(self.data.reshape(-1, 1))

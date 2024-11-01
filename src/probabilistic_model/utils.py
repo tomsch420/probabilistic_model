@@ -75,3 +75,13 @@ def timeit_print(func):
         return result
 
     return timeit_print_wrapper
+
+
+def neighbouring_points(point: float) -> np.array:
+    """
+    Embed the point in an array with the next left and next right point.
+
+    :param point: The point.
+    :return: The point and its two neighbours
+    """
+    return np.array([np.nextafter(point, -np.inf), point, np.nextafter(point, np.inf)])

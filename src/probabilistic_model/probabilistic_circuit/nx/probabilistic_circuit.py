@@ -231,7 +231,7 @@ class LeafUnit(Unit):
         self.result_of_current_query = self.distribution.probability_of_simple_event(event)
 
     def support(self):
-        self.result_of_current_query = self.distribution.support
+        self.result_of_current_query = self.distribution.support# .__deepcopy__()
 
     def simplify(self):
         if self.distribution is None:
@@ -374,9 +374,9 @@ class SumUnit(InnerUnit):
     moment = forward
 
     def support(self):
-        support = self.subcircuits[0].result_of_current_query
+        support = self.subcircuits[0].result_of_current_query.__deepcopy__()
         for subcircuit in self.subcircuits[1:]:
-            support |= subcircuit.result_of_current_query
+            support |= subcircuit.result_of_current_query.__deepcopy__()
         self.result_of_current_query = support
 
     @property
@@ -781,9 +781,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                     unit.forward()
         return self.root.result_of_current_query
 
-    def log_mode(self) -> Tuple[Event, float]:
-        if not self.is_deterministic():
-            raise IntractableError("The circuit is not deterministic.")
+    def log_mode(self, check_determinism: bool = True) -> Tuple[Event, float]:
+        if check_determinism:
+            if not self.is_deterministic():
+                raise IntractableError("The circuit is not deterministic.")
         [unit.log_mode() for layer in reversed(self.layers) for unit in layer]
         return self.root.result_of_current_query
 
@@ -1046,6 +1047,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         :return: Whether, this circuit is deterministic or not.
         """
+
         # calculate the support
         support = self.support
 
