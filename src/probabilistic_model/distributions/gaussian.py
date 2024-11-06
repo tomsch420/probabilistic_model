@@ -1,6 +1,5 @@
 from __future__ import annotations
-import math
-from math import nextafter
+from numpy import nextafter
 
 from scipy.stats import gamma, norm
 
