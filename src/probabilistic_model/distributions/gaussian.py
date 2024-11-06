@@ -1,5 +1,6 @@
 from __future__ import annotations
 import math
+from math import nextafter
 
 from scipy.stats import gamma, norm
 
@@ -163,8 +164,12 @@ class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, Gau
             value = self.location
         elif self.location < self.lower:
             value = self.lower
+            if self.interval.left == Bound.OPEN:
+                value = nextafter(value, np.inf)
         else:
             value = self.upper
+            if self.interval.right == Bound.OPEN:
+                value = nextafter(value, -np.inf)
         return singleton(value), self.log_likelihood_without_bounds_check(np.array([[value]]))[0]
 
     def rejection_sample(self, amount: int) -> np.array:

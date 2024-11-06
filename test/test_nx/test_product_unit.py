@@ -75,7 +75,7 @@ class ProductUnitTestCase(unittest.TestCase):
 
     def test_marginal_with_intersecting_variables(self):
         marginal = self.model.marginal([self.x])
-        self.assertEqual(len(list(marginal.nodes())), 2)
+        self.assertEqual(len(list(marginal.nodes())), 1)
         self.assertEqual(marginal.variables, SortedSet([self.x]))
 
     def test_marginal_without_intersecting_variables(self):

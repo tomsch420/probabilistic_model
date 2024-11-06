@@ -264,6 +264,9 @@ class ProbabilisticModel(abc.ABC):
         """
         return SimpleEvent({variable: variable.domain for variable in self.variables})
 
+    def __copy__(self):
+        raise NotImplementedError
+
     def plotly_layout(self) -> Dict[str, Any]:
         """
         Create a layout for the plotly plot.

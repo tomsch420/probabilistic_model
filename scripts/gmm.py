@@ -28,14 +28,14 @@ np.random.seed(69)
 number_of_variables = 2
 number_of_samples_per_component = 100000
 number_of_components = 2
-number_of_mixtures = 1000
+number_of_mixtures = 100
 number_of_iterations = 1000
 
 # model selection
 path_prefix = os.path.join(os.path.expanduser("~"), "Documents")
 nx_model_path = os.path.join(path_prefix, "nx_gmm.pm")
 jax_model_path = os.path.join(path_prefix, "jax_gmm.pm")
-load_from_disc = True
+load_from_disc = False
 save_to_disc = True
 
 data = []
@@ -101,7 +101,7 @@ jax_data = jnp.array(data)
 
 jax.config.update("jax_traceback_filtering", "off")
 
-# @eqx.filter_jit
+@eqx.filter_jit
 def loss(model, x):
     ll = model.log_likelihood_of_nodes(x)
     return -jnp.mean(ll)

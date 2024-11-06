@@ -882,6 +882,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         result = [node.marginal(variables) for layer in reversed(self.layers) for node in layer][-1]
         if result is not None:
             self.remove_unreachable_nodes(result)
+            self.simplify()
             return self
         else:
             return None
