@@ -303,30 +303,33 @@ class ProbabilisticModel(abc.ABC):
                 "scene": {"xaxis": {"title": self.variables[0].name}, "yaxis": {"title": self.variables[1].name},
                           "zaxis": {"title": self.variables[2].name}}}
 
-    def plot(self, number_of_samples: int = 1000, surface=False) -> List:
+    def plot(self, number_of_samples: int = 1000, surface=False, mode=False) -> List:
         """
         Generate traces that can be plotted with plotly.
 
         :param number_of_samples: The number of samples to draw.
         :param surface: If True, plot the model as a surface plot.
+        :param mode: If True, plot the mode of the model.
         :return: The traces.
         """
         if len(self.variables) == 1:
-            return self.plot_1d(number_of_samples)
+            return self.plot_1d(number_of_samples, mode)
         elif len(self.variables) == 2:
             if surface:
                 return self.plot_2d_surface(number_of_samples)
             else:
-                return self.plot_2d(number_of_samples)
+                return self.plot_2d(number_of_samples, mode)
         elif len(self.variables) == 3:
-            return self.plot_3d(number_of_samples)
+            return self.plot_3d(number_of_samples, mode)
         else:
             raise NotImplementedError("Plotting is only supported for models with up to three variables.")
 
-    def plot_1d(self, number_of_samples: int) -> List:
+    def plot_1d(self, number_of_samples: int, mode=False) -> List:
         """
         Plot a one-dimensional model using samples.
+
         :param number_of_samples: The number of samples to draw.
+        :param mode: If True, plot the mode of the model.
         :return: The traces.
         """
 
@@ -364,10 +367,14 @@ class ProbabilisticModel(abc.ABC):
                                line=dict(color=PDF_TRACE_COLOR))
 
         # plot the mode if possible
-        try:
-            mode, maximum_likelihood = self.mode()
-        except IntractableError:
+        if mode:
+            try:
+                mode, maximum_likelihood = self.mode()
+            except IntractableError:
+                mode, maximum_likelihood = None, max(pdf)
+        else:
             mode, maximum_likelihood = None, max(pdf)
+
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
         mode_traces = self.univariate_mode_traces(mode, height)
 
@@ -417,10 +424,12 @@ class ProbabilisticModel(abc.ABC):
             trace.update(name=PDF_TRACE_NAME, marker=dict(color=PDF_TRACE_COLOR))
         return traces
 
-    def plot_2d(self, number_of_samples: int) -> List:
+    def plot_2d(self, number_of_samples: int, mode=False) -> List:
         """
         Plot a two-dimensional model.
+
         :param number_of_samples: The number of samples to draw.
+        :param mode: If True, plot the mode of the model.
         :return: The traces.
         """
         samples = self.sample(number_of_samples)
@@ -430,7 +439,13 @@ class ProbabilisticModel(abc.ABC):
                                       name=SAMPLES_TRACE_NAME)
         expectation_trace = go.Scatter(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
                                        mode="markers", marker=dict(color=EXPECTATION_TRACE_COLOR), name=EXPECTATION_TRACE_NAME)
-        return [likelihood_trace, expectation_trace] + self.multivariate_mode_traces()
+
+        if mode:
+            mode_traces = self.multivariate_mode_traces()
+        else:
+            mode_traces = []
+
+        return [likelihood_trace, expectation_trace] + mode_traces
 
     def plot_2d_surface(self, number_of_samples: int) -> List:
         """
@@ -546,10 +561,12 @@ class ProbabilisticModel(abc.ABC):
         trace = go.Surface(z=likelihood, x=x, y=y)
         return trace
 
-    def plot_3d(self, number_of_samples: int) -> List:
+    def plot_3d(self, number_of_samples: int, mode=False) -> List:
         """
         Plot a three-dimensional model using samples.
+
         :param number_of_samples: The number of samples to draw.
+        :param mode: If True, plot the mode of the model.
         :return: The traces.s
         """
         samples = self.sample(number_of_samples)
@@ -561,7 +578,12 @@ class ProbabilisticModel(abc.ABC):
                                          z=[expectation[self.variables[2]]], mode="markers",
                                          name=EXPECTATION_TRACE_NAME, marker=dict(color=EXPECTATION_TRACE_COLOR))
 
-        return [likelihood_trace, expectation_trace] + self.multivariate_mode_traces()
+        if mode:
+            mode_traces = self.multivariate_mode_traces()
+        else:
+            mode_traces = []
+
+        return [likelihood_trace, expectation_trace] + mode_traces
 
     def multivariate_mode_traces(self):
         """
