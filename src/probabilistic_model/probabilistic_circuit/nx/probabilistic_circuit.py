@@ -7,6 +7,7 @@ import random
 
 import networkx as nx
 import numpy as np
+from matplotlib import pyplot as plt
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.utils import SubclassJSONSerializer
@@ -544,8 +545,8 @@ class SumUnit(InnerUnit):
                     # add an edge to that subcircuit
                     self.add_subcircuit(sub_subcircuit, new_weight, mount=False)
 
-                    # remove the old node
-                    self.probabilistic_circuit.remove_node(subcircuit)
+                # remove the old node
+                self.probabilistic_circuit.remove_node(subcircuit)
 
     def normalize(self):
         """

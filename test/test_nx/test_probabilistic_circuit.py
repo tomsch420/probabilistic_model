@@ -1,3 +1,5 @@
+import json
+import os.path
 import unittest
 
 from matplotlib import pyplot as plt
@@ -72,6 +74,19 @@ class SmallCircuitTestCast(unittest.TestCase):
         # plt.show()
         fig = go.Figure(self.model.plot(600, surface=True))
         # fig.show()
+
+from probabilistic_model.learning.jpt.variables import *
+
+class PyCRAMErrorTestCase(unittest.TestCase):
+
+    path = os.path.join(os.path.expanduser("~"), "Documents", "model.json")
+    with open(path, "r") as file:
+        model: ProbabilisticCircuit = ProbabilisticCircuit.from_json(json.load(file))
+
+    def test_error(self):
+        arm, grasp, rx, ry = self.model.variables
+        self.model.marginal([rx, ry])
+        print(self.model.variables)
 
 
 if __name__ == '__main__':
