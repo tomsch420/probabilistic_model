@@ -77,9 +77,9 @@ class DiscreteDistributionTestCase(unittest.TestCase):
         self.assertEqual(len(list(circuit.nodes)), 2)
 
     def test_as_deterministic_sum(self):
-        result = self.integer_distribution.as_deterministic_sum()
+        result = self.symbolic_distribution.as_deterministic_sum()
         self.assertEqual(len(result.subcircuits), 3)
-        self.assertTrue(np.allclose(result.weights, np.array(list(self.integer_distribution.probabilities.values()))))
+        self.assertTrue(np.allclose(result.weights, np.array(list(self.symbolic_distribution.probabilities.values()))))
         self.assertIsInstance(result.probabilistic_circuit.root, SumUnit)
 
 
