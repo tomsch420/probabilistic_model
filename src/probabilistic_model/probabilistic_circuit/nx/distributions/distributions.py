@@ -3,10 +3,13 @@ from __future__ import annotations
 from abc import ABC
 
 import numpy as np
+import random_events.interval
 from random_events.interval import SimpleInterval, Interval
-from random_events.product_algebra import SimpleEvent
+from random_events.product_algebra import SimpleEvent, Event
+from random_events.sigma_algebra import AbstractCompositeSet, AbstractSimpleSet
+import random_events.set
 from sortedcontainers import SortedSet
-from typing_extensions import Tuple, Optional, Self
+from typing_extensions import Tuple, Optional, Self, List
 
 from probabilistic_model.distributions.distributions import (ContinuousDistribution as PMContinuousDistribution,
                                                              DiracDeltaDistribution as PMDiracDeltaDistribution,
@@ -45,6 +48,15 @@ class UnivariateDistribution(PMUnivariateDistribution, ProbabilisticCircuitMixin
     def empty_copy(self) -> Self:
         return self.__copy__()
 
+    def event_of_higher_density(self, other: Self, own_weight, other_weight) -> Tuple[Event, Event]:
+        """
+        Calculate the event where $own_weight * self.pdf > other_weight * other.pdf$
+
+        :return: A tuple of two events, the first describes where the weighted density of this is higher than the
+        weighted density of other and the vice versa event
+        """
+        raise NotImplementedError
+
 
 class ContinuousDistribution(UnivariateDistribution, PMContinuousDistribution, ProbabilisticCircuitMixin, ABC):
 
@@ -79,7 +91,7 @@ class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, Proba
         """
         result = SumUnit()
 
-        for event in self.variable.domain.simple_sets:
+        for event in self.univariate_support.simple_sets:
             event = SimpleEvent({self.variable: event}).as_composite_set()
             conditional, probability = self.conditional(event)
             result.add_subcircuit(conditional, probability)
@@ -105,13 +117,42 @@ class DiscreteDistribution(UnivariateDistribution, PMDiscreteDistribution, Proba
             probabilities[int(element)] = probability
         return cls(variable, probabilities)
 
+    def create_event_from_value_list(self, values: List[AbstractSimpleSet]) -> AbstractCompositeSet:
+        raise NotImplementedError
 
 class DiracDeltaDistribution(ContinuousDistribution, PMDiracDeltaDistribution):
-    ...
+
+    def event_of_higher_density(self, other: Self, own_weight, other_weight) -> Tuple[Event, Event]:
+        if self.location == other.location:
+            own_density = self.density_cap * own_weight
+            other_density = self.density_cap * other_weight
+
+            empty_interval = random_events.interval.open(0, 0)
+
+            if own_density > other_density:
+                return self.support, SimpleEvent({other.variable: empty_interval}).as_composite_set()
+            elif own_density < other_density:
+                return SimpleEvent({self.variable: empty_interval}).as_composite_set(), other.support
+
+        return self.support, other.support
 
 
 class UniformDistribution(ContinuousDistribution, PMUniformDistribution):
-    ...
+
+    def event_of_higher_density(self, other: Self, own_weight, other_weight) -> Tuple[Event, Event]:
+        own_density = self.pdf_value() * own_weight
+        other_density = self.pdf_value() * other_weight
+
+        own_event = self.support - other.support
+        other_event = other.support - self.support
+        intersection = self.support & other.support
+
+        if own_density > other_density:
+            own_event |= intersection
+        else:
+            other_event |= intersection
+
+        return own_event, other_event
 
 
 class GaussianDistribution(ContinuousDistribution, PMGaussianDistribution):
@@ -129,8 +170,74 @@ class TruncatedGaussianDistribution(GaussianDistribution, ContinuousDistribution
 
 
 class IntegerDistribution(DiscreteDistribution, PMIntegerDistribution):
-    ...
 
+    def event_of_higher_density(self, other: Self, own_weight, other_weight) -> Tuple[Event, Event]:
+        own_result = []
+        other_result = []
+        for value in self.variable.domain.simple_sets:
+            p_own = self.probabilities[value.lower]
+            p_other = other.probabilities[value.lower]
+            if p_own > p_other:
+                own_result.append(value)
+            elif p_own < p_other:
+                other_result.append(value)
+
+        own_result = self.create_event_from_value_list(own_result)
+
+        if own_result.is_empty():
+            own_result = Event()
+        else:
+            own_result = SimpleEvent({self.variable: own_result}).as_composite_set()
+
+        other_result = self.create_event_from_value_list(other_result)
+        if other_result.is_empty():
+
+            other_result = Event()
+        else:
+            other_result = SimpleEvent({other.variable: other_result}).as_composite_set()
+        return own_result, other_result
+
+    def create_event_from_value_list(self, values: List[AbstractSimpleSet]) -> AbstractCompositeSet:
+        if len(values) == 0:
+            return random_events.interval.open(0, 0)
+        result = values[0].as_composite_set()
+        for value in values[1:]:
+            result |= value.as_composite_set()
+        return result
 
 class SymbolicDistribution(DiscreteDistribution, PMSymbolicDistribution):
-    ...
+
+    def event_of_higher_density(self, other: Self, own_weight, other_weight) -> Tuple[Event, Event]:
+
+        own_result = []
+        other_result = []
+        for value in self.variable.domain.simple_sets:
+            p_own = self.probabilities[int(value)]
+            p_other = other.probabilities[int(value)]
+            if p_own > p_other:
+                own_result.append(value)
+            elif p_own < p_other:
+                other_result.append(value)
+
+        own_result = self.create_event_from_value_list(own_result)
+        if own_result.is_empty():
+            own_result = Event()
+        else:
+            own_result = SimpleEvent({self.variable: own_result}).as_composite_set()
+
+        other_result = self.create_event_from_value_list(other_result)
+        if other_result.is_empty():
+            other_result = Event()
+        else:
+            other_result = SimpleEvent({other.variable: other_result}).as_composite_set()
+
+        return own_result, other_result
+
+    def create_event_from_value_list(self, values: List[AbstractSimpleSet]) -> AbstractCompositeSet:
+        if len(values) == 0:
+            return random_events.set.Set()
+
+        result = values[0].as_composite_set()
+        for value in values[1:]:
+            result |= value.as_composite_set()
+        return result

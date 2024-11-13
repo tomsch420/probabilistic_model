@@ -1,5 +1,7 @@
+import time
 from collections import defaultdict
 
+from random_events.product_algebra import Event
 from random_events.variable import Continuous, Symbolic, Integer
 from sympy.solvers.diophantine.diophantine import prime_as_sum_of_two_squares
 
@@ -60,27 +62,8 @@ class MonteCarloEstimator:
         supp_of_self = self.model.support
         supp_of_other = other.support
         union_of_supps = supp_of_other | supp_of_self
-        bounding_box = union_of_supps.bounding_box()
+        uniform_model = uniform_measure_of_event(union_of_supps)
 
-        uniform_model = ProductUnit()
-        for variable, assignment in bounding_box.items():
-            if isinstance(variable, Continuous):
-                distribution = SumUnit()
-                for assignment_ in assignment:
-                    u = UniformDistribution(variable, assignment_)
-                    distribution.add_subcircuit(u, 1/u.pdf_value())
-                distribution.normalize()
-            elif isinstance(variable, Symbolic):
-                distribution = SymbolicDistribution(variable, MissingDict(float, {value: 1/len(assignment.simple_sets) for
-                                                                                  value in assignment}))
-            elif isinstance(variable, Integer):
-                distribution = IntegerDistribution(variable, MissingDict(float, {value.lower: 1/len(assignment.simple_sets) for
-                                                                                  value in assignment}))
-            else:
-                raise NotImplementedError
-            uniform_model.add_subcircuit(distribution)
-        uniform_model, _ = uniform_model.conditional(union_of_supps)
-        import plotly.graph_objects as go
         samples = uniform_model.sample(self.sample_size)
         density_of_uniform_model = uniform_model.likelihood(samples[:1])[0]
         p_self = self.model.likelihood(samples)
@@ -92,6 +75,7 @@ class MonteCarloEstimator:
     def area_validation_metric(self, other_model: ProbabilisticModel):
         p_p_amount, q_q_amount = self.monte_carlo_densty_events(other_model)
         return (p_p_amount + q_q_amount) / self.sample_size
+
     def monte_carlo_densty_events(self, other_model: ProbabilisticModel):
         half_sample_amount = int(self.sample_size / 2) if self.sample_size > 0 else 1
         own_amount = 0
@@ -112,17 +96,44 @@ class MonteCarloEstimator:
         return own_amount, other_amount
 
     def l1(self, other: ProbabilisticModel, tolerance = 10e-8):
+        sample_time_s = time.time()
         samples_p = self.model.sample(self.sample_size)
+        sample_time_e = time.time()
         l_p = self.model.likelihood(samples_p)
         l_q = other.likelihood(samples_p)
+        sample_time_lik = time.time()
         diff = l_p - l_q
         p = (diff > tolerance).mean()
-        print(p)
 
         samples_q = other.sample(self.sample_size)
         l_p = self.model.likelihood(samples_q)
         l_q = other.likelihood(samples_q)
         diff = l_p - l_q
         q = (diff > tolerance).mean()
-        print(q)
-        return 2 * (p - q)
+        return (p - q), [sample_time_e- sample_time_s, sample_time_lik- sample_time_e]
+
+
+def uniform_measure_of_event(event: Event):
+
+    bounding_box = event.bounding_box()
+
+    uniform_model = ProductUnit()
+    for variable, assignment in bounding_box.items():
+        if isinstance(variable, Continuous):
+            distribution = SumUnit()
+            for assignment_ in assignment:
+                u = UniformDistribution(variable, assignment_)
+                distribution.add_subcircuit(u, 1 / u.pdf_value())
+            distribution.normalize()
+        elif isinstance(variable, Symbolic):
+            distribution = SymbolicDistribution(variable, MissingDict(float, {value: 1 / len(assignment.simple_sets) for
+                                                                              value in assignment}))
+        elif isinstance(variable, Integer):
+            distribution = IntegerDistribution(variable,
+                                               MissingDict(float, {value.lower: 1 / len(assignment.simple_sets) for
+                                                                   value in assignment}))
+        else:
+            raise NotImplementedError
+        uniform_model.add_subcircuit(distribution)
+    uniform_model, _ = uniform_model.conditional(event)
+    return uniform_model
