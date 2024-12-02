@@ -14,49 +14,30 @@ from probabilistic_model.utils import MissingDict
 
 
 class MonteCarloEstimator:
+    """
+    This class has different Monte Carlo estimators for L1 Metric on Shallow Circuits.
+
+    """
 
     model: ProbabilisticModel
     sample_size: int
 
     def __init__(self, model: ProbabilisticModel, sample_size: int=100):
+        """
+        :model: Probabilistic model the model on which the sample be calculated on
+        :sample_size: Number of Monte Carlo samples
+        """
         self.model = model
         self.sample_size = sample_size
 
     def set_sample_size(self, sample_size: int):
         self.sample_size = sample_size
 
-    def area_validation_metric2(self, other: ProbabilisticModel) -> float:
-        own_samples = self.model.sample(self.sample_size)
-        other_samples = other.sample(self.sample_size)
-
-        ll_own_samples_self = self.model.likelihood(own_samples)
-        ll_other_samples_self = other.likelihood(own_samples)
-
-        p_x_greater_q_x_own_samples = (ll_own_samples_self > ll_other_samples_self).sum()
-        q_x_greater_p_x_own_samples = (ll_other_samples_self > ll_own_samples_self).sum()
-
-        ll_own_samples_other = np.round(self.model.likelihood(other_samples), 5)
-        ll_other_samples_other = np.round(other.likelihood(other_samples), 5)
-
-        p_x_greater_q_x_other_samples = (ll_own_samples_other > ll_other_samples_other).sum()
-        q_x_greater_p_x_other_samples = (ll_other_samples_other > ll_own_samples_other).sum()
-
-        result = (p_x_greater_q_x_own_samples - q_x_greater_p_x_own_samples + q_x_greater_p_x_other_samples -
-                  p_x_greater_q_x_other_samples)
-        return result/self.sample_size
-
-    def l1_metric(self, other: ProbabilisticModel) -> float:
-        own_samples = self.model.sample(self.sample_size)
-        other_samples = other.sample(self.sample_size)
-        ll_own_samples_self = self.model.likelihood(own_samples)
-        ll_other_samples_self = other.likelihood(own_samples)
-        ll_own_samples_other = self.model.likelihood(other_samples)
-        ll_other_samples_other = other.likelihood(other_samples)
-        diff_on_self = np.abs(ll_own_samples_self - ll_other_samples_self)
-        diff_on_other = np.abs(ll_other_samples_other - ll_own_samples_other)
-        return np.mean(diff_on_other + diff_on_self)
-
     def l1_metric_but_with_uniform_measure(self, other: ProbabilisticModel):
+        """
+        This estimator uses the union of supports both models to reduce sample time.
+        :other: the 2. Model need to estimate the L1 Metric.
+        """
         supp_of_self = self.model.support
         supp_of_other = other.support
         union_of_supps = supp_of_other | supp_of_self
@@ -80,7 +61,6 @@ class MonteCarloEstimator:
                 raise NotImplementedError
             uniform_model.add_subcircuit(distribution)
         uniform_model, _ = uniform_model.conditional(union_of_supps)
-        import plotly.graph_objects as go
         samples = uniform_model.sample(self.sample_size)
         density_of_uniform_model = uniform_model.likelihood(samples[:1])[0]
         p_self = self.model.likelihood(samples)
@@ -89,40 +69,20 @@ class MonteCarloEstimator:
         return l1_metric
 
 
-    def area_validation_metric(self, other_model: ProbabilisticModel):
-        p_p_amount, q_q_amount = self.monte_carlo_densty_events(other_model)
-        return (p_p_amount + q_q_amount) / self.sample_size
-    def monte_carlo_densty_events(self, other_model: ProbabilisticModel):
-        half_sample_amount = int(self.sample_size / 2) if self.sample_size > 0 else 1
-        own_amount = 0
-        other_amount = 0
-        own_samples = self.model.sample(half_sample_amount)
-        other_samples = other_model.sample(half_sample_amount)
-        for sample in own_samples:
-            own_liklihood = self.model.likelihood(np.array([sample]))
-            other_liklihood = other_model.likelihood(np.array([sample]))
-            if own_liklihood > other_liklihood:
-                own_amount += 1
-        for sample in other_samples:
-            own_liklihood = self.model.likelihood(np.array([sample]))
-            other_liklihood = other_model.likelihood(np.array([sample]))
-            if own_liklihood < other_liklihood:
-                other_amount += 1
-
-        return own_amount, other_amount
-
     def l1(self, other: ProbabilisticModel, tolerance = 10e-8):
+        """
+        Estimates the L1 metric with Monte Carlo estimator.
+        :other: the 2. Model need to estimate the L1 Metric.
+        :tolerance: Tolerance for how close to zero should be zero.
+        """
         samples_p = self.model.sample(self.sample_size)
         l_p = self.model.likelihood(samples_p)
         l_q = other.likelihood(samples_p)
         diff = l_p - l_q
         p = (diff > tolerance).mean()
-        print(p)
-
         samples_q = other.sample(self.sample_size)
         l_p = self.model.likelihood(samples_q)
         l_q = other.likelihood(samples_q)
         diff = l_p - l_q
         q = (diff > tolerance).mean()
-        print(q)
         return 2 * (p - q)
