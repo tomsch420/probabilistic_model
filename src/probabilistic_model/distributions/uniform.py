@@ -4,9 +4,6 @@ from .distributions import *
 from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT, EXPECTATION_TRACE_NAME, MODE_TRACE_NAME, MODE_TRACE_COLOR, \
     PDF_TRACE_NAME, CDF_TRACE_NAME, CDF_TRACE_COLOR, PDF_TRACE_COLOR
 
-from ..constants import PADDING_FACTOR_FOR_X_AXIS_IN_PLOT
-from typing_extensions import List, Dict, Any, Self
-from plotly import graph_objects as go
 
 class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     """
@@ -79,6 +76,9 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     @property
     def representation(self):
         return f"U({self.variable.name} | {self.interval})"
+
+    def __repr__(self):
+        return f"U({self.variable.name})"
 
     @property
     def image(self):

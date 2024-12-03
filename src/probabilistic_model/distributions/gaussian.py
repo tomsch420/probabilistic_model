@@ -1,5 +1,5 @@
 from __future__ import annotations
-import math
+from numpy import nextafter
 
 from scipy.stats import gamma, norm
 
@@ -104,6 +104,9 @@ class GaussianDistribution(ContinuousDistribution):
     def representation(self):
         return f"N({self.variable.name} | {self.location}, {self.scale})"
 
+    def __repr__(self):
+        return f"N({self.variable.name})"
+
     def __copy__(self):
         return self.__class__(self.variable, self.location, self.scale)
 
@@ -160,8 +163,12 @@ class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, Gau
             value = self.location
         elif self.location < self.lower:
             value = self.lower
+            if self.interval.left == Bound.OPEN:
+                value = nextafter(value, np.inf)
         else:
             value = self.upper
+            if self.interval.right == Bound.OPEN:
+                value = nextafter(value, -np.inf)
         return singleton(value), self.log_likelihood_without_bounds_check(np.array([[value]]))[0]
 
     def rejection_sample(self, amount: int) -> np.array:

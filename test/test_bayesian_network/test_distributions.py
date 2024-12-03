@@ -12,7 +12,8 @@ from random_events.variable import Symbolic, Continuous
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
                                                                 ConditionalProbabilisticCircuit)
-from probabilistic_model.probabilistic_circuit.nx.distributions import SymbolicDistribution, UniformDistribution
+from probabilistic_model.distributions import SymbolicDistribution, UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import  SumUnit, ProductUnit
 from probabilistic_model.utils import MissingDict
 
@@ -104,7 +105,7 @@ class DistributionTestCase(unittest.TestCase):
         joint_distribution = self.p_yx.joint_distribution_with_parent()
         self.assertIsInstance(joint_distribution, SumUnit)
 
-        likelihoods = joint_distribution.likelihood(np.array([[0, 1], [2, 1]]))
+        likelihoods = joint_distribution.probabilistic_circuit.likelihood(np.array([[0, 1], [2, 1]]))
         self.assertAlmostEqual(likelihoods[0], 0.25)
         self.assertAlmostEqual(likelihoods[1], 0.2 * 0.9)
 
@@ -122,12 +123,12 @@ class CircuitDistributionTestCase(unittest.TestCase):
         self.p_x = RootDistribution(self.x, MissingDict(float, zip([0, 1], [0.7, 0.3])))
 
         d1 = ProductUnit()
-        d1.add_subcircuit(UniformDistribution(self.y, closed(0, 1).simple_sets[0]))
-        d1.add_subcircuit(UniformDistribution(self.z, closed(0, 1).simple_sets[0]))
+        d1.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.y, closed(0, 1).simple_sets[0])))
+        d1.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.z, closed(0, 1).simple_sets[0])))
 
         d2 = ProductUnit()
-        d2.add_subcircuit(UniformDistribution(self.y, closed(0, 2).simple_sets[0]))
-        d2.add_subcircuit(UniformDistribution(self.z, closed(0, 3).simple_sets[0]))
+        d2.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.y, closed(0, 2).simple_sets[0])))
+        d2.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.z, closed(0, 3).simple_sets[0])))
 
         self.p_yzx.conditional_probability_distributions[0] = d1.probabilistic_circuit
         self.p_yzx.conditional_probability_distributions[1] = d2.probabilistic_circuit
@@ -149,7 +150,7 @@ class CircuitDistributionTestCase(unittest.TestCase):
         event = SimpleEvent({variable: variable.domain for variable in self.bayesian_network.variables})
         self.bayesian_network.forward_pass(event)
 
-        joint_distribution = self.p_yzx.joint_distribution_with_parent()
+        joint_distribution = self.p_yzx.joint_distribution_with_parent().probabilistic_circuit
         event = SimpleEvent({self.x: YEnum.ZERO, self.y: closed(0, 0.5)}).as_composite_set()
         self.assertEqual(joint_distribution.probability(event), 0.35)
 

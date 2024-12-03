@@ -178,7 +178,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
 
     @property
     def univariate_support(self) -> Interval:
-        return self.interval.__deepcopy__().as_composite_set()
+        return self.interval.as_composite_set()
 
     def left_included_condition(self, x: np.array) -> np.array:
         """
@@ -315,14 +315,15 @@ class DiscreteDistribution(UnivariateDistribution):
             self.probabilities[key] /= total
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-
         # construct event
         condition = self.composite_set_from_event(event)
+        return self.log_conditional_of_composite_set(condition)
 
+    def log_conditional_of_composite_set(self, event: AbstractCompositeSet) -> Tuple[Optional[Self], float]:
         # calculate new probabilities
         new_probabilities = MissingDict(float)
         for x, p_x in self.probabilities.items():
-            if x in condition:
+            if x in event:
                 new_probabilities[x] = p_x
 
         # if the event is impossible, return None and 0
@@ -337,6 +338,9 @@ class DiscreteDistribution(UnivariateDistribution):
 
     def __copy__(self) -> Self:
         return self.__class__(self.variable, self.probabilities)
+
+    def __repr__(self):
+        return f"P({self.variable.name})"
 
     def sample(self, amount: int) -> np.array:
         sample_space = np.array(list(self.probabilities.keys()))
@@ -530,6 +534,9 @@ class DiracDeltaDistribution(ContinuousDistribution):
     def representation(self):
         return f"δ({self.location}, {self.density_cap})"
 
+    def __repr__(self):
+        return f"δ({self.variable.name})"
+
     def __copy__(self):
         return self.__class__(self.variable, self.location, self.density_cap)
 
@@ -545,9 +552,6 @@ class DiracDeltaDistribution(ContinuousDistribution):
         location = data["location"]
         density_cap = data["density_cap"]
         return cls(variable, location, density_cap)
-
-    def __repr__(self):
-        return f"δ({self.variable.name}, {self.location}, {self.density_cap})"
 
     def plot(self, **kwargs) -> List:
         lower_border = self.location - 1

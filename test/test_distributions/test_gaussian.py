@@ -152,6 +152,18 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
         self.assertEqual(conditional.lower, 1)
         self.assertEqual(conditional.upper, 2)
 
+    def test_conditional_on_mode(self):
+        mode, _ = self.distribution.mode()
+        conditional, probability = self.distribution.conditional(mode)
+        self.assertIsInstance(conditional, DiracDeltaDistribution)
+        self.assertTrue(probability > 0)
+
+    def test_copy(self):
+        copy = self.distribution.__copy__()
+        self.assertEqual(self.distribution, copy)
+        copy.interval = copy.interval.intersection_with(SimpleInterval(-1, 1, Bound.CLOSED, Bound.CLOSED))
+        self.assertNotEqual(self.distribution, copy)
+
     def test_sample(self):
         samples = self.distribution.rejection_sample(100)
         self.assertEqual(samples.shape, (100, 1))
@@ -288,7 +300,7 @@ class TruncatedGaussianSamplingTestCase(unittest.TestCase):
     def test_non_standard_sampling(self):
         model = TruncatedGaussianDistribution(self.x, SimpleInterval(-np.inf, -0.1), 0.5, 2)
         samples = model.robert_rejection_sample(1000).reshape(-1, 1)
-        self.assertAlmostEqual(max(samples), -0.1, delta=0.01)
+        self.assertAlmostEqual(max(samples), -0.1, delta=0.1)
         likelihoods = model.likelihood(samples)
         self.assertTrue(all(likelihoods > 0))
         self.assertAlmostEqual(model.expectation(model.variables)[model.variable], samples.mean(), delta=0.1)

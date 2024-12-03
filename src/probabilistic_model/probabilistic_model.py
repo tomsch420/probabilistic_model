@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import abc
+import itertools
+import math
 
+import numpy as np
 from random_events.interval import closed, SimpleInterval
 from random_events.product_algebra import *
 from random_events.set import *
@@ -9,6 +12,9 @@ from random_events.variable import *
 
 from .constants import *
 from .error import IntractableError, UndefinedOperationError
+import tqdm
+
+from .utils import neighbouring_points
 
 # Type definitions
 FullEvidenceType = np.array  # [Union[float, int, SetElement]]
@@ -258,6 +264,9 @@ class ProbabilisticModel(abc.ABC):
         """
         return SimpleEvent({variable: variable.domain for variable in self.variables})
 
+    def __copy__(self):
+        raise NotImplementedError
+
     def plotly_layout(self) -> Dict[str, Any]:
         """
         Create a layout for the plotly plot.
@@ -294,68 +303,83 @@ class ProbabilisticModel(abc.ABC):
                 "scene": {"xaxis": {"title": self.variables[0].name}, "yaxis": {"title": self.variables[1].name},
                           "zaxis": {"title": self.variables[2].name}}}
 
-    def plot(self, number_of_samples: int = 1000) -> List:
+    def plot(self, number_of_samples: int = 1000, surface=False, mode=False) -> List:
         """
         Generate traces that can be plotted with plotly.
+
+        :param number_of_samples: The number of samples to draw.
+        :param surface: If True, plot the model as a surface plot.
+        :param mode: If True, plot the mode of the model.
         :return: The traces.
         """
         if len(self.variables) == 1:
-            return self.plot_1d(number_of_samples)
+            return self.plot_1d(number_of_samples, mode)
         elif len(self.variables) == 2:
-            return self.plot_2d(number_of_samples)
+            if surface:
+                return self.plot_2d_surface(number_of_samples)
+            else:
+                return self.plot_2d(number_of_samples, mode)
         elif len(self.variables) == 3:
-            return self.plot_3d(number_of_samples)
+            return self.plot_3d(number_of_samples, mode)
         else:
             raise NotImplementedError("Plotting is only supported for models with up to three variables.")
 
-    def plot_1d(self, number_of_samples: int) -> List:
+    def plot_1d(self, number_of_samples: int, mode=False) -> List:
         """
         Plot a one-dimensional model using samples.
+
         :param number_of_samples: The number of samples to draw.
+        :param mode: If True, plot the mode of the model.
         :return: The traces.
         """
 
         # sample for the plot
-        samples = np.sort(self.sample(number_of_samples), axis=0)
-        likelihood = self.likelihood(samples)
-
-        # plot the mode if possible
-        try:
-            mode, maximum_likelihood = self.mode()
-        except IntractableError:
-            mode, maximum_likelihood = None, max(likelihood)
-
-        height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
+        samples = self.sample(number_of_samples)[:, 0]
 
         # prepare pdf trace
-        x_and_likelihood = np.concatenate((samples, likelihood.reshape(-1, 1)), axis=1)
-        x_values = []
-        y_values = []
         supporting_interval: Interval = self.support.simple_sets[0][self.variables[0]]
 
-        # add pdf trace for non-zero areas
+        # add border points to samples
         for simple_interval in supporting_interval.simple_sets:
             simple_interval: SimpleInterval
-            filtered = x_and_likelihood[(x_and_likelihood[:, 0] >= simple_interval.lower) &
-                                        (x_and_likelihood[:, 0] <= simple_interval.upper)]
-            x_values += [simple_interval.lower] + filtered[:, 0].tolist() + [simple_interval.upper]
-            y_values += [None] + filtered[:, 1].tolist() + [None]
+            lower, upper = simple_interval.lower, simple_interval.upper
+            if lower > -np.inf:
+                samples = np.concatenate((samples, neighbouring_points(lower)))
+            if upper < np.inf:
+                samples = np.concatenate((samples, neighbouring_points(upper)))
+
+        samples = np.sort(samples)
+        lowest = samples[0]
+        highest = samples[-1]
+        size = highest - lowest
+        samples = np.concatenate((np.array([lowest - size * 0.05]), samples, np.array([highest + size * 0.05])))
 
         # add cdf trace if implemented
-        cdf_x_values = np.array(samples)
         try:
-            cdf_y_values = self.cdf(cdf_x_values)
-            cdf_trace = [go.Scatter(x=cdf_x_values[:, 0], y=cdf_y_values, mode="lines", legendgroup="CDF",
+            cdf = self.cdf(samples.reshape(-1, 1))
+            cdf_trace = [go.Scatter(x=samples, y=cdf, mode="lines", legendgroup="CDF",
                                     name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))]
         except UndefinedOperationError:
             cdf_trace = []
 
-        pdf_trace = go.Scatter(x=x_values, y=y_values, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
+        pdf = self.likelihood(samples.reshape(-1, 1))
+        pdf_trace = go.Scatter(x=samples, y=pdf, mode="lines", legendgroup="PDF", name=PDF_TRACE_NAME,
                                line=dict(color=PDF_TRACE_COLOR))
 
+        # plot the mode if possible
+        if mode:
+            try:
+                mode, maximum_likelihood = self.mode()
+            except IntractableError:
+                mode, maximum_likelihood = None, max(pdf)
+        else:
+            mode, maximum_likelihood = None, max(pdf)
+
+        height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
         mode_traces = self.univariate_mode_traces(mode, height)
+
         return ([pdf_trace, self.univariate_expectation_trace(height)] + mode_traces +
-                self.univariate_complement_of_support_trace(min(samples)[0], max(samples)[0]) + cdf_trace)
+                self.univariate_complement_of_support_trace(min(samples), max(samples)) + cdf_trace)
 
     def univariate_expectation_trace(self, height: float) -> go.Scatter:
         """
@@ -400,10 +424,12 @@ class ProbabilisticModel(abc.ABC):
             trace.update(name=PDF_TRACE_NAME, marker=dict(color=PDF_TRACE_COLOR))
         return traces
 
-    def plot_2d(self, number_of_samples: int) -> List:
+    def plot_2d(self, number_of_samples: int, mode=False) -> List:
         """
         Plot a two-dimensional model.
+
         :param number_of_samples: The number of samples to draw.
+        :param mode: If True, plot the mode of the model.
         :return: The traces.
         """
         samples = self.sample(number_of_samples)
@@ -413,12 +439,134 @@ class ProbabilisticModel(abc.ABC):
                                       name=SAMPLES_TRACE_NAME)
         expectation_trace = go.Scatter(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
                                        mode="markers", marker=dict(color=EXPECTATION_TRACE_COLOR), name=EXPECTATION_TRACE_NAME)
-        return [likelihood_trace, expectation_trace] + self.multivariate_mode_traces()
 
-    def plot_3d(self, number_of_samples: int) -> List:
+        if mode:
+            mode_traces = self.multivariate_mode_traces()
+        else:
+            mode_traces = []
+
+        return [likelihood_trace, expectation_trace] + mode_traces
+
+    def plot_2d_surface(self, number_of_samples: int) -> List:
+        """
+        Plot a two-dimensional model as a surface plot.
+
+        :param number_of_samples: The number of samples to draw.
+        :return: The traces.
+        """
+        samples = self.sample(math.ceil(math.sqrt(number_of_samples)))
+        support = self.support
+        likelihood = self.likelihood(samples)
+        max_likelihood = max(likelihood)
+
+
+        support_trace = self.bounding_box_trace_of_simple_event(support.bounding_box(), samples, 0.)
+        support_trace.showscale = False
+        support_trace.cmin = 0
+        support_trace.cmax = max_likelihood
+
+        expectation_trace = self.expectation_trace_2d_surface(max_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT)
+
+        traces = [support_trace, expectation_trace]
+
+        first = True
+        for simple_set in tqdm.tqdm(support.simple_sets):
+            for i1, i2 in itertools.product(*simple_set.values()):
+                simple_event = SimpleEvent({self.variables[0]: i1, self.variables[1]: i2})
+                trace = self.plot_2d_surface_of_simple_event(simple_event, samples)
+                if not first:
+                    trace.showscale = False
+                    first = False
+                trace.cmin = 0
+                trace.cmax = max_likelihood
+                traces.append(trace)
+
+        return traces
+
+    def expectation_trace_2d_surface(self, height: float) -> go.Scatter3d:
+        expectation = self.expectation(self.variables)
+        x = expectation[self.variables[0]]
+        y = expectation[self.variables[1]]
+        return go.Scatter3d(x=[x, x], y=[y, y],
+                            z=[0, height], mode="lines+markers", name=EXPECTATION_TRACE_NAME,)
+
+
+    def bounding_box_trace_of_simple_event(self, simple_event: SimpleEvent, samples: np.array, fill_value=0.) -> go.Surface:
+        """
+        Create a bounding box trace for a simple event.
+        :param simple_event: The simple event.
+        :param samples: The samples to read from if bounds are infinite.
+        :param fill_value: The height of the box.
+
+        :return: The trace.
+        """
+        x_variable = self.variables[0]
+        y_variable = self.variables[1]
+        min_x = simple_event[x_variable].simple_sets[0].lower
+        max_x = simple_event[x_variable].simple_sets[-1].upper
+        min_y = simple_event[y_variable].simple_sets[0].lower
+        max_y = simple_event[y_variable].simple_sets[-1].upper
+
+        min_x = min_x if min_x > -np.inf else min(samples[:, 0])
+        min_x = np.nextafter(min_x, -np.inf)
+        max_x = max_x if max_x < np.inf else max(samples[:, 0])
+        max_x = np.nextafter(max_x, np.inf)
+
+        min_y = min_y if min_y > -np.inf else min(samples[:, 1])
+        min_y = np.nextafter(min_y, -np.inf)
+        max_y = max_y if max_y < np.inf else max(samples[:, 1])
+        max_y = np.nextafter(max_y, np.inf)
+
+        return go.Surface(x=[min_x, max_x], y=[min_y, max_y], z=[[fill_value, fill_value], [fill_value, fill_value]],
+                          showscale=False)
+
+
+    def plot_2d_surface_of_simple_event(self, simple_event: SimpleEvent, samples: np.array):
+        # filter samples by this event
+        samples_of_this_event = [s for s in samples if simple_event.contains(s)]
+
+        if len(samples_of_this_event) == 0:
+            return go.Surface()
+
+        samples_of_this_event = np.stack(samples_of_this_event, axis=0)
+
+        x_variable = self.variables[0]
+        y_variable = self.variables[1]
+
+        x_support: SimpleInterval = simple_event[x_variable].simple_sets[0]
+        y_support: SimpleInterval = simple_event[y_variable].simple_sets[0]
+
+        # create border points
+        min_x = x_support.lower if x_support.lower > -np.inf else min(samples_of_this_event[:, 0])
+        min_x_next_after = np.nextafter(min_x, -np.inf)
+        max_x = x_support.upper if x_support.upper < np.inf else max(samples_of_this_event[:, 0])
+        max_x_next_after = np.nextafter(max_x, np.inf)
+        min_y = y_support.lower if y_support.lower > -np.inf else min(samples_of_this_event[:, 1])
+        min_y_next_after = np.nextafter(min_y, -np.inf)
+        max_y = y_support.upper if y_support.upper < np.inf else max(samples_of_this_event[:, 1])
+        max_y_next_after = np.nextafter(max_y, np.inf)
+
+        # create x axis
+        x = samples_of_this_event[:, 0]
+        x = np.append(x, [min_x, max_x, min_x_next_after, max_x_next_after])
+        x.sort()
+
+        # create y axis
+        y = samples_of_this_event[:, 1]
+        y = np.append(y, [min_y, max_y, min_y_next_after, max_y_next_after])
+        y.sort()
+
+        meshgrid = np.array(np.meshgrid(x, y)).T.reshape(-1, 2)
+        likelihood = self.likelihood(meshgrid).reshape(len(x), len(y))
+        trace = go.Surface(z=likelihood, x=x, y=y)
+        return trace
+
+    def plot_3d(self, number_of_samples: int, mode=False) -> List:
         """
         Plot a three-dimensional model using samples.
+
         :param number_of_samples: The number of samples to draw.
+        :param mode: If True, plot the mode of the model.
         :return: The traces.s
         """
         samples = self.sample(number_of_samples)
@@ -430,7 +578,12 @@ class ProbabilisticModel(abc.ABC):
                                          z=[expectation[self.variables[2]]], mode="markers",
                                          name=EXPECTATION_TRACE_NAME, marker=dict(color=EXPECTATION_TRACE_COLOR))
 
-        return [likelihood_trace, expectation_trace] + self.multivariate_mode_traces()
+        if mode:
+            mode_traces = self.multivariate_mode_traces()
+        else:
+            mode_traces = []
+
+        return [likelihood_trace, expectation_trace] + mode_traces
 
     def multivariate_mode_traces(self):
         """

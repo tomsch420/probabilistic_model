@@ -7,7 +7,7 @@ from random_events.product_algebra import SimpleEvent
 from random_events.variable import Variable, Symbolic
 from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
 
-from probabilistic_model.probabilistic_circuit.nx.distributions import (SymbolicDistribution)
+from probabilistic_model.probabilistic_circuit.nx.distributions import (SymbolicDistribution, UnivariateDiscreteLeaf)
 import networkx as nx
 
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit, SumUnit)
@@ -197,7 +197,8 @@ class BayesianNetwork(nx.DiGraph):
             if parent not in pointers_to_sum_units.keys():
 
                 # create the parent circuit
-                pointers_to_sum_units[parent] = parent.forward_message.as_deterministic_sum()
+                forward_of_parent = UnivariateDiscreteLeaf(parent.forward_message)
+                pointers_to_sum_units[parent] = forward_of_parent.as_deterministic_sum()
 
             # get parent and child circuits
             parent_sum_unit = pointers_to_sum_units[parent]

@@ -8,7 +8,6 @@ parts:
     chapters:
     - file: pc_guide
     - file: layered_circuit
-    - file: uniform_profiling
   - caption: Theoretical Concepts
     chapters:
     - file: probability_theory

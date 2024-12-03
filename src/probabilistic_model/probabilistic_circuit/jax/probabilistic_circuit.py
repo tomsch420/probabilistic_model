@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import collections
+from typing import Dict, Any
 
+import numpy as np
+from random_events.product_algebra import SimpleEvent
+from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Self, List
@@ -11,9 +15,10 @@ from ..nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCi
 import jax
 import tqdm
 import networkx as nx
+import jax.numpy as jnp
 
 
-class ProbabilisticCircuit:
+class ProbabilisticCircuit(SubclassJSONSerializer):
     """
     A probabilistic circuit as wrapper for a layered probabilistic model.
     """
@@ -34,6 +39,14 @@ class ProbabilisticCircuit:
 
     def log_likelihood(self, x: jax.Array) -> jax.Array:
         return self.root.log_likelihood_of_nodes(x)[:, 0]
+
+    def sample(self, amount: int) -> np.array:
+        result_array = np.full((amount, len(self.variables)), np.nan)
+        self.root.sample_from_frequencies(np.array([amount]), result_array)
+        return result_array
+
+    def probability_of_simple_event(self, event: SimpleEvent):
+        return self.root.probability_of_simple_event(event)
 
     @classmethod
     def from_nx(cls, pc: NXProbabilisticCircuit, progress_bar: bool = False) -> ProbabilisticCircuit:
@@ -64,9 +77,28 @@ class ProbabilisticCircuit:
 
         return cls(pc.variables, root)
 
-    @property
-    def trainable_parameters(self):
-        parameters = []
-        for layer in self.root.all_layers():
-            parameters.extend(layer.trainable_parameters)
-        return parameters
+    def to_nx(self, progress_bar: bool = True) -> NXProbabilisticCircuit:
+        """
+        Convert the probabilistic circuit to a networkx graph.
+
+        :param progress_bar: Whether to show a progress bar.
+        :return: The networkx graph.
+        """
+        if progress_bar:
+            number_of_edges = self.root.number_of_components
+            progress_bar = tqdm.tqdm(total=number_of_edges, desc="Converting to nx")
+        else:
+            progress_bar = None
+        return self.root.to_nx(self.variables, progress_bar)[0].probabilistic_circuit
+
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["variables"] = [variable.to_json() for variable in self.variables]
+        result["root"] = self.root.to_json()
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variables = SortedSet(Variable.from_json(variable) for variable in data["variables"])
+        root = Layer.from_json(data["root"])
+        return cls(variables, root)

@@ -39,26 +39,25 @@ import plotly.graph_objects as go
 from random_events.product_algebra import VariableMap, Event, SimpleEvent
 from random_events.variable import Continuous
 
+from probabilistic_model.distributions import *
 from probabilistic_model.probabilistic_circuit.nx.distributions import *
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_model import ProbabilisticModel
 
 
 x = Continuous("x")
 
-model = NygaDistribution(x)
-model.add_subcircuit(UniformDistribution(x, closed(-1.5, -0.5).simple_sets[0]), 0.5)
-model.add_subcircuit(UniformDistribution(x, closed(0.5, 1.5).simple_sets[0]), 0.5)
+model = SumUnit()
+model.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(x, closed(-1.5, -0.5).simple_sets[0])), 0.5)
+model.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(x, closed(0.5, 1.5).simple_sets[0])), 0.5)
+model = model.probabilistic_circuit
 go.Figure(model.plot(), layout=model.plotly_layout()).show()
 ```
 
 ```{code-cell} ipython3
-def show_structure(model):
-    pos = nx.planar_layout(model)
-    nx.draw(model, pos=pos, with_labels=True)
-    plt.show()
-    
-show_structure(model.probabilistic_circuit)
+model.plot_structure()
+plt.show()
 ```
 
 Let's now expand this distribution over time such that $x$ will flip the sign at each timestep.
@@ -69,11 +68,11 @@ import numpy as np
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 import tabulate
 
-probabilities = np.array([[0, 0.5], 
-                          [0.5, 0]])
+probabilities = np.array([[0.1, 0.4], 
+                          [0.4, 0.1]])
 
 next_model = model.__copy__()
-transition_model = MultinomialDistribution([model.latent_variable, next_model.latent_variable], probabilities)
+transition_model = MultinomialDistribution([model.root.latent_variable, next_model.root.latent_variable], probabilities)
 print(tabulate.tabulate(transition_model.to_tabulate(), tablefmt="fancy_grid"))
 ```
 
@@ -101,17 +100,17 @@ def expand_model(base_model: NygaDistribution, transition_model: ProbabilisticMo
         
         # update variables in model
         current_variable = Continuous(f"x{i}")
-        variable_update = VariableMap({current_model.variable: current_variable})
-        current_model.update_variables(variable_update)
+        variable_update = VariableMap({current_model.variables[0]: current_variable})
+        current_model.root.update_variables(variable_update)
         
         # if this is not the first iteration
         if previous_model is not None:
             
             # update variables in transition model
-            transition_model._variables = [previous_model.latent_variable, current_model.latent_variable]
+            transition_model._variables = [previous_model.root.latent_variable, current_model.root.latent_variable]
             
             # expand model
-            current_model.mount_with_interaction_terms(previous_model, transition_model)
+            current_model.root.mount_with_interaction_terms(previous_model.root, transition_model)
             
         # update previous model
         previous_model = current_model
@@ -124,7 +123,7 @@ expanded_model = expand_model(model.__copy__(), transition_model, 2)
 Let's now sample from our expanded model to get a feel on how it behaves over time.
 
 ```{code-cell} ipython3
-samples = np.array(expanded_model.probabilistic_circuit.sample(2))
+samples = np.array(expanded_model.sample(2))
 
 def plot_samples(samples: np.ndarray) -> go.Figure:
     """
@@ -160,7 +159,7 @@ plot_samples(samples).show()
 ```
 
 ```{code-cell} ipython3
-print(expanded_model.probabilistic_circuit)
+print(expanded_model)
 ```
 
 Furthermore, all inference methods still work as usually.

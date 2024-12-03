@@ -25,14 +25,12 @@ purely knowledge graph driven AI.
 A full swing takes a couple of years.
 Frank argued that there needs to be a middle ground where machine learning and knowledge graphs come together.
 
-The implementation of probabilistic models in this package is capable of doing so. 
-Knowledge graphs generate sets that describe possible assignments that match the constraints and instance knowledge of ontologies. 
+I belive that the implementation of probabilistic models in this package is capable of doing so. 
+Knowledge graphs generate sets that describe possible assignments
+that match the constraints and instance knowledge of ontologies (a random event, so to say). 
 Probability distributions describe the likelihoods of every possible solution. 
 Combining these in an efficient way provides a framework that is capable of putting the pendulum to rest.
 
-The integration of ontological reasoning into probabilistic models is currently researched by 
-[Dr. Mihai Pomarlan](https://ai.uni-bremen.de/team/mihai_pomarlan) and 
-[me](https://ai.uni-bremen.de/team/tom_schierenbeck).
-
-The integration of neural techniques into probabilistic models is an ongoing research and implementation by me.
-However, {cite}`martires2024probabilistic` wonderfully explains a very similar approach.
+The integration of ontological reasoning into probabilistic models is currently not investigated, however I would be
+happy to do so.
+If anyone is interested in this, please contact me.

@@ -4,6 +4,7 @@ doc/build
 src/probabilistic_model.egg-info
 build
 doc/_build
+
+mlruns
+mlartifacts
 .drawio
-__pycache__/
-**/__pycache__

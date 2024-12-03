@@ -1,4 +1,4 @@
-import os
+
 import unittest
 
 from typing_extensions import List

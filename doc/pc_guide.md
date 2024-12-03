@@ -21,7 +21,7 @@ First, let's start by importing the necessary modules.
 ```{code-cell} ipython3
 from random_events.interval import closed_open, closed
 from random_events.product_algebra import Continuous, Event, SimpleEvent
-from probabilistic_model.probabilistic_circuit.nx.distributions import SymbolicDistribution
+from probabilistic_model.distributions import *
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import *
 
@@ -32,8 +32,13 @@ plotly.offline.init_notebook_mode()
 ```
 
 Let's have a look at input units.
-The currently supported input units are:
-- Normal Distributions
+Input units (Leaves) are nodes that are at the end of the probabilistic circuit.
+These leaves can contain any distribution and will try to call it for the respective inference tasks.
+Hence, the distributions need to implement the methods required for the inference tasks.
+Leaf distributions have to be wrapped in a leaf node.
+
+Currently supported distributions are:
+- (Truncated) Normal Distributions
 - Uniform Distributions
 - Dirac Delta Distributions
 - Multinomial Distributions
@@ -42,39 +47,38 @@ The currently supported input units are:
 You can create them by calling the corresponding class constructors.
 For this tutorial, we will stick to normal distributions.
 
-
 ```{code-cell} ipython3
 x = Continuous("x")
 y = Continuous("y")
 
-p_x_1 = GaussianDistribution(x, 0, 1)
+p_x_1 = UnivariateContinuousLeaf(GaussianDistribution(x, 0, 1))
 ```
 
 We can always look at the graph that we have by calling the plot_structure method.
 
 ```{code-cell} ipython3
-p_x_1.plot_structure()
+p_x_1.probabilistic_circuit.plot_structure()
 ```
 
 One node only is pretty boring, so let us create a gaussian mixture model.
 
 ```{code-cell} ipython3
-p_x_2 = GaussianDistribution(x, 2, 1)
+p_x_2 = UnivariateContinuousLeaf(GaussianDistribution(x, 2, 1))
 p_x = SumUnit()
 p_x.add_subcircuit(p_x_1, 0.3)
 p_x.add_subcircuit(p_x_2, 0.7)
-p_x.plot_structure()
+p_x.probabilistic_circuit.plot_structure()
 ```
 
 Now we got a more interesting model. We can see the nodes we created and the connections between them. Even the weights are indicated by the opacity of an edge.
 Let's create a more complex model by becoming multivariate through product units.
 
 ```{code-cell} ipython3
-p_y = GaussianDistribution(y, 1, 2)
+p_y = UnivariateContinuousLeaf(GaussianDistribution(y, 1, 2))
 p_xy = ProductUnit()
 p_xy.add_subcircuit(p_x)
 p_xy.add_subcircuit(p_y)
-p_xy.plot_structure()
+p_xy.probabilistic_circuit.plot_structure()
 ```
 
 Now we have a model that is a bit more complex. 
@@ -83,7 +87,7 @@ We can now observe how conditioning modifies the structure of a probabilistic ci
 ```{code-cell} ipython3
 e = SimpleEvent({x: closed_open(0, 1),
                  y: closed_open(0, 0.5 ) | closed(1, 1.5)}).as_composite_set()
-p_xy_conditioned, _ = p_xy.conditional(e)
+p_xy_conditioned, _ = p_xy.probabilistic_circuit.conditional(e)
 p_xy_conditioned.plot_structure()
 ```
 
@@ -101,8 +105,6 @@ from probabilistic_model.bayesian_network.bayesian_network import *
 from probabilistic_model.bayesian_network.distributions import *
 from random_events.set import *
 from random_events.variable import *
-from probabilistic_model.probabilistic_circuit.nx.distributions import *
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from random_events.interval import *
 import networkx as nx
 
@@ -163,8 +165,8 @@ bn.add_edge(cpd_success, cpd_mood)
 # create P(X, Y | ObjectPosition)
 cpd_xy = ConditionalProbabilisticCircuit([x, y])
 product_unit = ProductUnit()
-product_unit.add_subcircuit(GaussianDistribution(x, 0, 1))
-product_unit.add_subcircuit(GaussianDistribution(y, 0, 1))
+product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(x, 0, 1)))
+product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(y, 0, 1)))
 default_circuit = product_unit.probabilistic_circuit
 
 cpd_xy.conditional_probability_distributions[int(ObjectPosition.LEFT)] = default_circuit.conditional(SimpleEvent({x: closed(-np.inf, -0.5)}).as_composite_set())[0]
@@ -179,6 +181,7 @@ nx.draw(bn, with_labels=True, pos=pos)
 ```
 
 ```{code-cell} ipython3
-pc_bn = bn.as_probabilistic_circuit()
-pc_bn.root.plot_structure()
+pc_bn = bn.as_probabilistic_circuit().simplify()
+pc_bn.plot_structure()
+
 ```
