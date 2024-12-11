@@ -6,10 +6,13 @@ from matplotlib import pyplot as plt
 from random_events.interval import closed, SimpleInterval
 from random_events.variable import Continuous
 
+from probabilistic_model.distributions import SymbolicDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
+from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf, UnivariateDiscreteLeaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 import plotly.graph_objects as go
+
+from probabilistic_model.utils import MissingDict
 
 
 class SymbolEnum(SetElement):
@@ -75,19 +78,22 @@ class SmallCircuitTestCast(unittest.TestCase):
         fig = go.Figure(self.model.plot(600, surface=True))
         # fig.show()
 
-from probabilistic_model.learning.jpt.variables import *
+class SymbolicPlottingTestCase(unittest.TestCase):
+    x = Symbolic("x", SymbolEnum)
+    model: ProbabilisticCircuit
 
-class PyCRAMErrorTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        probabilities = MissingDict(float)
+        probabilities[int(SymbolEnum.A)] = 7 / 20
+        probabilities[int(SymbolEnum.B)] = 13 / 20
+        cls.model = ProbabilisticCircuit()
+        l1 = UnivariateDiscreteLeaf(SymbolicDistribution(cls.x, probabilities))
+        cls.model.add_node(l1)
 
-    path = os.path.join(os.path.expanduser("~"), "Documents", "model.json")
-    with open(path, "r") as file:
-        model: ProbabilisticCircuit = ProbabilisticCircuit.from_json(json.load(file))
-
-    def test_error(self):
-        arm, grasp, rx, ry = self.model.variables
-        self.model.marginal([rx, ry])
-        print(self.model.variables)
-
+    def test_plot(self):
+        fig = go.Figure(self.model.plot(), self.model.plotly_layout())
+        # fig.show()
 
 if __name__ == '__main__':
     unittest.main()

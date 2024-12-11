@@ -313,7 +313,10 @@ class ProbabilisticModel(abc.ABC):
         :return: The traces.
         """
         if len(self.variables) == 1:
-            return self.plot_1d(number_of_samples, mode)
+            if self.variables[0].is_numeric:
+                return self.plot_1d_numeric(number_of_samples, mode)
+            else:
+                return self.plot_1d_symbolic()
         elif len(self.variables) == 2:
             if surface:
                 return self.plot_2d_surface(number_of_samples)
@@ -324,7 +327,25 @@ class ProbabilisticModel(abc.ABC):
         else:
             raise NotImplementedError("Plotting is only supported for models with up to three variables.")
 
-    def plot_1d(self, number_of_samples: int, mode=False) -> List:
+    def plot_1d_symbolic(self) -> List:
+        variable: Symbolic = self.variables[0]
+
+        # calculate probabilities of every element in the domain
+        probabilities = {element.name: self.probability_of_simple_event(SimpleEvent({variable: Set(element)}))
+                         for element in variable.domain}
+
+        maximum = max(probabilities.values())
+
+        # highlight the mode
+        color = [MODE_TRACE_COLOR if probability == maximum else PDF_TRACE_COLOR for probability in probabilities.values()]
+
+        return [go.Bar(x=list(probabilities.keys()), y=list(probabilities.values()), name=PDF_TRACE_NAME,
+                       marker=dict(color=color))]
+
+
+
+
+    def plot_1d_numeric(self, number_of_samples: int, mode=False) -> List:
         """
         Plot a one-dimensional model using samples.
 
