@@ -11,7 +11,10 @@ from typing import Tuple, Iterable, TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
+import portion
+from matplotlib import pyplot as plt
 from portion import Interval
+from random_events.interval import SimpleInterval
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.utils import SubclassJSONSerializer
@@ -25,6 +28,8 @@ import os
 #from .distributions import UnivariateDiscreteLeaf
 from ...error import IntractableError
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
+from ...utils import interval_as_array
+
 
 class Unit(SubclassJSONSerializer):
     """
@@ -818,13 +823,14 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def log_likelihood(self, events: np.array) -> np.array:
         variable_to_index_map = self.variable_to_index_map
         for layer in reversed(self.layers):
-            for unit in layer:
+            for unit in layer: # open all the procesess
                 if unit.is_leaf:
                     unit: LeafUnit
                     unit.log_likelihood(events[:, [variable_to_index_map[variable] for variable in unit.variables]])
                 else:
                     unit: InnerUnit
                     unit.log_forward()
+            # Synch trheads 1
         return self.root.result_of_current_query
 
     def cdf(self, events: np.array) -> np.array:
@@ -1245,12 +1251,11 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         Initialization function, to input a PC to create its shallow version.
         """
         result = cls()
-        shallow_pc = probabilistic_circuit
+        shallow_pc = probabilistic_circuit.__copy__()
         cls.shallowing(result, node=shallow_pc.root, presucc=None)
         result.add_nodes_from(shallow_pc.nodes)
         result.add_edges_from(shallow_pc.edges)
         result.add_weighted_edges_from(shallow_pc.weighted_edges)
-
         return result
 
     def shallowing(self, node: Unit, presucc: Unit | None):
@@ -1274,7 +1279,7 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                 probabilistic_circuit.add_edge(presucc, sum_unit, **data)
                 probabilistic_circuit.remove_edge(presucc, node)
             return
-        elif isinstance(node, SumUnit) or isinstance(node, SumUnit):
+        elif isinstance(node, SumUnit):
             for succ in succ_list:
                 self.shallowing(succ, presucc=node)
             new_succ_list = list(probabilistic_circuit.successors(node))
@@ -1300,6 +1305,9 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                 probabilistic_circuit.remove_edge(presucc, node)
                 if len(list(probabilistic_circuit.predecessors(node))) == 0:
                     probabilistic_circuit.remove_node(node)
+            elif presucc is None:
+                #None only happen if this Instance is root
+                probabilistic_circuit.remove_node(node)
             for sum_succ in new_succ_list:
                 pro_li = []
                 for pro_succ in list(probabilistic_circuit.successors(sum_succ)):
@@ -1333,13 +1341,18 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         :other: other product unit which is part of E_p
         :tolerance: float as how close to zero is zero, because of imprecision.
         """
-        supp_own = own_pro_unit.support
-        supp_other = other_pro_unit.support
-        intersection: Event = (supp_own & supp_other)
+        # supp_own = own_pro_unit.support
+        # supp_other = other_pro_unit.support
+        # intersection: Event = (supp_own & supp_other)
+        own_copy = self.subgraph_of(own_pro_unit)
+        other_copy = other.subgraph_of(other_pro_unit)
+        intersection = own_copy.support & other_copy.support
+
         if intersection.is_empty():
             return Event()
-        center = np.array([assignment.simple_sets[0].center() if isinstance(assignment, Interval)
-                                 else assignment.simple_sets[0] for variable, assignment in intersection.simple_sets[0].items()]).reshape(1, -1)
+
+        center = np.array([assignment.simple_sets[0].center() for variable, assignment in intersection.simple_sets[0].items()]).reshape(1, -1)
+
         likelihood_own = self.likelihood(center)
         likelihood_other = other.likelihood(center)
         diff = likelihood_own - likelihood_other
@@ -1354,7 +1367,6 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         :other: the other Root shallow PC node to create the E_p
         :tolerance: float as how close to zero is zero, because of imprecisions
         """
-
         progress_bar = tqdm.tqdm(total=len(self.root.subcircuits) * len(other.root.subcircuits))
         result = self.support - other.support
         for own_prod, other_prod in itertools.product(self.root.subcircuits, other.root.subcircuits):

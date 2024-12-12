@@ -3,8 +3,8 @@ from collections import defaultdict
 from random_events.variable import Continuous, Symbolic, Integer
 from sympy.solvers.diophantine.diophantine import prime_as_sum_of_two_squares
 
-from probabilistic_model.probabilistic_circuit.nx.distributions import SymbolicDistribution, IntegerDistribution, \
-    UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.distributions import SymbolicDistribution, IntegerDistribution
+from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit, SumUnit
 from probabilistic_model.probabilistic_model import ProbabilisticModel
 from probabilistic_model.learning.jpt.jpt import JPT

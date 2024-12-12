@@ -6,3 +6,6 @@ typing_extensions
 numpy<=1.26.4
 sortedcontainers
 tqdm
+
+N2G
+python-igraph

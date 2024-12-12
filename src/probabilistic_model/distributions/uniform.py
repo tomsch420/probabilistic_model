@@ -15,6 +15,22 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
         self.variable = variable
         self.interval = interval
 
+    @property
+    def label(self):
+        return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
+    @property
+    def representation(self):
+        return f"U({self.interval})"
+
+    def draw_io_style(self) -> Dict[str, Any]:
+        return {
+            "style": self.label,
+            "width": 30,
+            "height": 30,
+            "label": self.representation
+        }
+
+
     def log_likelihood_without_bounds_check(self, x: np.array) -> np.array:
         return np.full((len(x),), self.log_pdf_value())
 
