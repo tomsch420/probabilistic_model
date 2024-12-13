@@ -28,7 +28,7 @@ np.random.seed(69)
 number_of_variables = 2
 number_of_samples_per_component = 100000
 number_of_components = 2
-number_of_mixtures = 100
+number_of_mixtures = 1000
 number_of_iterations = 1000
 
 # model selection

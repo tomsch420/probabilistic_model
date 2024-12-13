@@ -20,7 +20,7 @@ from scipy.sparse import coo_matrix, coo_array, csc_array
 from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Self, Optional
 
-from . import shrink_index_array
+from . import shrink_index_array, embed_sparse_array_in_nan_array
 from .utils import copy_bcoo, sample_from_sparse_probabilities_csc, sparse_remove_rows_and_cols_where_all
 from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, Unit,
                                         ProbabilisticCircuit as NXProbabilisticCircuit)
@@ -310,7 +310,9 @@ class SumLayer(InnerLayer):
     def log_normalization_constants(self) -> jax.Array:
         result = self.concatenated_log_weights
         result.data = jnp.exp(result.data)
+        jax.debug.print("dense time")
         result = result.sum(1).todense()
+        jax.debug.print("post dense time")
         return jnp.log(result)
 
     @property
@@ -337,11 +339,10 @@ class SumLayer(InnerLayer):
             cloned_log_weights.data += child_layer_log_likelihood[cloned_log_weights.indices[:, 1]]
             cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent weights
 
-            # sum the weights for each node
-            ll = cloned_log_weights.sum(1).todense()
-
-            # sum the child layer result
-            result += ll
+            jax.debug.print("pre scatter add time")
+            result = result.at[cloned_log_weights.indices[:, 0]].add(cloned_log_weights.data,
+                                                                     indices_are_sorted=True, unique_indices=True)
+            jax.debug.print("post scatter add time")
 
         return jnp.where(result > 0, jnp.log(result) - self.log_normalization_constants, -jnp.inf)
 

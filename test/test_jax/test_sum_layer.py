@@ -69,6 +69,12 @@ class DiracSumUnitTestCase(unittest.TestCase):
                                [0., 0.,]]))
         assert jnp.allclose(ll, result)
 
+    def test_ll_single(self):
+        data = jnp.array([0])
+        l = self.sum_layer.log_likelihood_of_nodes_single(data)
+        result = jnp.log(jnp.array([0., 0.4]))
+        assert jnp.allclose(l, result)
+
 
 class NygaDistributionTestCase(unittest.TestCase):
 

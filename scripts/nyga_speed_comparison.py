@@ -34,7 +34,7 @@ warmup_iterations = 10
 path_prefix = os.path.join(os.path.expanduser("~"), "Documents")
 nx_model_path = os.path.join(path_prefix, "nx_nyga.pm")
 jax_model_path = os.path.join(path_prefix, "jax_nyga.pm")
-load_from_disc = True
+load_from_disc = False
 save_to_disc = True
 
 
@@ -103,7 +103,7 @@ data_jax = jnp.array(data)
 
 # times_nx, times_jax = eval_performance(nx_model.log_likelihood, (data, ), compiled_ll_jax, (data_jax, ), 20, 2)
 # times_nx, times_jax = eval_performance(prob_nx, event, prob_jax, event, 15, 10)
-times_nx, times_jax = eval_performance(nx_model.sample, (1000, ), jax_model.sample, (1000, ), 10, 5)
+times_nx, times_jax = eval_performance(nx_model.sample, (1000, ), jax_model.sample, (1000, ), 5, 10)
 
 time_jax = np.mean(times_jax), np.std(times_jax)
 time_nx = np.mean(times_nx), np.std(times_nx)
