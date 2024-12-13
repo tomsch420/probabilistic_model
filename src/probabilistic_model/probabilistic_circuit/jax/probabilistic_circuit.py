@@ -40,14 +40,6 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
     def log_likelihood(self, x: jax.Array) -> jax.Array:
         return self.root.log_likelihood_of_nodes(x)[:, 0]
 
-    def sample(self, amount: int) -> np.array:
-        result_array = np.full((amount, len(self.variables)), np.nan)
-        self.root.sample_from_frequencies(np.array([amount]), result_array)
-        return result_array
-
-    def probability_of_simple_event(self, event: SimpleEvent):
-        return self.root.probability_of_simple_event(event)
-
     @classmethod
     def from_nx(cls, pc: NXProbabilisticCircuit, progress_bar: bool = False) -> ProbabilisticCircuit:
         """
