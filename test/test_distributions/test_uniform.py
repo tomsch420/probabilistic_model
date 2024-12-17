@@ -1,5 +1,6 @@
 import unittest
 
+import portion
 from random_events.interval import *
 from random_events.product_algebra import *
 

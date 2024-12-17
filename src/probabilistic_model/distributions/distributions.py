@@ -7,7 +7,6 @@ from typing import Optional
 
 import numpy as np
 import plotly.graph_objects as go
-from random_events.interval import *
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import *
 from random_events.interval import *
@@ -186,7 +185,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         :param x: The data
         :return: A boolean array
         """
-        return (self.interval.lower <= x if self.interval.left == Bound.CLOSED else self.interval.lower < x)
+        return self.interval.lower <= x if self.interval.left == Bound.CLOSED else self.interval.lower < x
 
     def right_included_condition(self, x: np.array) -> np.array:
         """
@@ -194,7 +193,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
          :param x: The data
          :return: A boolean array
          """
-        return (x < self.interval.upper if self.interval.right == Bound.OPEN else x <= self.interval.upper)
+        return x < self.interval.upper if self.interval.right == Bound.OPEN else x <= self.interval.upper
 
     def included_condition(self, x: np.array) -> np.array:
         """

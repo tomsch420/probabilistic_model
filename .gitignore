@@ -8,3 +8,5 @@ doc/_build
 mlruns
 mlartifacts
 .drawio
+ *.pyc
+ __pycache__/
