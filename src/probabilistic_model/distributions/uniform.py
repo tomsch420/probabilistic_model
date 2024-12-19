@@ -15,22 +15,6 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
         self.variable = variable
         self.interval = interval
 
-    @property
-    def label(self):
-        return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
-    @property
-    def representation(self):
-        return f"U({self.interval})"
-
-    def draw_io_style(self) -> Dict[str, Any]:
-        return {
-            "style": self.label,
-            "width": 30,
-            "height": 30,
-            "label": self.representation
-        }
-
-
     def log_likelihood_without_bounds_check(self, x: np.array) -> np.array:
         return np.full((len(x),), self.log_pdf_value())
 
@@ -147,6 +131,11 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
 
     def all_union_of_mixture_points_with(self, other: Self):
+        """
+        Computes all possible union intervals of mixture points when combining two intervals.
+
+        Returns: list of closed intervals representing all mixture points between distributions
+        """
         points = SortedSet([self.interval.lower, self.interval.upper, other.interval.lower, other.interval.upper])
         result = [closed(lower, upper) for lower, upper in zip(points[:-1], points[1:])]
         return result

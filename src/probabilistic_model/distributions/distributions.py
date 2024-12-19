@@ -74,6 +74,16 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
         """
         return event.marginal(SortedSet(self.variables)).simple_sets[0][self.variable]
 
+    def label(self):
+        return
+
+    def draw_io_style(self) -> Dict[str, Any]:
+        return {
+            "style": self.label,
+            "width": 30,
+            "height": 30,
+            "label": self.__repr__()
+        }
 
 class ContinuousDistribution(UnivariateDistribution):
     """

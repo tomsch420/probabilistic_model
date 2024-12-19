@@ -13,7 +13,7 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 #from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit, ProductUnit, SimpleEvent, ShallowProbabilisticCircuit
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 import plotly.graph_objects as go
-from probabilistic_model.Monte_Carlo_Estimator import MonteCarloEstimator
+from probabilistic_model.monte_carlo_estimator import MonteCarloEstimator
 
 class SymbolEnum(SetElement):
     EMPTY_SET = -1

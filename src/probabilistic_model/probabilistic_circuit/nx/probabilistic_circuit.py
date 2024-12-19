@@ -3,11 +3,10 @@ from __future__ import annotations
 import itertools
 import math
 from abc import abstractmethod
-import random
+
 
 import queue
 import random
-from typing import Tuple, Iterable, TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
@@ -25,7 +24,7 @@ from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable
 import tqdm
 import os
 
-#from .distributions import UnivariateDiscreteLeaf
+
 from ...error import IntractableError
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ...utils import interval_as_array
@@ -222,7 +221,7 @@ class Unit(SubclassJSONSerializer):
         nx.draw_networkx_edges(subgraph, positions, alpha=alpha_for_edges)
         # draw the nodes and labels
         nx.draw_networkx_nodes(subgraph, positions)
-        labels = {node: node.representation for node in subgraph.nodes}
+        labels = {node: node.__repr__() for node in subgraph.nodes}
         nx.draw_networkx_labels(subgraph, positions, labels)
 
     def draw_io_style(self) -> Dict[str, Any]:
@@ -230,9 +229,17 @@ class Unit(SubclassJSONSerializer):
             "style": self.label,
             "width": 30,
             "height": 30,
-            "label": self.representation
+            "label": self.__repr__()
         }
+
+
 def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
+    """
+    Calculate the weights of all nodes in a probabilistic circuit.
+    Circuit (ProbabilisticCircuit): The probabilistic circuit containing nodes, edges, and weights.
+
+    Return: A dictionary containing computed weights for every node in the circuit indexed by their hash values.
+    """
     node_weights = {hash(circuit.root): [1]}
     seen_nodes = set()
     seen_nodes.add(hash(circuit.root))
@@ -270,6 +277,18 @@ class LeafUnit(Unit):
 
     def __repr__(self):
         return repr(self.distribution)
+
+
+    def label(self):
+        return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
+
+    def draw_io_style(self) -> Dict[str, Any]:
+        return {
+            "style": self.label(),
+            "width": 30,
+            "height": 30,
+            "label": self.__repr__()
+        }
 
     @property
     def variables(self) -> SortedSet:
@@ -1119,9 +1138,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return unweighted_edges
 
-
-    def plot(self, **kwargs):
-        return self.root.plot(**kwargs)
 
     def plotly_layout(self, **kwargs):
         return self.root.plotly_layout()

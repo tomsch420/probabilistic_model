@@ -444,49 +444,12 @@ class NygaDistribution(ProbabilisticCircuit):
 
         return result
 
-    def pdf_trace(self) -> go.Scatter:
-        """
-        Create a plotly trace for the probability density function.
-        """
-        x_values = []
-        y_values = []
-        for weight, subcircuit in self.weighted_subcircuits:
-            interval = subcircuit.interval
-            height = weight * subcircuit.pdf_value()
-            x_values += [interval.lower, interval.upper, None]
-            y_values += [height, height, None]
-        return go.Scatter(x=x_values, y=y_values, mode="lines", name=PDF_TRACE_NAME,
-                          line=dict(color=PDF_TRACE_COLOR))
-
-    def cdf_trace(self) -> go.Scatter:
-        """
-        Create a plotly trace for the cumulative distribution function.
-        """
-        x_values = []
-        for subcircuit in self.subcircuits:
-            x_values += [subcircuit.interval.lower, subcircuit.interval.upper]
-        x_values = sorted(x_values)
-        y_values = self.cdf(np.array(x_values).reshape(-1, 1))
-        return go.Scatter(x=x_values, y=y_values, mode="lines", name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))
-
-    def plot(self, **kwargs) -> List[go.Scatter]:
-        """
-        Plot the distribution with PDF, CDF, Expectation and Mode.
-        """
-        traces = [self.pdf_trace(), self.cdf_trace()]
-        mode, maximum_likelihood = self.mode()
-        height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
-        mode_trace = self.univariate_mode_traces(mode, height)
-        self.reset_result_of_current_query()
-
-        traces.extend(mode_trace)
-        self.reset_result_of_current_query()
-
-        traces.append(self.univariate_expectation_trace(height))
-
-        return traces
-
     def all_union_of_mixture_points_with(self, other: Self):
+        """
+        Computes all possible union intervals of mixture points when combining two intervals.
+
+        Returns: list of closed intervals representing all mixture points between distributions
+        """
         all_mixture_points = set()
         for leaf in self.leaves:
             leaf: UniformDistribution
