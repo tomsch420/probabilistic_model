@@ -110,51 +110,8 @@ class RegionGraph(nx.DiGraph):
 
         return possible_roots[0]
 
-    def as_probabilistic_circuit(self, continuous_distribution_type: Type = GaussianDistribution,
-                                 input_units: int = 5, sum_units: int = 5) -> ProbabilisticCircuit:
-        model = ProbabilisticCircuit()
 
-        # create nodes for each region
-        for region in self.regions():
-            region: Region
-            children = list(self.successors(region))
-            parents = list(self.predecessors(region))
-
-            # if the region is a leaf
-            if len(children) == 0:
-                variable = region.variables[0]
-                if isinstance(variable, Continuous):
-                    region.nodes = [UnivariateContinuousLeaf(GaussianDistribution(variable, 0, 1), model)
-                                    for _ in range(input_units)]
-
-            # region is root
-            elif len(parents) == 0:
-                region.nodes = [SumUnit(model)]
-
-            # region is in the middle
-            else:
-                region.nodes = [SumUnit(model) for _ in range(sum_units)]
-
-        # create nodes for each partition
-        for partition in self.partition_nodes():
-            children = list(self.successors(partition))
-            parent = list(self.predecessors(partition))
-            assert len(parent) == 1, "Partition should only have one parent."
-            parent = parent[0]
-
-            node_lengths = [len(child.nodes) for child in children]
-            assert (len(set(node_lengths)) == 1), "Node lengths must be all equal. Got {}".format(node_lengths)
-
-            for index in range(node_lengths[0]):
-                prod = ProductUnit(model)
-                for child in children:
-                    prod.add_subcircuit(child.nodes[index], mount=False)
-                for node in parent.nodes:
-                    node.add_subcircuit(prod, 1., mount=False)
-
-        return model
-
-    def as_jax_pc(self, continuous_distribution_type: Type = GaussianDistribution,
+    def as_probabilistic_circuit(self, continuous_distribution_type: Type = GaussianLayer,
                                  input_units: int = 5, sum_units: int = 5, key=jax.random.PRNGKey(69)) -> JPC:
         root = self.root
 
