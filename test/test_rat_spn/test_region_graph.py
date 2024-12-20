@@ -23,18 +23,12 @@ class RandomRegionGraphTestCase(unittest.TestCase):
     def test_region_graph(self):
         self.assertEqual(len(self.region_graph.nodes()), len(self.region_graph.nodes()))
 
-    def test_as_pc(self):
-        model = self.region_graph.as_probabilistic_circuit(input_units=1, sum_units=1)
-        model.plot_structure()
-        plt.show()
-        jax_model = JPC.from_nx(model)
-
     def test_as_jpc(self):
-        model = self.region_graph.as_jax_pc(input_units=10, sum_units=5)
-        print(model)
+        model = self.region_graph.as_probabilistic_circuit(input_units=10, sum_units=5)
         nx_model = model.to_nx()
         nx_model.plot_structure()
         plt.show()
+        print(len(list(node for node in nx_model.nodes() if isinstance(node, SumUnit))))
 
 
 if __name__ == '__main__':

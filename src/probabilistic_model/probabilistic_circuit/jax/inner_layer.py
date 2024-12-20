@@ -418,25 +418,15 @@ class SumLayer(InnerLayer):
 
         child_layer_nx = [cl.to_nx(variables, progress_bar) for cl in self.child_layers]
 
-        clw = self.normalized_weights
-        csc_weights = coo_matrix((clw.data, clw.indices.T), shape=clw.shape).tocsc(copy=False)
+        for log_weights, child_layer in zip(self.log_weights, child_layer_nx):
 
-        # offset for shifting through the frequencies of the node_to_child_frequency_map
-        prev_column_index = 0
-
-        for child_layer in child_layer_nx:
             # extract the weights for the child layer
-            current_weight_block: csc_array = csc_weights[:, prev_column_index:prev_column_index + len(child_layer)]
-            current_weight_block: coo_array = current_weight_block.tocoo(False)
-
-            for row, col, weight in zip(current_weight_block.row, current_weight_block.col, current_weight_block.data):
-                units[row].add_subcircuit(child_layer[col], weight)
-
+            for ((row, col), log_weight) in zip(log_weights.indices, log_weights.data):
+                units[row].add_subcircuit(child_layer[col], jnp.exp(log_weight).item())
                 if progress_bar:
                     progress_bar.update()
 
-            # shift the offset
-            prev_column_index += len(child_layer)
+        [unit.normalize() for unit in units]
 
         return units
 
@@ -574,8 +564,7 @@ class ProductLayer(InnerLayer):
             progress_bar.set_postfix_str(f"Parsing Product Layer of variables {variables_}")
 
         nx_pc = NXProbabilisticCircuit()
-        units = [ProductUnit() for _ in range(self.number_of_nodes)]
-        nx_pc.add_nodes_from(units)
+        units = [ProductUnit(nx_pc) for _ in range(self.number_of_nodes)]
 
         child_layer_nx = [cl.to_nx(variables, progress_bar) for cl in self.child_layers]
 
