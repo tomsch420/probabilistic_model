@@ -25,7 +25,7 @@ purely knowledge graph driven AI.
 A full swing takes a couple of years.
 Frank argued that there needs to be a middle ground where machine learning and knowledge graphs come together.
 
-I belive that the implementation of probabilistic models in this package is capable of doing so. 
+I believe that the implementation of probabilistic models in this package is capable of doing so. 
 Knowledge graphs generate sets that describe possible assignments
 that match the constraints and instance knowledge of ontologies (a random event, so to say). 
 Probability distributions describe the likelihoods of every possible solution. 

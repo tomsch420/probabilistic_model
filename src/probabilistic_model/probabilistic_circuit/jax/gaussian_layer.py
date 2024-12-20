@@ -41,7 +41,7 @@ class GaussianLayer(ContinuousLayer):
 
     @property
     def number_of_nodes(self) -> int:
-        return len(self.location.shape)
+        return self.location.shape[0]
 
     @property
     def scale(self) -> jnp.array:

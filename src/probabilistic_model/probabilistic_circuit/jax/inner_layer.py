@@ -142,6 +142,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
             for scope in unique_scopes:
                 nodes_of_current_type_and_scope = [node for node in nodes_of_current_type if
                                                    tuple(node.variables) == scope]
+
                 layer = layer_type.create_layer_from_nodes_with_same_type_and_scope(nodes_of_current_type_and_scope,
                                                                                     child_layers, progress_bar)
                 result.append(layer)
@@ -310,9 +311,7 @@ class SumLayer(InnerLayer):
     def log_normalization_constants(self) -> jax.Array:
         result = self.concatenated_log_weights
         result.data = jnp.exp(result.data)
-        jax.debug.print("dense time")
         result = result.sum(1).todense()
-        jax.debug.print("post dense time")
         return jnp.log(result)
 
     @property
@@ -338,13 +337,10 @@ class SumLayer(InnerLayer):
             # multiply the weights with the child layer likelihood
             cloned_log_weights.data += child_layer_log_likelihood[cloned_log_weights.indices[:, 1]]
             cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent weights
-
-            jax.debug.print("pre scatter add time")
             result = result.at[cloned_log_weights.indices[:, 0]].add(cloned_log_weights.data,
-                                                                     indices_are_sorted=True, unique_indices=True)
-            jax.debug.print("post scatter add time")
+                                                                     indices_are_sorted=False, unique_indices=False)
 
-        return jnp.where(result > 0, jnp.log(result) - self.log_normalization_constants, -jnp.inf)
+        return jnp.log(result) - self.log_normalization_constants
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
@@ -376,6 +372,11 @@ class SumLayer(InnerLayer):
         number_of_nodes = len(nodes)
 
         # filter the child layers to only contain layers with the same scope as this one
+        print(variables)
+        print([child_layer.layer.variables for child_layer in child_layers])
+        print(len(child_layers))
+        print([n.variables for n in child_layers[0].nodes])
+        print([n.variables for n in child_layers[1].nodes])
         filtered_child_layers = [child_layer for child_layer in child_layers if (child_layer.layer.variables ==
                                                                                  variables).all()]
         log_weights = []
@@ -492,11 +493,9 @@ class ProductLayer(InnerLayer):
 
     @cached_property
     def variables(self) -> jax.Array:
-        child_layer_variables = jnp.concatenate([child_layer.variables for child_layer in self.child_layers])
-        max_size = child_layer_variables.shape[0]
-        unique_values = jnp.unique(child_layer_variables, size=max_size, fill_value=-1)
-        unique_values = unique_values[unique_values >= 0]
-        return unique_values.sort()
+        variables = jnp.concatenate([child_layer.variables for child_layer in self.child_layers])
+        variables = jnp.unique(variables)
+        return variables
 
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
         result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
