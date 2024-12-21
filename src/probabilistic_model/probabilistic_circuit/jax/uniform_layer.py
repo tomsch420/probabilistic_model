@@ -107,23 +107,22 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         return cls(data["variable"], jnp.array(data["interval"]))
 
-    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        Unit]:
+    def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
+              progress_bar: Optional[tqdm.tqdm] = None) -> List[Unit]:
         variable = variables[self.variable]
 
         if progress_bar:
             progress_bar.set_postfix_str(f"Creating Uniform distributions for variable {variable.name}")
 
-        nx_pc = NXProbabilisticCircuit()
         nodes = [UnivariateContinuousLeaf(
             UniformDistribution(variable=variable,
                                 interval=random_events.interval.SimpleInterval(lower.item(), upper.item(),
                                                                                random_events.interval.Bound.OPEN,
-                                                                               random_events.interval.Bound.OPEN)))
+                                                                               random_events.interval.Bound.OPEN)),
+            result)
             for lower, upper in self.interval]
 
         if progress_bar:
             progress_bar.update(self.number_of_nodes)
 
-        nx_pc.add_nodes_from(nodes)
         return nodes

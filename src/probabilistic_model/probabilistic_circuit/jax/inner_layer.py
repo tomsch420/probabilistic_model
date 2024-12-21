@@ -374,11 +374,6 @@ class SumLayer(InnerLayer):
         number_of_nodes = len(nodes)
 
         # filter the child layers to only contain layers with the same scope as this one
-        print(variables)
-        print([child_layer.layer.variables for child_layer in child_layers])
-        print(len(child_layers))
-        print([n.variables for n in child_layers[0].nodes])
-        print([n.variables for n in child_layers[1].nodes])
         filtered_child_layers = [child_layer for child_layer in child_layers if (child_layer.layer.variables ==
                                                                                  variables).all()]
         log_weights = []
