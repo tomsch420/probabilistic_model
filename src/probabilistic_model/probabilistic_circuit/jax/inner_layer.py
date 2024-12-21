@@ -83,7 +83,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         """
         return [(depth, self)]
 
-    @property
+    @cached_property
     @abstractmethod
     def variables(self) -> jax.Array:
         """
@@ -202,7 +202,7 @@ class InnerLayer(Layer, ABC):
         super().__init__()
         self.child_layers = child_layers
 
-    @property
+    @cached_property
     @abstractmethod
     def variables(self) -> jax.Array:
         raise NotImplementedError
@@ -248,7 +248,7 @@ class InputLayer(Layer, ABC):
         super().__init__()
         self._variables = jnp.array([variable])
 
-    @property
+    @cached_property
     def variables(self) -> jax.Array:
         return self._variables
 
@@ -454,6 +454,8 @@ class ProductLayer(InnerLayer):
     The shape is (#child_layers, #nodes).
     """
 
+    _variables: Optional[jnp.array] = None
+
     def __init__(self, child_layers: List[Layer], edges: BCOO):
         """
         Initialize the product layer.
@@ -463,6 +465,7 @@ class ProductLayer(InnerLayer):
         """
         super().__init__(child_layers)
         self.edges = edges
+        self.variables
 
     def validate(self):
         assert self.edges.shape == (len(self.child_layers), self.number_of_nodes), \
@@ -481,11 +484,13 @@ class ProductLayer(InnerLayer):
     def number_of_components(self) -> int:
         return sum([cl.number_of_components for cl in self.child_layers]) + self.edges.nse
 
-    @cached_property
+    @property
     def variables(self) -> jax.Array:
-        variables = jnp.concatenate([child_layer.variables for child_layer in self.child_layers])
-        variables = jnp.unique(variables)
-        return variables
+        if self._variables is None:
+            variables = jnp.concatenate([child_layer.variables for child_layer in self.child_layers])
+            variables = jnp.unique(variables)
+            self._variables = variables
+        return self._variables
 
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
         result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
