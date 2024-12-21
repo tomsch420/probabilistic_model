@@ -37,7 +37,7 @@ class GaussianLayer(ContinuousLayer):
     def validate(self):
         assert self.location.shape == self.log_scale.shape, "The shapes of location and scale must match."
         assert self.min_scale.shape == self.log_scale.shape, "The shapes of the min_scale and scale bounds must match."
-        assert jnp.all(self.min_scale >= 0), "The scale must be positive."
+        assert jnp.all(self.min_scale >= 0), "The minimum scale must be positive."
 
     @property
     def number_of_nodes(self) -> int:
