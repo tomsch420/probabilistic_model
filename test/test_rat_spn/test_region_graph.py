@@ -21,14 +21,14 @@ class RandomRegionGraphTestCase(unittest.TestCase):
     region_graph = region_graph.create_random_region_graph()
 
     def test_region_graph(self):
-        self.assertEqual(len(self.region_graph.nodes()), len(self.region_graph.nodes()))
+        self.assertEqual(len(self.region_graph.nodes()), 19)
 
     def test_as_jpc(self):
         model = self.region_graph.as_probabilistic_circuit(input_units=10, sum_units=5)
         nx_model = model.to_nx()
         nx_model.plot_structure()
-        plt.show()
-        print(len(list(node for node in nx_model.nodes() if isinstance(node, SumUnit))))
+        # plt.show()
+        self.assertEqual(len(list(node for node in nx_model.nodes() if isinstance(node, SumUnit))), 21)
 
 
 if __name__ == '__main__':

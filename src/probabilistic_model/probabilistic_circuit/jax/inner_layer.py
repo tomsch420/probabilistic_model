@@ -104,8 +104,8 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         """
         return tuple()
 
-    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        Unit]:
+    def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
+              progress_bar: Optional[tqdm.tqdm] = None,) -> List[Unit]:
         """
         Convert the layer to a networkx circuit.
         For every node in this circuit, a corresponding node in the networkx circuit
@@ -113,7 +113,9 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         The nodes all belong to the same circuit.
 
         :param variables: The variables of the circuit.
+        :param result: The resulting circuit to write into
         :param progress_bar: A progress bar to show the progress.
+
         :return: The nodes of the networkx circuit.
         """
         raise NotImplementedError
@@ -404,25 +406,23 @@ class SumLayer(InnerLayer):
         sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
         return NXConverterLayer(sum_layer, nodes, result_hash_remap)
 
-    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        Unit]:
+    def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
+              progress_bar: Optional[tqdm.tqdm] = None) -> List[Unit]:
 
         variables_ = [variables[i] for i in self.variables]
 
         if progress_bar:
             progress_bar.set_postfix_str(f"Parsing Sum Layer for variables {variables_}")
 
-        nx_pc = NXProbabilisticCircuit()
-        units = [SumUnit() for _ in range(self.number_of_nodes)]
-        nx_pc.add_nodes_from(units)
+        units = [SumUnit(result) for _ in range(self.number_of_nodes)]
 
-        child_layer_nx = [cl.to_nx(variables, progress_bar) for cl in self.child_layers]
+        child_layer_nx = [cl.to_nx(variables, result, progress_bar) for cl in self.child_layers]
 
         for log_weights, child_layer in zip(self.log_weights, child_layer_nx):
 
             # extract the weights for the child layer
             for ((row, col), log_weight) in zip(log_weights.indices, log_weights.data):
-                units[row].add_subcircuit(child_layer[col], jnp.exp(log_weight).item())
+                units[row].add_subcircuit(child_layer[col], jnp.exp(log_weight).item(), False)
                 if progress_bar:
                     progress_bar.update()
 
@@ -556,20 +556,22 @@ class ProductLayer(InnerLayer):
         layer = cls([cl.layer for cl in child_layers], edges)
         return NXConverterLayer(layer, nodes, hash_remap)
 
-    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        Unit]:
+    def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
+              progress_bar: Optional[tqdm.tqdm] = None) -> List[Unit]:
+
+        if result is None:
+            result = NXProbabilisticCircuit()
 
         variables_ = [variables[i] for i in self.variables]
         if progress_bar:
             progress_bar.set_postfix_str(f"Parsing Product Layer of variables {variables_}")
 
-        nx_pc = NXProbabilisticCircuit()
-        units = [ProductUnit(nx_pc) for _ in range(self.number_of_nodes)]
+        units = [ProductUnit(result) for _ in range(self.number_of_nodes)]
 
-        child_layer_nx = [cl.to_nx(variables, progress_bar) for cl in self.child_layers]
-
+        child_layer_nx = [cl.to_nx(variables, result, progress_bar) for cl in self.child_layers]
         for (row, col), data in zip(self.edges.indices, self.edges.data):
-            units[col].add_subcircuit(child_layer_nx[row][data])
+            units[col].add_subcircuit(child_layer_nx[row][data], mount=False)
+
             if progress_bar:
                 progress_bar.update()
 

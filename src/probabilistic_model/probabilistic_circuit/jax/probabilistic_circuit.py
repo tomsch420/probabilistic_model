@@ -81,7 +81,9 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
             progress_bar = tqdm.tqdm(total=number_of_edges, desc="Converting to nx")
         else:
             progress_bar = None
-        return self.root.to_nx(self.variables, progress_bar)[0].probabilistic_circuit
+        result = NXProbabilisticCircuit()
+        self.root.to_nx(self.variables, result, progress_bar)
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()

@@ -140,17 +140,16 @@ class DiracDeltaLayer(ContinuousLayer):
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         return cls(data["variable"], jnp.array(data["location"]), jnp.array(data["density_cap"]))
 
-    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
+    def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
+              progress_bar: Optional[tqdm.tqdm] = None) -> List[
         Unit]:
-        nx_pc = NXProbabilisticCircuit()
 
         variable = variables[self.variable]
 
         if progress_bar:
             progress_bar.set_postfix_str(f"Creating Dirac Delta distributions for variable {variable.name}")
 
-        nodes = [UnivariateContinuousLeaf(DiracDeltaDistribution(variable, location.item(), density_cap.item()))
+        nodes = [UnivariateContinuousLeaf(DiracDeltaDistribution(variable, location.item(), density_cap.item()), result)
                  for location, density_cap in zip(self.location, self.density_cap)]
         progress_bar.update(self.number_of_nodes)
-        nx_pc.add_nodes_from(nodes)
         return nodes

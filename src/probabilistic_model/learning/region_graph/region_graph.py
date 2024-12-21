@@ -133,14 +133,13 @@ class RegionGraph(nx.DiGraph):
                         else:
                             raise NotImplementedError
 
+                    # if the region is root or in the middle
                     else:
                         # if the region is root
                         if len(parents) == 0:
-                            current_sum_units = 1
-                        # if the region is in the middle
-                        else:
-                            current_sum_units = sum_units
-                        log_weights = [BCOO.fromdense(jax.random.uniform(key, shape=(current_sum_units, child.layer.number_of_nodes), minval=0., maxval=1.)) for child in children]
+                            sum_units = 1
+
+                        log_weights = [BCOO.fromdense(jax.random.uniform(key, shape=(sum_units, child.layer.number_of_nodes), minval=0., maxval=1.)) for child in children]
                         for log_weight in log_weights:
                             log_weight.data = jnp.log(log_weight.data)
                         node.layer = SumLayer([child.layer for child in children], log_weights=log_weights)
@@ -153,7 +152,7 @@ class RegionGraph(nx.DiGraph):
 
                     edges = jnp.arange(node_lengths[0]).reshape(1, -1).repeat(len(children), axis=0)
                     sparse_edges = BCOO.fromdense(jnp.ones_like(edges))
-                    sparse_edges.values = edges
+                    sparse_edges.data = edges.flatten()
                     node.layer = ProductLayer([child.layer for child in children], sparse_edges)
                     node.layer.validate()
 

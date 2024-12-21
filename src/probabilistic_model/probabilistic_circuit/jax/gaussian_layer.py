@@ -80,20 +80,18 @@ class GaussianLayer(ContinuousLayer):
         return cls(data["variable"], jnp.array(data["location"]), jnp.array(data["scale"]),
                    jnp.array(data["min_scale"]))
 
-    def to_nx(self, variables: SortedSet[Variable], progress_bar: Optional[tqdm.tqdm] = None) -> List[
-        Unit]:
+    def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
+              progress_bar: Optional[tqdm.tqdm] = None) -> List[Unit]:
         variable = variables[self.variable]
 
         if progress_bar:
             progress_bar.set_postfix_str(f"Creating Gaussian distributions for variable {variable.name}")
 
-        nx_pc = NXProbabilisticCircuit()
         nodes = [UnivariateContinuousLeaf(
-            GaussianDistribution(variable=variable, location=location.item(), scale=scale.item()))
+            GaussianDistribution(variable=variable, location=location.item(), scale=scale.item()),result)
             for location, scale in zip(self.location, self.scale)]
 
         if progress_bar:
             progress_bar.update(self.number_of_nodes)
 
-        nx_pc.add_nodes_from(nodes)
         return nodes
