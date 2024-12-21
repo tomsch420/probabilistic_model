@@ -110,7 +110,7 @@ event = SimpleEvent(VariableMap({variable: closed(0, 0.1) | closed(0.2, 0.3) | c
 # ll = jax_model.log_likelihood(samples)
 # assert (ll > -jnp.inf).all()
 
-times_nx, times_jax = eval_performance(nx_model.log_likelihood, (data, ), compiled_ll_jax, (data_jax, ), 10, 5)
+times_nx, times_jax = eval_performance(nx_model.log_likelihood, (data, ), compiled_ll_jax, (data_jax, ), 15, 10)
 # times_nx, times_jax = eval_performance(nx_model.probability_of_simple_event, (event,), jax_model.probability_of_simple_event, (event,), 20, 10)
 # times_nx, times_jax = eval_performance(nx_model.sample, (10000, ), jax_model.sample, (10000,), 10, 5)
 

@@ -40,14 +40,6 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
     def log_likelihood(self, x: jax.Array) -> jax.Array:
         return self.root.log_likelihood_of_nodes(x)[:, 0]
 
-    def sample(self, amount: int) -> np.array:
-        result_array = np.full((amount, len(self.variables)), np.nan)
-        self.root.sample_from_frequencies(np.array([amount]), result_array)
-        return result_array
-
-    def probability_of_simple_event(self, event: SimpleEvent):
-        return self.root.probability_of_simple_event(event)
-
     @classmethod
     def from_nx(cls, pc: NXProbabilisticCircuit, progress_bar: bool = False) -> ProbabilisticCircuit:
         """
@@ -89,7 +81,9 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
             progress_bar = tqdm.tqdm(total=number_of_edges, desc="Converting to nx")
         else:
             progress_bar = None
-        return self.root.to_nx(self.variables, progress_bar)[0].probabilistic_circuit
+        result = NXProbabilisticCircuit()
+        self.root.to_nx(self.variables, result, progress_bar)
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
