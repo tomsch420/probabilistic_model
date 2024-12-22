@@ -3,12 +3,13 @@ from collections import deque
 import networkx as nx
 import numpy as np
 from jax.experimental.sparse import BCOO
-from random_events.variable import Continuous
+from random_events.variable import Continuous, Symbolic
 from sortedcontainers import SortedSet
 from typing_extensions import List, Self, Type
 
 from ...distributions import GaussianDistribution
 from ...probabilistic_circuit.jax import SumLayer, ProductLayer
+from ...probabilistic_circuit.jax.discrete_layer import DiscreteLayer
 from ...probabilistic_circuit.jax.gaussian_layer import GaussianLayer
 from ...probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit, ProductUnit
 from ...probabilistic_circuit.nx.distributions.distributions import UnivariateContinuousLeaf
@@ -130,8 +131,14 @@ class RegionGraph(nx.DiGraph):
                             log_scale = jnp.log(jax.random.uniform(key, shape=(input_units,), minval=0.01, maxval=1.))
                             node.layer = GaussianLayer(variable_index, location=location, log_scale=log_scale, min_scale=jnp.full_like(location, 0.01))
                             node.layer.validate()
+                        elif isinstance(variable, Symbolic):
+                            log_probabilities = jax.random.uniform(key,
+                                                                   shape=(input_units, len(variable.domain.simple_sets)),
+                                                                   minval=0., maxval=1.)
+                            log_probabilities = jnp.log(log_probabilities)
+                            node.layer = DiscreteLayer(variable_index, log_probabilities=log_probabilities)
                         else:
-                            raise NotImplementedError
+                            raise ValueError(f"Variable {variable} is not supported.")
 
                     # if the region is root or in the middle
                     else:

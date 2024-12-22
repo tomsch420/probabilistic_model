@@ -6,3 +6,4 @@ typing_extensions
 numpy<=1.26.4
 sortedcontainers
 tqdm
+tabulate
