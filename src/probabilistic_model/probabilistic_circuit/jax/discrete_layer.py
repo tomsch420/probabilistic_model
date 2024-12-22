@@ -56,7 +56,7 @@ class DiscreteLayer(InputLayer):
         return self.log_probabilities.shape[0]
 
     def log_likelihood_of_nodes_single(self, x: jnp.array) -> jnp.array:
-        return self.log_probabilities.T[x.astype(int)] - self.log_normalization_constant
+        return self.normalized_log_probabilities[:, x.astype(int)][:, 0]
 
 
     @classmethod

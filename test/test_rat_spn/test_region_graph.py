@@ -2,10 +2,7 @@ import random
 import unittest
 
 from jax import tree_flatten
-from matplotlib import pyplot as plt
-from networkx.drawing.nx_agraph import graphviz_layout
-from random_events.variable import Continuous
-import pydot
+
 from probabilistic_model.learning.region_graph.region_graph import *
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit as JPC
 from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer

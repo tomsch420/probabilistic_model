@@ -35,9 +35,9 @@ class UniformLayerTestCaste(unittest.TestCase):
         intervals = jnp.vstack([simple_interval_to_open_array(i) for i in [ioo, ioc, ico, icc]])
         p_x = UniformLayer(0, intervals)
 
-        data = jnp.array([[0], [1]])
+        data = jnp.array([[0], [1]]).astype(float)
         ll = jnp.exp(p_x.log_likelihood_of_nodes(data))
-        result = jnp.array([[0, 0, 1, 1], [0, 1, 0, 1]])
+        result = jnp.array([[0, 0, 1, 1], [0, 1, 0, 1]]).astype(float)
         self.assertTrue(jnp.allclose(ll, result))
 
     def test_to_json(self):

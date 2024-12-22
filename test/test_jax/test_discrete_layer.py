@@ -43,6 +43,13 @@ class DiscreteLayerTestCase(unittest.TestCase):
         correct = jnp.log(jnp.array([.0, 3/7]))
         self.assertTrue(jnp.allclose(result, correct, atol=1e-3))
 
+        x2 = jnp.array([0., 1., 2]).reshape(-1, 1)
+        result = self.model.log_likelihood_of_nodes(x2)
+        self.assertEqual(result.shape, (3, 2))
+        correct = jnp.log(jnp.array([[0., 3./7.], [1./3., 4./7.], [2./3., 0.]]))
+        self.assertTrue(jnp.allclose(result, correct, atol=1e-3))
+
+
     def test_from_nx(self):
 
         p1 = MissingDict(float, {Animal.CAT: 0., Animal.DOG: 1, Animal.FISH: 2})
