@@ -128,13 +128,13 @@ class RegionGraph(nx.DiGraph):
                         variable_index = self.variables.index(variable)
                         if isinstance(variable, Continuous):
                             location = jax.random.uniform(key, shape=(input_units,), minval=-1., maxval=1.)
-                            log_scale = jnp.log(jax.random.uniform(key, shape=(input_units,), minval=0.01, maxval=1.))
+                            log_scale = jnp.log(jax.random.uniform(key, shape=(input_units,), minval=0.5, maxval=3.))
                             node.layer = GaussianLayer(variable_index, location=location, log_scale=log_scale, min_scale=jnp.full_like(location, 0.01))
                             node.layer.validate()
                         elif isinstance(variable, Symbolic):
                             log_probabilities = jax.random.uniform(key,
                                                                    shape=(input_units, len(variable.domain.simple_sets)),
-                                                                   minval=0., maxval=1.)
+                                                                   minval=0.1, maxval=1.)
                             log_probabilities = jnp.log(log_probabilities)
                             node.layer = DiscreteLayer(variable_index, log_probabilities=log_probabilities)
                         else:
@@ -146,7 +146,7 @@ class RegionGraph(nx.DiGraph):
                         if len(parents) == 0:
                             sum_units = 1
 
-                        log_weights = [BCOO.fromdense(jax.random.uniform(key, shape=(sum_units, child.layer.number_of_nodes), minval=0., maxval=1.)) for child in children]
+                        log_weights = [BCOO.fromdense(jax.random.uniform(key, shape=(sum_units, child.layer.number_of_nodes), minval=0.1, maxval=1.)) for child in children]
                         for log_weight in log_weights:
                             log_weight.data = jnp.log(log_weight.data)
                         node.layer = SumLayer([child.layer for child in children], log_weights=log_weights)

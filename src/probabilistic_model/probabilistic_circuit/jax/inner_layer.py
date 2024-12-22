@@ -278,6 +278,7 @@ class SumLayer(InnerLayer):
         for log_weights, child_layer in self.log_weighted_child_layers:
             assert log_weights.shape[
                        1] == child_layer.number_of_nodes, "The number of nodes must match the number of weights."
+            assert (child_layer.variables == self.variables).all(), "The variables must match."
 
     @cached_property
     def variables(self) -> jax.Array:
