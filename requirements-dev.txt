@@ -1,5 +1,4 @@
 -r requirements.txt
-pyjpt
 pandas
 graphviz
 scikit-learn
@@ -9,3 +8,4 @@ jaxtyping
 equinox
 mlflow
 optax
+pyjpt
