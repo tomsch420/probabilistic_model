@@ -91,7 +91,7 @@ class GaussianLayer(ContinuousLayer):
             progress_bar.set_postfix_str(f"Creating Gaussian distributions for variable {variable.name}")
 
         nodes = [UnivariateContinuousLeaf(
-            GaussianDistribution(variable=variable, location=location.item(), scale=scale.item()),result)
+            GaussianDistribution(variable=variable, location=location.item(), scale=scale.item()), result)
             for location, scale in zip(self.location, self.scale)]
 
         if progress_bar:

@@ -97,7 +97,7 @@ class DiscreteLayer(InputLayer):
             progress_bar.set_postfix_str(f"Creating discrete distributions for variable {variable.name}")
 
         nodes = [UnivariateDiscreteLeaf(SymbolicDistribution(variable, MissingDict(float,
-            {domain(state): value for state, value in enumerate(jnp.exp(log_probabilities))})), result)
+            {state: value.item() for state, value in enumerate(jnp.exp(log_probabilities))})), result)
                  for log_probabilities in self.normalized_log_probabilities]
 
         if progress_bar:

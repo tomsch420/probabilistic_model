@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import abc
-import itertools
 import math
 
-import numpy as np
+import tqdm
 from random_events.interval import closed, SimpleInterval
 from random_events.product_algebra import *
 from random_events.set import *
@@ -12,8 +11,6 @@ from random_events.variable import *
 
 from .constants import *
 from .error import IntractableError, UndefinedOperationError
-import tqdm
-
 from .utils import neighbouring_points
 
 # Type definitions
@@ -331,19 +328,17 @@ class ProbabilisticModel(abc.ABC):
         variable: Symbolic = self.variables[0]
 
         # calculate probabilities of every element in the domain
-        probabilities = {element.name: self.probability_of_simple_event(SimpleEvent({variable: Set(element)}))
-                         for element in variable.domain}
+        probabilities = {element.name: self.probability_of_simple_event(SimpleEvent({variable: element})) for element in
+                         variable.domain}
 
         maximum = max(probabilities.values())
 
         # highlight the mode
-        color = [MODE_TRACE_COLOR if probability == maximum else PDF_TRACE_COLOR for probability in probabilities.values()]
+        color = [MODE_TRACE_COLOR if probability == maximum else PDF_TRACE_COLOR for probability in
+                 probabilities.values()]
 
         return [go.Bar(x=list(probabilities.keys()), y=list(probabilities.values()), name=PDF_TRACE_NAME,
                        marker=dict(color=color))]
-
-
-
 
     def plot_1d_numeric(self, number_of_samples: int, mode=False) -> List:
         """
@@ -378,8 +373,8 @@ class ProbabilisticModel(abc.ABC):
         # add cdf trace if implemented
         try:
             cdf = self.cdf(samples.reshape(-1, 1))
-            cdf_trace = [go.Scatter(x=samples, y=cdf, mode="lines", legendgroup="CDF",
-                                    name=CDF_TRACE_NAME, line=dict(color=CDF_TRACE_COLOR))]
+            cdf_trace = [go.Scatter(x=samples, y=cdf, mode="lines", legendgroup="CDF", name=CDF_TRACE_NAME,
+                                    line=dict(color=CDF_TRACE_COLOR))]
         except UndefinedOperationError:
             cdf_trace = []
 
@@ -399,8 +394,9 @@ class ProbabilisticModel(abc.ABC):
         height = maximum_likelihood * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
         mode_traces = self.univariate_mode_traces(mode, height)
 
-        return ([pdf_trace, self.univariate_expectation_trace(height)] + mode_traces +
-                self.univariate_complement_of_support_trace(min(samples), max(samples)) + cdf_trace)
+        return ([pdf_trace,
+                 self.univariate_expectation_trace(height)] + mode_traces + self.univariate_complement_of_support_trace(
+            min(samples), max(samples)) + cdf_trace)
 
     def univariate_expectation_trace(self, height: float) -> go.Scatter:
         """
@@ -459,7 +455,8 @@ class ProbabilisticModel(abc.ABC):
         likelihood_trace = go.Scatter(x=samples[:, 0], y=samples[:, 1], mode="markers", marker=dict(color=likelihood),
                                       name=SAMPLES_TRACE_NAME)
         expectation_trace = go.Scatter(x=[expectation[self.variables[0]]], y=[expectation[self.variables[1]]],
-                                       mode="markers", marker=dict(color=EXPECTATION_TRACE_COLOR), name=EXPECTATION_TRACE_NAME)
+                                       mode="markers", marker=dict(color=EXPECTATION_TRACE_COLOR),
+                                       name=EXPECTATION_TRACE_NAME)
 
         if mode:
             mode_traces = self.multivariate_mode_traces()
@@ -479,7 +476,6 @@ class ProbabilisticModel(abc.ABC):
         support = self.support
         likelihood = self.likelihood(samples)
         max_likelihood = max(likelihood)
-
 
         support_trace = self.bounding_box_trace_of_simple_event(support.bounding_box(), samples, 0.)
         support_trace.showscale = False
@@ -508,11 +504,10 @@ class ProbabilisticModel(abc.ABC):
         expectation = self.expectation(self.variables)
         x = expectation[self.variables[0]]
         y = expectation[self.variables[1]]
-        return go.Scatter3d(x=[x, x], y=[y, y],
-                            z=[0, height], mode="lines+markers", name=EXPECTATION_TRACE_NAME,)
+        return go.Scatter3d(x=[x, x], y=[y, y], z=[0, height], mode="lines+markers", name=EXPECTATION_TRACE_NAME, )
 
-
-    def bounding_box_trace_of_simple_event(self, simple_event: SimpleEvent, samples: np.array, fill_value=0.) -> go.Surface:
+    def bounding_box_trace_of_simple_event(self, simple_event: SimpleEvent, samples: np.array,
+                                           fill_value=0.) -> go.Surface:
         """
         Create a bounding box trace for a simple event.
         :param simple_event: The simple event.
@@ -540,7 +535,6 @@ class ProbabilisticModel(abc.ABC):
 
         return go.Surface(x=[min_x, max_x], y=[min_y, max_y], z=[[fill_value, fill_value], [fill_value, fill_value]],
                           showscale=False)
-
 
     def plot_2d_surface_of_simple_event(self, simple_event: SimpleEvent, samples: np.array):
         # filter samples by this event
