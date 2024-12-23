@@ -4,11 +4,12 @@ import collections
 from typing import Dict, Any
 
 import numpy as np
+import optax
 from random_events.product_algebra import SimpleEvent
 from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
-from typing_extensions import Tuple, Self, List
+from typing_extensions import Tuple, Self, List, Optional
 
 from .inner_layer import Layer, NXConverterLayer
 from ..nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
@@ -16,6 +17,7 @@ import jax
 import tqdm
 import networkx as nx
 import jax.numpy as jnp
+import equinox as eqx
 
 
 class ProbabilisticCircuit(SubclassJSONSerializer):
@@ -96,3 +98,36 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
         variables = SortedSet(Variable.from_json(variable) for variable in data["variables"])
         root = Layer.from_json(data["root"])
         return cls(variables, root)
+
+    def fit_generative(self, data: jax.Array, epochs: int = 100,
+                       optimizer: Optional[optax.GradientTransformation] = None) -> None:
+        """
+        Fit the circuit to the data using generative training with the negative average log-likelihood as loss.
+
+        :param data: The data.
+        :param epochs: The number of epochs.
+        :param optimizer: The optimizer to use.
+        If `None`, the Adam optimizer with a learning rate of 1e-3 is used.
+        """
+
+        @eqx.filter_jit
+        def loss(p, x):
+            ll = p.log_likelihood_of_nodes(x)
+            return -jnp.mean(ll)
+
+        if optimizer is None:
+            optimizer = optax.adam(1e-3)
+
+        opt_state = optimizer.init(eqx.filter(self.root, eqx.is_inexact_array))
+
+        progress_bar = tqdm.tqdm(range(epochs), desc="Fitting")
+
+        for epoch in progress_bar:
+            loss_value, grads = eqx.filter_value_and_grad(loss)(self.root, data)
+
+            updates, opt_state = optimizer.update(
+                grads, opt_state, eqx.filter(self.root, eqx.is_inexact_array)
+            )
+            self.root = eqx.apply_updates(self.root, updates)
+            progress_bar.set_postfix_str(f"Loss: {loss_value}")
+

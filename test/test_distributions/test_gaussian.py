@@ -237,7 +237,7 @@ class TruncatedGaussianDistributionJapaneseManTestCase(unittest.TestCase):
         raw_moment = result[self.distribution.variable]
         self.assertAlmostEqual(raw_moment, 0, delta=0.01)
 
-@unittest.skip("Skip this test")
+
 class TruncatedGaussianSamplingTestCase(unittest.TestCase):
     x = Continuous("x")
 
