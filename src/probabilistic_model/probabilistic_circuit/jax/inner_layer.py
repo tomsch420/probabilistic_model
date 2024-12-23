@@ -42,6 +42,21 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
     Layers have the same scope (set of variables) for every node in them.
     """
 
+    _variables: Optional[jnp.array] = None
+    """
+    The variable indices of the layer.
+    """
+
+    @property
+    @abstractmethod
+    def variables(self) -> jax.Array:
+        raise NotImplementedError
+
+    @variables.setter
+    @abstractmethod
+    def variables(self, value: jax.Array):
+        raise NotImplementedError
+
     @abstractmethod
     def log_likelihood_of_nodes_single(self, x: jnp.array) -> jnp.array:
         """
@@ -82,14 +97,6 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         :return: A list of tuples of all layers in the circuit with their depth.
         """
         return [(depth, self)]
-
-    @cached_property
-    @abstractmethod
-    def variables(self) -> jax.Array:
-        """
-        :return: The variable indices of this layer.
-        """
-        raise NotImplementedError
 
     def __deepcopy__(self) -> 'Layer':
         """
@@ -201,11 +208,11 @@ class InnerLayer(Layer, ABC):
     def __init__(self, child_layers: List[Layer]):
         super().__init__()
         self.child_layers = child_layers
+        self.variables # initialize the variables of the layer
 
-    @cached_property
-    @abstractmethod
-    def variables(self) -> jax.Array:
-        raise NotImplementedError
+    @Layer.variables.setter
+    def variables(self, value: jnp.array):
+        raise AttributeError("Variables of inner layers are read-only.")
 
     def all_layers(self) -> List[Layer]:
         """
@@ -239,18 +246,17 @@ class InputLayer(Layer, ABC):
     calculation works without bottleneck statements like if/else or loops.
     """
 
-    _variables: jnp.array = eqx.field(static=True)
-    """
-    The variable indices of the layer.
-    """
-
     def __init__(self, variable: int):
         super().__init__()
         self._variables = jnp.array([variable])
 
-    @cached_property
+    @property
     def variables(self) -> jax.Array:
         return self._variables
+
+    @variables.setter
+    def variables(self, value: jax.Array):
+        self._variables = value
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
@@ -280,9 +286,11 @@ class SumLayer(InnerLayer):
                        1] == child_layer.number_of_nodes, "The number of nodes must match the number of weights."
             assert (child_layer.variables == self.variables).all(), "The variables must match."
 
-    @cached_property
+    @property
     def variables(self) -> jax.Array:
-        return self.child_layers[0].variables
+        if self._variables is None:
+            self._variables = self.child_layers[0].variables
+        return self._variables
 
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
@@ -449,8 +457,6 @@ class ProductLayer(InnerLayer):
 
     The shape is (#child_layers, #nodes).
     """
-
-    _variables: Optional[jnp.array] = None
 
     def __init__(self, child_layers: List[Layer], edges: BCOO):
         """
