@@ -91,14 +91,13 @@ class DiscreteLayer(InputLayer):
                 progress_bar: Optional[tqdm.tqdm] = None) -> List[Unit]:
 
         variable = variables[self.variable]
-        domain = variable.domain_type()
 
         if progress_bar:
             progress_bar.set_postfix_str(f"Creating discrete distributions for variable {variable.name}")
 
         nodes = [UnivariateDiscreteLeaf(SymbolicDistribution(variable, MissingDict(float,
-            {state: value.item() for state, value in enumerate(jnp.exp(log_probabilities))})), result)
-                 for log_probabilities in self.normalized_log_probabilities]
+            {state: value.item() for state, value in enumerate(log_probabilities)})), result)
+                 for log_probabilities in jnp.exp(self.normalized_log_probabilities)]
 
         if progress_bar:
             progress_bar.update(self.number_of_nodes)

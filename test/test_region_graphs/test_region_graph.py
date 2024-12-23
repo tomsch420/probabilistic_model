@@ -3,9 +3,11 @@ import unittest
 
 import optax
 from matplotlib import pyplot as plt
+from random_events.product_algebra import SimpleEvent
 from random_events.set import SetElement
-
+import plotly.graph_objects as go
 from probabilistic_model.learning.region_graph.region_graph import *
+from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
 
 np.random.seed(420)
 random.seed(420)
@@ -34,10 +36,31 @@ class RandomRegionGraphTestCase(unittest.TestCase):
         self.assertEqual(len(list(node for node in nx_model.nodes() if isinstance(node, SumUnit))), 21)
 
 
+class RandomRegionGraphLearningTestCase(unittest.TestCase):
+    variables = SortedSet([Continuous(str(i)) for i in range(8)] + [Symbolic("target", Target)])
+    region_graph = RegionGraph(variables, partitions=2, depth=2, repetitions=2)
+    region_graph = region_graph.create_random_region_graph()
+
+    def test_learning(self):
+        data = np.random.uniform(0, 1, (100, len(self.variables)))
+        data = jnp.array(data)
+        model = self.region_graph.as_probabilistic_circuit(input_units=5, sum_units=5)
+        model.fit(data, epochs=10, optimizer=optax.adamw(0.01))
+        nx_model = model.to_nx()
+        for node in nx_model.nodes():
+            if isinstance(node, SumUnit):
+                self.assertAlmostEqual(sum(node.weights), 1.)
+            elif isinstance(node, UnivariateDiscreteLeaf):
+                self.assertAlmostEqual(sum(node.distribution.probabilities), 1.)
+            elif isinstance(node, UnivariateContinuousLeaf):
+                distribution: GaussianDistribution = node.distribution
+                self.assertGreater(distribution.scale, 0.)
+
+
 class ClassificationTestCase(unittest.TestCase):
     features = SortedSet([Continuous(f"x{i}") for i in range(4)])
     target = Symbolic("target", Target)
-    region_graph = RegionGraph(features, partitions=2, depth=1, repetitions=2, classes=2)
+    region_graph = RegionGraph(features, partitions=2, depth=1, repetitions=6, classes=2)
     region_graph = region_graph.create_random_region_graph()
 
     def test_classification(self):
@@ -55,20 +78,10 @@ class ClassificationTestCase(unittest.TestCase):
         nx_pc = pc.to_nx()
         self.assertTrue(nx_pc.is_decomposable())
 
-
-
-
-class RandomRegionGraphLearningTestCase(unittest.TestCase):
-    variables = SortedSet([Continuous(str(i)) for i in range(4)])
-    region_graph = RegionGraph(variables, partitions=2, depth=1, repetitions=2)
-    region_graph = region_graph.create_random_region_graph()
-
-    def test_learning(self):
-        data = np.random.uniform(0, 1, (10000, len(self.variables)))
-        data = jnp.array(data)
-        model = self.region_graph.as_probabilistic_circuit(input_units=5, sum_units=5)
-        model.fit(data, epochs=10, optimizer=optax.adamw(0.01))
-
+        p_target = nx_pc.marginal(SortedSet([self.target]))
+        probabilities = {element.name: p_target.probability_of_simple_event(SimpleEvent({self.target: element})) for
+                         element in self.target.domain}
+        self.assertAlmostEqual(sum(probabilities.values()), 1.0)
 
 if __name__ == '__main__':
     unittest.main()

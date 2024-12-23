@@ -161,11 +161,10 @@ class RegionGraph(nx.DiGraph):
         return possible_roots[0]
 
 
-    def as_probabilistic_circuit(self, continuous_distribution_type: Type = GaussianLayer,
-                                 input_units: int = 5, sum_units: int = 5, key=jax.random.PRNGKey(69)) -> Union[JPC, ClassificationCircuit]:
+    def as_probabilistic_circuit(self, input_units: int = 5, sum_units: int = 5,
+                                 key=jax.random.PRNGKey(69)) -> Union[JPC, ClassificationCircuit]:
         """
         Convert the region graph to a jax probabilistic circuit.
-        :param continuous_distribution_type:
         :param input_units: The number of input units to use in each input layer.
         :param sum_units: The number of sum units to use in each sum layer.
         :param key: The random key to use for all trainable parameters.
@@ -186,7 +185,8 @@ class RegionGraph(nx.DiGraph):
                         if isinstance(variable, Continuous):
                             location = jax.random.uniform(key, shape=(input_units,), minval=-1., maxval=1.)
                             log_scale = jnp.log(jax.random.uniform(key, shape=(input_units,), minval=0.5, maxval=3.))
-                            node.layer = GaussianLayer(variable_index, location=location, log_scale=log_scale, min_scale=jnp.full_like(location, 0.01))
+                            node.layer = GaussianLayer(variable_index, location=location, log_scale=log_scale,
+                                                       min_scale=jnp.full_like(location, 0.1))
                             node.layer.validate()
                         elif isinstance(variable, Symbolic):
                             log_probabilities = jax.random.uniform(key,

@@ -175,7 +175,6 @@ class ClassificationCircuit(ProbabilisticCircuit):
         for layer in copied_root.all_layers():
             if isinstance(layer, InputLayer):
                 updated_variable_indices = jnp.where(layer.variables >= class_variable_index, layer.variables + 1, layer.variables)
-                print(updated_variable_indices)
                 layer.set_variables(updated_variable_indices)
             elif isinstance(layer, InnerLayer):
                 layer.reset_variables()
@@ -195,8 +194,6 @@ class ClassificationCircuit(ProbabilisticCircuit):
         root_weights = BCOO.fromdense(jnp.ones((1, number_of_classes), dtype=float))
         root_weights.data = jnp.log(class_probabilities)
         root = SumLayer([product_layer], [root_weights])
-
-
 
         # set the variables again
         for layer in root.all_layers():

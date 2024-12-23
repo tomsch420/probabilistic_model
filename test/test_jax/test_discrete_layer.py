@@ -72,6 +72,11 @@ class DiscreteLayerTestCase(unittest.TestCase):
         nx_circuit = self.model.to_nx(SortedSet([self.x]), NXProbabilisticCircuit())[0].probabilistic_circuit
         self.assertEqual(len(nx_circuit.nodes()), 2)
         self.assertEqual(len(nx_circuit.edges()), 0)
+        for node in nx_circuit.nodes():
+            self.assertIsInstance(node, UnivariateDiscreteLeaf)
+            self.assertEqual(node.variable, self.x)
+            distribution: SymbolicDistribution = node.distribution
+            self.assertAlmostEqual(sum(distribution.probabilities.values()), 1., places=5)
 
 
 if __name__ == '__main__':

@@ -98,3 +98,7 @@ class NygaDistributionTestCase(unittest.TestCase):
     def test_log_likelihood(self):
         ll = self.jax_model.log_likelihood(self.data)
         self.assertTrue(jnp.all(ll > -jnp.inf))
+
+    def test_to_nx(self):
+        nx_model = self.jax_model.to_nx()
+        self.assertAlmostEqual(sum(nx_model.root.weights), 1.)
