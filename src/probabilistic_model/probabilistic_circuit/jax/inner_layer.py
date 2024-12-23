@@ -284,7 +284,7 @@ class SumLayer(InnerLayer):
                        1] == child_layer.number_of_nodes, "The number of nodes must match the number of weights."
             assert (child_layer.variables == self.variables).all(), "The variables must match."
 
-    @Layer.variables.getter
+    @property
     def variables(self) -> jax.Array:
         if self._variables is None:
             object.__setattr__(self, "_variables", self.child_layers[0].variables)
@@ -489,7 +489,7 @@ class ProductLayer(InnerLayer):
         if self._variables is None:
             variables = jnp.concatenate([child_layer.variables for child_layer in self.child_layers])
             variables = jnp.unique(variables)
-            self._variables = variables
+            object.__setattr__(self, "_variables", variables)
         return self._variables
 
     def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:

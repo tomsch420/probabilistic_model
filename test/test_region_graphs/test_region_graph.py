@@ -2,6 +2,7 @@ import random
 import unittest
 
 import optax
+from matplotlib import pyplot as plt
 from random_events.set import SetElement
 
 from probabilistic_model.learning.region_graph.region_graph import *
@@ -34,7 +35,7 @@ class RandomRegionGraphTestCase(unittest.TestCase):
 
 
 class ClassificationTestCase(unittest.TestCase):
-    features = SortedSet([Continuous(str(i)) for i in range(4)])
+    features = SortedSet([Continuous(f"x{i}") for i in range(4)])
     target = Symbolic("target", Target)
     region_graph = RegionGraph(features, partitions=2, depth=1, repetitions=2, classes=2)
     region_graph = region_graph.create_random_region_graph()
@@ -46,7 +47,15 @@ class ClassificationTestCase(unittest.TestCase):
         labels = jnp.array(labels)
         model = self.region_graph.as_probabilistic_circuit(input_units=5, sum_units=5)
         self.assertIsInstance(model, ClassificationCircuit)
-        model.fit(data, labels=labels, epochs=50, optimizer=optax.adamw(0.01))
+        self.assertEqual(model.root.number_of_nodes, 2)
+        model.fit(data, labels=labels, epochs=10, optimizer=optax.adamw(0.01))
+        pc = model.as_probabilistic_circuit(self.target)
+        self.assertIsInstance(pc, JPC)
+        self.assertEqual(pc.variables, self.features | SortedSet([self.target]))
+        nx_pc = pc.to_nx()
+        self.assertTrue(nx_pc.is_decomposable())
+
+
 
 
 class RandomRegionGraphLearningTestCase(unittest.TestCase):
@@ -58,7 +67,7 @@ class RandomRegionGraphLearningTestCase(unittest.TestCase):
         data = np.random.uniform(0, 1, (10000, len(self.variables)))
         data = jnp.array(data)
         model = self.region_graph.as_probabilistic_circuit(input_units=5, sum_units=5)
-        model.fit(data, epochs=50, optimizer=optax.adamw(0.01))
+        model.fit(data, epochs=10, optimizer=optax.adamw(0.01))
 
 
 if __name__ == '__main__':

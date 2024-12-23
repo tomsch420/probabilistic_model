@@ -30,6 +30,9 @@ class GaussianLayer(ContinuousLayer):
         self.log_scale = log_scale
         self.min_scale = min_scale
 
+    def __deepcopy__(self):
+        return GaussianLayer(self.variable, self.location, self.log_scale, self.min_scale)
+
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
         return GaussianDistribution,
