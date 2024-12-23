@@ -85,6 +85,10 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
 
 
 class DiracDeltaLayer(ContinuousLayer):
+    """
+    A layer that represents Dirac delta distributions over a single variable.
+    """
+
     location: jax.Array = eqx.field(static=True)
     """
     The locations of the Dirac delta distributions.

@@ -42,19 +42,16 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
     Layers have the same scope (set of variables) for every node in them.
     """
 
-    _variables: Optional[jnp.array] = None
+    _variables: Optional[jnp.array] = eqx.field(static=False, default=None)
     """
     The variable indices of the layer.
     """
 
     @property
-    @abstractmethod
     def variables(self) -> jax.Array:
         raise NotImplementedError
 
-    @variables.setter
-    @abstractmethod
-    def variables(self, value: jax.Array):
+    def set_variables(self, value: jax.Array):
         raise NotImplementedError
 
     @abstractmethod
@@ -210,9 +207,11 @@ class InnerLayer(Layer, ABC):
         self.child_layers = child_layers
         self.variables # initialize the variables of the layer
 
-    @Layer.variables.setter
-    def variables(self, value: jnp.array):
+    def set_variables(self, value: jnp.array):
         raise AttributeError("Variables of inner layers are read-only.")
+
+    def reset_variables(self):
+        object.__setattr__(self, "_variables", None)
 
     def all_layers(self) -> List[Layer]:
         """
@@ -254,9 +253,8 @@ class InputLayer(Layer, ABC):
     def variables(self) -> jax.Array:
         return self._variables
 
-    @variables.setter
-    def variables(self, value: jax.Array):
-        self._variables = value
+    def set_variables(self, value: jax.Array):
+        object.__setattr__(self, "_variables", value)
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
@@ -286,10 +284,10 @@ class SumLayer(InnerLayer):
                        1] == child_layer.number_of_nodes, "The number of nodes must match the number of weights."
             assert (child_layer.variables == self.variables).all(), "The variables must match."
 
-    @property
+    @Layer.variables.getter
     def variables(self) -> jax.Array:
         if self._variables is None:
-            self._variables = self.child_layers[0].variables
+            object.__setattr__(self, "_variables", self.child_layers[0].variables)
         return self._variables
 
     @classmethod
@@ -486,7 +484,7 @@ class ProductLayer(InnerLayer):
     def number_of_components(self) -> int:
         return sum([cl.number_of_components for cl in self.child_layers]) + self.edges.nse
 
-    @property
+    @Layer.variables.getter
     def variables(self) -> jax.Array:
         if self._variables is None:
             variables = jnp.concatenate([child_layer.variables for child_layer in self.child_layers])

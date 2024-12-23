@@ -75,6 +75,10 @@ class DiracSumUnitTestCase(unittest.TestCase):
         result = jnp.log(jnp.array([0., 0.4]))
         assert jnp.allclose(l, result)
 
+    def test_set_variables(self):
+        self.sum_layer.reset_variables()
+        self.assertEqual(self.sum_layer.variables.item(), 0)
+
 
 class NygaDistributionTestCase(unittest.TestCase):
 
