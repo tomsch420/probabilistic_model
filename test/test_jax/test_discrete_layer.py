@@ -33,8 +33,8 @@ class DiscreteLayerTestCase(unittest.TestCase):
         cls.model.validate()
 
     def test_normalization(self):
-        result = self.model.normalization_constant
-        correct = jnp.array([3., 7.])
+        result = self.model.log_normalization_constant
+        correct = jnp.log(jnp.array([3., 7.]))
         self.assertTrue(jnp.allclose(result, correct, atol=1e-3))
 
     def test_log_likelihood(self):

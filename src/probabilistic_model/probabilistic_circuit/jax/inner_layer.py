@@ -319,9 +319,10 @@ class SumLayer(InnerLayer):
     @property
     def log_normalization_constants(self) -> jax.Array:
         result = self.concatenated_log_weights
-        result.data = jnp.exp(result.data)
+        maximum = result.data.max()
+        result.data = jnp.exp(result.data - maximum)
         result = result.sum(1).todense()
-        return jnp.log(result)
+        return maximum + jnp.log(result)
 
     @property
     def normalized_weights(self):

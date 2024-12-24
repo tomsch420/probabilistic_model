@@ -5,6 +5,7 @@ from random_events.variable import Symbolic, Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Self, Optional
 
+import jax
 from . import NXConverterLayer
 from .inner_layer import InputLayer
 import jax.numpy as jnp
@@ -40,12 +41,8 @@ class DiscreteLayer(InputLayer):
         return True
 
     @property
-    def normalization_constant(self) -> jnp.array:
-        return jnp.exp(self.log_probabilities).sum(1)
-
-    @property
     def log_normalization_constant(self) -> jnp.array:
-        return jnp.log(self.normalization_constant)
+        return jax.scipy.special.logsumexp(self.log_probabilities, axis=1)
 
     @property
     def normalized_log_probabilities(self) -> jnp.array:
