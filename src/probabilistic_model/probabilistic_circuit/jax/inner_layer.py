@@ -185,6 +185,12 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         number_of_parameters = sum([len(p) for p in flattened_parameters])
         return number_of_parameters
 
+    @property
+    def number_of_components(self) -> int:
+        """
+        :return: The number of components (leaves + edges) of the entire circuit
+        """
+        return self.number_of_nodes
 
 
 class InnerLayer(Layer, ABC):
@@ -260,6 +266,7 @@ class InputLayer(Layer, ABC):
     def variable(self):
         return self._variables[0].item()
 
+
 class SumLayer(InnerLayer, ABC):
 
     log_weights: List[Union[jax.array, BCOO]]
@@ -303,6 +310,10 @@ class SparseSumLayer(SumLayer):
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
         return SumUnit,
+
+    @property
+    def number_of_components(self) -> int:
+        return sum([cl.number_of_components for cl in self.child_layers]) + sum([lw.nse for lw in self.log_weights])
 
     @property
     def concatenated_log_weights(self) -> BCOO:
@@ -441,6 +452,11 @@ class DenseSumLayer(SumLayer):
             NXConverterLayer:
         raise NotImplementedError
 
+    @property
+    def number_of_components(self) -> int:
+        return sum([cl.number_of_components for cl in self.child_layers]) + sum([math.prod(lw.shape)
+                                                                                 for lw in self.log_weights])
+
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
         return tuple()
@@ -479,7 +495,7 @@ class DenseSumLayer(SumLayer):
 
     def __deepcopy__(self):
         child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
-        log_weights = [copy_bcoo(log_weight) for log_weight in self.log_weights]
+        log_weights = [jnp.copy(log_weight) for log_weight in self.log_weights]
         return self.__class__(child_layers, log_weights)
 
     def to_json(self) -> Dict[str, Any]:
@@ -567,6 +583,10 @@ class ProductLayer(InnerLayer):
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
         return ProductUnit,
+
+    @property
+    def number_of_components(self) -> int:
+        return sum([cl.number_of_components for cl in self.child_layers]) + self.edges.nse
 
     @Layer.variables.getter
     def variables(self) -> jax.Array:
