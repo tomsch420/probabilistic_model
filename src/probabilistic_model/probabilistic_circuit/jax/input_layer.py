@@ -15,7 +15,7 @@ from random_events.variable import Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Type, Self, Union, Optional
 
-from .inner_layer import InputLayer, NXConverterLayer, SumLayer
+from .inner_layer import InputLayer, NXConverterLayer, SparseSumLayer
 from .utils import simple_interval_to_open_array, remove_rows_and_cols_where_all
 from ..nx.distributions import UnivariateContinuousLeaf
 from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit

@@ -15,7 +15,7 @@ from random_events.variable import Continuous
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
-from probabilistic_model.probabilistic_circuit.jax import SumLayer, UniformLayer
+from probabilistic_model.probabilistic_circuit.jax import SparseSumLayer, UniformLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 from probabilistic_model.distributions import DiracDeltaDistribution
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
@@ -66,7 +66,7 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
 
     def test_creation(self):
         self.assertEqual(self.jax_model.variables, self.nx_model.variables)
-        self.assertIsInstance(self.jax_model.root, SumLayer)
+        self.assertIsInstance(self.jax_model.root, SparseSumLayer)
         self.assertEqual(self.jax_model.root.number_of_nodes, 1)
         self.assertEqual(len(self.jax_model.root.child_layers), 1)
         product_layer = self.jax_model.root.child_layers[0]
@@ -132,9 +132,9 @@ class LearningTestCase(unittest.TestCase):
                       np.random.uniform(2, 3, (200, 1))))
     uniform_layer = UniformLayer(0, jnp.array([[-0.01, 1.01],
                                                        [1.99, 3.01]]))
-    sum_layer = SumLayer([uniform_layer], [BCOO((jnp.array([0., 0.]),
-                                                 jnp.array([[0, 0], [0, 1]])),
-                                                shape=(1, 2))])
+    sum_layer = SparseSumLayer([uniform_layer], [BCOO((jnp.array([0., 0.]),
+                                                       jnp.array([[0, 0], [0, 1]])),
+                                                      shape=(1, 2))])
     sum_layer.validate()
 
     def test_learning(self):

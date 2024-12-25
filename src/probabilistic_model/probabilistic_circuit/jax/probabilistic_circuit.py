@@ -12,7 +12,7 @@ from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Self, List, Optional
 
-from . import ProductLayer, SumLayer, InputLayer, InnerLayer
+from . import ProductLayer, SparseSumLayer, InputLayer, InnerLayer
 from .discrete_layer import DiscreteLayer
 from .inner_layer import Layer, NXConverterLayer
 from ..nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
@@ -193,7 +193,7 @@ class ClassificationCircuit(ProbabilisticCircuit):
         # create the new root layer
         root_weights = BCOO.fromdense(jnp.ones((1, number_of_classes), dtype=float))
         root_weights.data = jnp.log(class_probabilities)
-        root = SumLayer([product_layer], [root_weights])
+        root = SparseSumLayer([product_layer], [root_weights])
 
         # set the variables again
         for layer in root.all_layers():

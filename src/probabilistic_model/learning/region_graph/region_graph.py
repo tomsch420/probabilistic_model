@@ -8,7 +8,7 @@ from sortedcontainers import SortedSet
 from typing_extensions import List, Self, Type, Iterable, Union
 
 from ...distributions import GaussianDistribution
-from ...probabilistic_circuit.jax import SumLayer, ProductLayer
+from ...probabilistic_circuit.jax import SparseSumLayer, ProductLayer
 from ...probabilistic_circuit.jax.discrete_layer import DiscreteLayer
 from ...probabilistic_circuit.jax.gaussian_layer import GaussianLayer
 from ...probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit, ProductUnit
@@ -206,7 +206,7 @@ class RegionGraph(nx.DiGraph):
                         log_weights = [BCOO.fromdense(jax.random.uniform(key, shape=(sum_units, child.layer.number_of_nodes), minval=0.1, maxval=1.)) for child in children]
                         for log_weight in log_weights:
                             log_weight.data = jnp.log(log_weight.data)
-                        node.layer = SumLayer([child.layer for child in children], log_weights=log_weights)
+                        node.layer = SparseSumLayer([child.layer for child in children], log_weights=log_weights)
                         node.layer.validate()
 
 

@@ -9,7 +9,7 @@ from random_events.interval import SimpleInterval, Bound, closed
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 
-from probabilistic_model.probabilistic_circuit.jax import simple_interval_to_open_array, SumLayer
+from probabilistic_model.probabilistic_circuit.jax import simple_interval_to_open_array, SparseSumLayer
 from probabilistic_model.probabilistic_circuit.jax.uniform_layer import UniformLayer
 import equinox as eqx
 

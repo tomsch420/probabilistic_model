@@ -24,6 +24,7 @@ from . import shrink_index_array, embed_sparse_array_in_nan_array
 from .utils import copy_bcoo, sample_from_sparse_probabilities_csc, sparse_remove_rows_and_cols_where_all
 from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, Unit,
                                         ProbabilisticCircuit as NXProbabilisticCircuit)
+from jax.scipy.special import logsumexp
 
 
 def inverse_class_of(clazz: Type[Unit]) -> Type[Layer]:
@@ -184,12 +185,6 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         number_of_parameters = sum([len(p) for p in flattened_parameters])
         return number_of_parameters
 
-    @property
-    def number_of_components(self) -> int:
-        """
-        :return: The number of components (leaves + edges) of the entire circuit
-        """
-        return self.number_of_nodes
 
 
 class InnerLayer(Layer, ABC):
@@ -265,13 +260,12 @@ class InputLayer(Layer, ABC):
     def variable(self):
         return self._variables[0].item()
 
+class SumLayer(InnerLayer, ABC):
 
-class SumLayer(InnerLayer):
-
-    log_weights: List[BCOO]
+    log_weights: List[Union[jax.array, BCOO]]
     child_layers: Union[List[[ProductLayer]], List[InputLayer]]
 
-    def __init__(self, child_layers: List[Layer], log_weights: List[BCOO]):
+    def __init__(self, child_layers: List[Layer], log_weights: List[Union[jax.array, BCOO]]):
         super().__init__(child_layers)
         self.log_weights = log_weights
 
@@ -285,16 +279,6 @@ class SumLayer(InnerLayer):
             assert (child_layer.variables == self.variables).all(), "The variables must match."
 
     @property
-    def variables(self) -> jax.Array:
-        if self._variables is None:
-            object.__setattr__(self, "_variables", self.child_layers[0].variables)
-        return self._variables
-
-    @classmethod
-    def nx_classes(cls) -> Tuple[Type, ...]:
-        return SumUnit,
-
-    @property
     def log_weighted_child_layers(self) -> Iterator[Tuple[BCOO, Layer]]:
         """
         :returns: Yields log weights and the child layers zipped together.
@@ -302,12 +286,23 @@ class SumLayer(InnerLayer):
         yield from zip(self.log_weights, self.child_layers)
 
     @property
+    def variables(self) -> jax.Array:
+        if self._variables is None:
+            object.__setattr__(self, "_variables", self.child_layers[0].variables)
+        return self._variables
+
+    @property
     def number_of_nodes(self) -> int:
         return self.log_weights[0].shape[0]
 
-    @property
-    def number_of_components(self) -> int:
-        return sum([cl.number_of_components for cl in self.child_layers]) + sum([lw.nse for lw in self.log_weights])
+
+class SparseSumLayer(SumLayer):
+
+    log_weights: List[BCOO]
+
+    @classmethod
+    def nx_classes(cls) -> Tuple[Type, ...]:
+        return SumUnit,
 
     @property
     def concatenated_log_weights(self) -> BCOO:
@@ -433,13 +428,105 @@ class SumLayer(InnerLayer):
 
         return units
 
+class DenseSumLayer(SumLayer):
+
+
+
+    log_weights: List[jnp.array]
+    child_layers: Union[List[[ProductLayer]], List[InputLayer]]
+
+    @classmethod
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[Unit], child_layers: List[NXConverterLayer],
+                                                         progress_bar: bool = True) -> \
+            NXConverterLayer:
+        raise NotImplementedError
+
+    @classmethod
+    def nx_classes(cls) -> Tuple[Type, ...]:
+        return tuple()
+
+    @property
+    def concatenated_log_weights(self) -> jnp.array:
+        """
+        :return: The concatenated weights of the child layers for each node.
+        """
+        return jnp.concatenate(self.log_weights, axis=1)
+
+    @property
+    def log_normalization_constants(self) -> jax.Array:
+        return logsumexp(self.concatenated_log_weights, 1)
+
+    @property
+    def normalized_weights(self):
+        """
+        :return: The normalized weights of the child layers for each node.
+        """
+        return jnp.exp(self.concatenated_log_weights - self.log_normalization_constants.reshape(-1, 1))
+
+    def log_likelihood_of_nodes_single(self, x: jax.Array) -> jax.Array:
+        result = jnp.zeros(self.number_of_nodes, dtype=jnp.float32)
+
+        for log_weights, child_layer in self.log_weighted_child_layers:
+            # get the log likelihoods of the child nodes
+            child_layer_log_likelihood = child_layer.log_likelihood_of_nodes_single(x)
+
+            # weight the log likelihood of the child nodes by the weight for each node of this layer
+            log_likelihood = log_weights + child_layer_log_likelihood
+            log_likelihood = jnp.exp(logsumexp(log_likelihood, 1))
+            result += log_likelihood
+
+        return jnp.log(result) - self.log_normalization_constants
+
+    def __deepcopy__(self):
+        child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
+        log_weights = [copy_bcoo(log_weight) for log_weight in self.log_weights]
+        return self.__class__(child_layers, log_weights)
+
+    def to_json(self) -> Dict[str, Any]:
+        result = super().to_json()
+        result["log_weights"] = [lw.tolist() for lw in self.log_weights]
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        child_layer = [Layer.from_json(child_layer) for child_layer in data["child_layers"]]
+        log_weights = [jnp.asarray(lw) for lw in data["log_weights"]]
+        return cls(child_layer, log_weights)
+
+
+    def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
+              progress_bar: Optional[tqdm.tqdm] = None) -> List[Unit]:
+
+        variables_ = [variables[i] for i in self.variables]
+
+        if progress_bar:
+            progress_bar.set_postfix_str(f"Parsing Dense Sum Layer for variables {variables_}")
+
+        units = [SumUnit(result) for _ in range(self.number_of_nodes)]
+
+        child_layer_nx = [cl.to_nx(variables, result, progress_bar) for cl in self.child_layers]
+
+        for log_weights, child_layer in zip(self.log_weights, child_layer_nx):
+            # extract the weights for the child layer
+            for row in range(log_weights.shape[0]):
+                for col in range(log_weights.shape[1]):
+                    units[row].add_subcircuit(child_layer[col], jnp.exp(log_weights[row, col]).item(), False)
+
+                    if progress_bar:
+                        progress_bar.update()
+
+        [unit.normalize() for unit in units]
+
+        return units
+
+
 
 class ProductLayer(InnerLayer):
     """
     A layer that represents the product of multiple other units.
     """
 
-    child_layers: List[Union[SumLayer, InputLayer]]
+    child_layers: List[Union[SparseSumLayer, InputLayer]]
     """
     The child of a product layer is a list that contains groups sum units with the same scope or groups of input
     units with the same scope.
@@ -480,10 +567,6 @@ class ProductLayer(InnerLayer):
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
         return ProductUnit,
-
-    @property
-    def number_of_components(self) -> int:
-        return sum([cl.number_of_components for cl in self.child_layers]) + self.edges.nse
 
     @Layer.variables.getter
     def variables(self) -> jax.Array:

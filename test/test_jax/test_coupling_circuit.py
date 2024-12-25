@@ -7,7 +7,7 @@ from jax import tree_flatten, tree_map
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
-from probabilistic_model.probabilistic_circuit.jax import UniformLayer, SumLayer
+from probabilistic_model.probabilistic_circuit.jax import UniformLayer, SparseSumLayer
 from probabilistic_model.probabilistic_circuit.jax.coupling_circuit import Conditioner, CouplingCircuit, \
     LinearConditioner
 
@@ -49,9 +49,9 @@ class CouplingCircuitTestCase(unittest.TestCase):
                       np.random.uniform(2, 3, (200, 1)))))
     uniform_layer = UniformLayer(0, jnp.array([[-0.01, 1.01],
                                                        [1.99, 3.01]]))
-    sum_layer = SumLayer([uniform_layer], [BCOO((jnp.array([0., 0.]),
-                                                 jnp.array([[0, 0], [0, 1]])),
-                                                shape=(1, 2))])
+    sum_layer = SparseSumLayer([uniform_layer], [BCOO((jnp.array([0., 0.]),
+                                                       jnp.array([[0, 0], [0, 1]])),
+                                                      shape=(1, 2))])
 
     cc: CouplingCircuit
 
