@@ -6,6 +6,7 @@ from typing import Optional, List, Deque, Tuple, Dict, Any
 
 import numpy as np
 import plotly.graph_objects as go
+import random_events
 from random_events.interval import closed, closed_open
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous, Variable
@@ -442,3 +443,60 @@ class NygaDistribution(ProbabilisticCircuit):
             root.add_subcircuit(leaf, weight)
 
         return result
+
+    def all_union_of_mixture_points_with(self, other: Self):
+        """
+        Computes all possible union intervals of mixture points when combining two intervals.
+
+        Returns: list of closed intervals representing all mixture points between distributions
+        """
+        all_mixture_points = set()
+        for leaf in self.leaves:
+            leaf: UniformDistribution
+            all_mixture_points.add(leaf.interval.lower)
+            all_mixture_points.add(leaf.interval.upper)
+
+        for leaf in other.leaves:
+            leaf: UniformDistribution
+            all_mixture_points.add(leaf.interval.lower)
+            all_mixture_points.add(leaf.interval.upper)
+
+        all_mixture_points = list(all_mixture_points)
+        all_mixture_points.sort()
+        portion_list = []
+        for i in range(1, len(all_mixture_points) - 1):
+            portion_list += random_events.product_algebra.SimpleInterval(all_mixture_points[i - 1], all_mixture_points[i])
+        return all_mixture_points
+
+    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights) -> random_events.product_algebra.Event:
+
+        sum_own_weights = 0.
+        sum_other_weights = 0.
+
+        all_mixture_points = set()
+        for leaf in self.leaves:
+            leaf: UniformDistribution
+            all_mixture_points.add(leaf.interval.lower)
+            all_mixture_points.add(leaf.interval.upper)
+            sum_own_weights += sum(own_node_weights.get(hash(leaf), [0]))
+
+        for leaf in other.leaves:
+            leaf: UniformDistribution
+            all_mixture_points.add(leaf.interval.lower)
+            all_mixture_points.add(leaf.interval.upper)
+            sum_other_weights += sum[other_node_weights.get(hash(leaf), [0])]
+
+        all_mixture_points = list(all_mixture_points)
+        all_mixture_points.sort()
+
+        resulting_event = random_events.product_algebra.SimpleInterval()
+
+        previous_point = -float("inf")
+        for point in all_mixture_points:
+            own_density = self.pdf(point) * sum_own_weights
+            other_density = other.pdf(point) * sum_other_weights
+            if own_density > other_density:
+                current_event = random_events.product_algebra.SimpleInterval(previous_point, point)
+                resulting_event = resulting_event.union(current_event)
+
+        return random_events.product_algebra.Event({self.variable: resulting_event})

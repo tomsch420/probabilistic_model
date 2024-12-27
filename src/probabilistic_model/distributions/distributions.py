@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import os
 import copy
 from abc import abstractmethod
 from typing import Optional
 
 import numpy as np
 import plotly.graph_objects as go
-from random_events.interval import *
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import *
 from random_events.interval import *
@@ -16,7 +16,6 @@ from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
 from ..utils import MissingDict, interval_as_array
-
 
 class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
     """
@@ -75,6 +74,16 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
         """
         return event.marginal(SortedSet(self.variables)).simple_sets[0][self.variable]
 
+    def label(self):
+        return
+
+    def draw_io_style(self) -> Dict[str, Any]:
+        return {
+            "style": self.label,
+            "width": 30,
+            "height": 30,
+            "label": self.__repr__()
+        }
 
 class ContinuousDistribution(UnivariateDistribution):
     """
@@ -186,7 +195,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         :param x: The data
         :return: A boolean array
         """
-        return (self.interval.lower <= x if self.interval.left == Bound.CLOSED else self.interval.lower < x)
+        return self.interval.lower <= x if self.interval.left == Bound.CLOSED else self.interval.lower < x
 
     def right_included_condition(self, x: np.array) -> np.array:
         """
@@ -194,7 +203,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
          :param x: The data
          :return: A boolean array
          """
-        return (x < self.interval.upper if self.interval.right == Bound.OPEN else x <= self.interval.upper)
+        return x < self.interval.upper if self.interval.right == Bound.OPEN else x <= self.interval.upper
 
     def included_condition(self, x: np.array) -> np.array:
         """
@@ -348,6 +357,7 @@ class DiscreteDistribution(UnivariateDistribution):
         return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
 
 
+
 class SymbolicDistribution(DiscreteDistribution):
     """
     Class for symbolic (categorical) distributions.
@@ -377,6 +387,14 @@ class SymbolicDistribution(DiscreteDistribution):
     @property
     def representation(self):
         return f"Nominal({self.variable.name}, {self.variable.domain.simple_sets[0].all_elements.__name__})"
+    @property
+    def label(self):
+        return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
+
+    @property
+    def image(self):
+        return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
+
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):

@@ -7,3 +7,5 @@ numpy<=1.26.4
 sortedcontainers
 tqdm
 tabulate
+N2G
+python-igraph

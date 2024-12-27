@@ -70,11 +70,19 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
                 and self.variable == other.variable)
 
     @property
+    def label(self):
+        return "rounded=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;html=1;labelBorderColor=default;"
+
+    @property
     def representation(self):
         return f"U({self.variable.name} | {self.interval})"
 
     def __repr__(self):
         return f"U({self.variable.name})"
+
+    @property
+    def image(self):
+        return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval)
@@ -119,3 +127,15 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))
+
+
+
+    def all_union_of_mixture_points_with(self, other: Self):
+        """
+        Computes all possible union intervals of mixture points when combining two intervals.
+
+        Returns: list of closed intervals representing all mixture points between distributions
+        """
+        points = SortedSet([self.interval.lower, self.interval.upper, other.interval.lower, other.interval.upper])
+        result = [closed(lower, upper) for lower, upper in zip(points[:-1], points[1:])]
+        return result
