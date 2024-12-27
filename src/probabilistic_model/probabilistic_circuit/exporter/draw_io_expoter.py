@@ -5,6 +5,7 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import P
 
 
 class DrawIoExporter:
+    # TODO review
 
     model: ProbabilisticCircuit
 

@@ -82,6 +82,7 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
     @property
     def image(self):
+        # TODO rewrite
         return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
 
     def __copy__(self):
@@ -127,7 +128,6 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
     def __hash__(self):
         return hash((self.variable.name, hash(self.interval)))
-
 
 
     def all_union_of_mixture_points_with(self, other: Self):

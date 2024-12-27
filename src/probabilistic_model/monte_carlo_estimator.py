@@ -1,79 +1,68 @@
-from collections import defaultdict
-
-from random_events.variable import Continuous, Symbolic, Integer
-from sympy.solvers.diophantine.diophantine import prime_as_sum_of_two_squares
-
-from probabilistic_model.probabilistic_circuit.nx.distributions import SymbolicDistribution, IntegerDistribution
-from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit, SumUnit
-from probabilistic_model.probabilistic_model import ProbabilisticModel
-from probabilistic_model.learning.jpt.jpt import JPT
 import numpy as np
 
-from probabilistic_model.utils import MissingDict
+from .probabilistic_circuit.nx.helper import uniform_measure_of_event
+from .probabilistic_model import ProbabilisticModel
 
 
 class MonteCarloEstimator:
     """
-    This class has different Monte Carlo estimators for L1 Metric on Shallow Circuits.
-
+    This is a wrapper class for using monte carlo estimations of a model that can be sampled from and where the
+    likelihood can be evaluated.
     """
 
     model: ProbabilisticModel
+    """
+    The wrapped model.
+    """
+
     sample_size: int
+    """
+    The number of samples to use for the estimation.
+    """
 
-    def __init__(self, model: ProbabilisticModel, sample_size: int=100):
-        """
-        :model: Probabilistic model the model on which the sample be calculated on
-        :sample_size: Number of Monte Carlo samples
-        """
+    def __init__(self, model: ProbabilisticModel, sample_size: int = 100):
         self.model = model
-        self.sample_size = sample_size
-
-    def set_sample_size(self, sample_size: int):
         self.sample_size = sample_size
 
     def l1_metric_but_with_uniform_measure(self, other: ProbabilisticModel):
         """
-        This estimator uses the union of supports both models to reduce sample time.
-        :other: the 2. Model need to estimate the L1 Metric.
+        Calculate the L1 metric between the model and another model using a uniform measure over the union of both
+        distributions to sample from.
+
+        :param other: The other model to compare to.
+        :return: The L1 metric between the two models.
         """
+
+        # get the union of both supports
         supp_of_self = self.model.support
         supp_of_other = other.support
-        union_of_supps = supp_of_other | supp_of_self
-        bounding_box = union_of_supps.bounding_box()
+        union_of_supports = supp_of_other | supp_of_self
 
-        uniform_model = ProductUnit()
-        for variable, assignment in bounding_box.items():
-            if isinstance(variable, Continuous):
-                distribution = SumUnit()
-                for assignment_ in assignment:
-                    u = UniformDistribution(variable, assignment_)
-                    distribution.add_subcircuit(u, 1/u.pdf_value())
-                distribution.normalize()
-            elif isinstance(variable, Symbolic):
-                distribution = SymbolicDistribution(variable, MissingDict(float, {value: 1/len(assignment.simple_sets) for
-                                                                                  value in assignment}))
-            elif isinstance(variable, Integer):
-                distribution = IntegerDistribution(variable, MissingDict(float, {value.lower: 1/len(assignment.simple_sets) for
-                                                                                  value in assignment}))
-            else:
-                raise NotImplementedError
-            uniform_model.add_subcircuit(distribution)
-        uniform_model, _ = uniform_model.conditional(union_of_supps)
+        # construct uniform measure over the union of both supports
+        uniform_model = uniform_measure_of_event(union_of_supports)
+
+        # draw samples from the uniform measure
         samples = uniform_model.sample(self.sample_size)
+
+        # get the density of the uniform model
         density_of_uniform_model = uniform_model.likelihood(samples[:1])[0]
+
+        # compare the likelihoods of the two models on the samples of the uniform model
         p_self = self.model.likelihood(samples)
         p_other = other.likelihood(samples)
+
+        # calculate the L1 metric
         l1_metric = np.mean(np.abs(p_self - p_other)) / density_of_uniform_model
         return l1_metric
 
-
-    def l1(self, other: ProbabilisticModel, tolerance = 10e-8):
+    def l1_metric(self, other: ProbabilisticModel, tolerance: float = 10e-8) -> float:
         """
-        Estimates the L1 metric with Monte Carlo estimator.
-        :other: the 2. Model need to estimate the L1 Metric.
-        :tolerance: Tolerance for how close to zero should be zero.
+        Estimates the L1 metric between to models.
+
+        :other: the other model.
+        :tolerance: Tolerance to use for the comparison of likelihoods.
+        Samples that have a likelihood in both models that differs by less than this tolerance are considered to have
+        an equal likelihood.
         """
         samples_p = self.model.sample(self.sample_size)
         l_p = self.model.likelihood(samples_p)

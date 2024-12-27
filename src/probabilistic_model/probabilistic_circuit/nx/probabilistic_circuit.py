@@ -10,10 +10,7 @@ import random
 
 import networkx as nx
 import numpy as np
-import portion
-from matplotlib import pyplot as plt
-from portion import Interval
-from random_events.interval import SimpleInterval
+
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.utils import SubclassJSONSerializer
@@ -199,6 +196,7 @@ class Unit(SubclassJSONSerializer):
 
     def plot_structure(self):
         """
+        TODO ALSO MOVE
         Plot the structure of the circuit.
         """
         # create the subgraph with this node as root
@@ -235,6 +233,7 @@ class Unit(SubclassJSONSerializer):
 
 def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
     """
+    TODO MOVE
     Calculate the weights of all nodes in a probabilistic circuit.
     Circuit (ProbabilisticCircuit): The probabilistic circuit containing nodes, edges, and weights.
 
@@ -280,6 +279,7 @@ class LeafUnit(Unit):
 
 
     def label(self):
+        # TODO DRAWIO INTERFACE AS MIXIN
         return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
 
     def draw_io_style(self) -> Dict[str, Any]:
@@ -1138,10 +1138,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return unweighted_edges
 
-
-    def plotly_layout(self, **kwargs):
-        return self.root.plotly_layout()
-
     def is_deterministic(self) -> bool:
         """
         :return: Whether, this circuit is deterministic or not.
@@ -1211,6 +1207,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def nodes_weights(self) -> dict:
         """
+        TODO COMPARE WITH OTHER NODE WEIGHTS
+
         :return: dict with keys as nodes and values as list of all the weights for the node.
         """
         node_weights = {hash(self.root): [1]}

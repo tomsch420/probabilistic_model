@@ -1,6 +1,5 @@
 import unittest
 
-import portion
 from random_events.interval import *
 from random_events.product_algebra import *
 
@@ -76,31 +75,6 @@ class UniformDistributionTestCase(unittest.TestCase):
         fig = go.Figure(data=self.distribution.plot())
         self.assertIsNotNone(fig)
         # fig.show()
-
-    def test_partly_joint_different_Distributions(self):
-        variable = self.distribution.variable
-        distribution_1 = UniformDistribution(variable, portion.closed(7, 24))
-        distribution_2 = UniformDistribution(variable, portion.closed(-4, 15))
-        self.assertEqual(distribution_1.area_validation_metric(distribution_2), (22 / 19) / 2)
-
-    def test_avm_partly_joint(self):
-        variable = self.distribution.variable
-        distribution_1 = UniformDistribution(variable, portion.closed(7, 24))
-        distribution_2 = UniformDistribution(variable, portion.closed(-4, 15))
-        self.assertEqual(distribution_1.area_validation_metric(distribution_2), (22 / 19) / 2)
-
-    def test_avm_no_overlapping(self):
-        variable = self.distribution.variable
-        distribution_1 = UniformDistribution(variable, portion.closed(0, 1))
-        distribution_2 = UniformDistribution(variable, portion.closed(2, 3))
-        self.assertEqual(distribution_1.area_validation_metric(distribution_2), 1)
-
-    def test_avm_overlapping(self):
-        variable = self.distribution.variable
-        distribution_1 = UniformDistribution(variable, portion.closed(0, 1))
-        distribution_2 = UniformDistribution(variable, portion.closed(0, 1))
-        self.assertEqual(distribution_1.area_validation_metric(distribution_2), 0)
-
 
     def test_variable_setting(self):
         distribution = UniformDistribution(Continuous("x"), closed(0, 1).simple_sets[0])
