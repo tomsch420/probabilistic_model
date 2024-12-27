@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 from probabilistic_model.monte_carlo_estimator import MonteCarloEstimator
 
 from probabilistic_model.utils import MissingDict
-from probabilistic_model.interfaces.drawio.exporter import DrawIoExporter
+from    probabilistic_model.interfaces.drawio.exporter import DrawIoExporter
 
 class SymbolEnum(SetElement):
     EMPTY_SET = -1

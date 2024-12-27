@@ -195,41 +195,12 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
     def moment(self, *args, **kwargs):
         raise NotImplementedError
 
-    def plot_structure(self):
-        """
-        TODO ALSO MOVE
-        Plot the structure of the circuit.
-        """
-        # create the subgraph with this node as root
-        subgraph = nx.subgraph(self.probabilistic_circuit, list(nx.descendants(self.probabilistic_circuit, self)) +
-                               [self])
-        # do a layer-wise BFS
-        layers = list(nx.bfs_layers(subgraph, [self]))
-        # calculate the positions of the nodes
-        maximum_layer_width = max([len(layer) for layer in layers])
-        positions = {}
-        for depth, layer in enumerate(layers):
-            number_of_nodes = len(layer)
-            positions_in_layer = np.linspace(0, maximum_layer_width, number_of_nodes, endpoint=False)
-            positions_in_layer += (maximum_layer_width - len(layer)) / (2 * len(layer))
-            for position, node in zip(positions_in_layer, layer):
-                positions[node] = (depth, position)
-        # draw the edges
-        alpha_for_edges = [subgraph.get_edge_data(*edge)["weight"] if subgraph.get_edge_data(*edge) else 1.
-                          for edge in subgraph.edges]
-        nx.draw_networkx_edges(subgraph, positions, alpha=alpha_for_edges)
-        # draw the nodes and labels
-        nx.draw_networkx_nodes(subgraph, positions)
-        labels = {node: node.__repr__() for node in subgraph.nodes}
-        nx.draw_networkx_labels(subgraph, positions, labels)
-
     @property
     def drawio_style(self) -> Dict[str, Any]:
         return {
             "style": self.drawio_label,
             "width": 30,
             "height": 30,
-            "label": self.__repr__()
         }
 
 
@@ -282,6 +253,15 @@ class LeafUnit(Unit):
     @property
     def drawio_label(self):
         return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
+
+    @property
+    def drawio_style(self) -> Dict[str, Any]:
+        return {
+            "style": self.drawio_label,
+            "width": 30,
+            "height": 30,
+            "label": self.distribution.representation
+        }
 
     @property
     def variables(self) -> SortedSet:
@@ -398,8 +378,6 @@ class InnerUnit(Unit):
         return cls()
 
 class SumUnit(InnerUnit):
-
-    image = os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", "Smoothsum.png")
 
     def __repr__(self):
         return "+"
@@ -684,7 +662,6 @@ class ProductUnit(InnerUnit):
     """
 
     representation = "×"
-    image = os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", 'DecomposableProductUnit.png')
 
     @property
     def drawio_label(self) -> str:
@@ -1176,12 +1153,12 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         nodes_to_keep = list(nx.descendants(self, node)) + [node]
         return nx.subgraph(self, nodes_to_keep)
 
-    def plot_structure(self):
+    def unit_positions_for_structure_plot(self) -> Dict[Unit, Tuple[int, int]]:
         """
-        Plot the structure of the circuit.
-        # TODO use
-        """
+        Calculate the positions of the nodes in the structure plot.
 
+        :return: The positions of the nodes as dictionary from unit to (x, y) coordinate.
+        """
         # do a layer-wise BFS
         layers = self.layers
 
@@ -1194,6 +1171,16 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             positions_in_layer += (maximum_layer_width - len(layer)) / (2 * len(layer))
             for position, node in zip(positions_in_layer, layer):
                 positions[node] = (depth, position)
+
+        return positions
+
+    def plot_structure(self):
+        """
+        Plot the structure of the circuit.
+        """
+
+        positions = self.unit_positions_for_structure_plot()
+
         # draw the edges
         alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1.
                            for edge in self.edges]
