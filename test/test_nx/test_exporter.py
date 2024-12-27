@@ -1,34 +1,18 @@
-
+import tempfile
 import unittest
 
-from typing_extensions import List
-import tempfile
-from probabilistic_model.learning.jpt.jpt import JPT
-from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
-from sklearn.datasets import load_breast_cancer
-import pandas as pd
+from probabilistic_model.interfaces.drawio.exporter import DrawIoExporter
+from random_events.interval import SimpleInterval
+from random_events.variable import Continuous
 from random_events.variable import Variable
+from typing_extensions import List
 
-from probabilistic_model.probabilistic_circuit.exporter.draw_io_expoter import DrawIoExporter
+from probabilistic_model.distributions.uniform import UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProductUnit, \
+    ProbabilisticCircuit
 
-
-
-class MyTestCase(unittest.TestCase):
-
-    dataset: pd.DataFrame
+class DrawIOExporterTestCase(unittest.TestCase):
     variables: List[Variable]
-    # model: JPT
-
-    from random_events.interval import closed, SimpleInterval
-    from random_events.set import SetElement
-    from random_events.variable import Continuous
-
-    from probabilistic_model.distributions.uniform import UniformDistribution
-    from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProductUnit, SimpleEvent, ShallowProbabilisticCircuit, ProbabilisticCircuit
-    # from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit, ProductUnit, SimpleEvent, ShallowProbabilisticCircuit
-    from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-    import plotly.graph_objects as go
-    from probabilistic_model.monte_carlo_estimator import MonteCarloEstimator
 
     x = Continuous("x")
     y = Continuous("y")
@@ -49,7 +33,7 @@ class MyTestCase(unittest.TestCase):
     model.add_edge(prod1, sum4)
     model.add_edge(prod2, sum3)
     model.add_edge(prod2, sum5)
-    uni_x1, uni_x2  = UniformDistribution(x, SimpleInterval(0, 1)), UniformDistribution(x, SimpleInterval(1, 2))
+    uni_x1, uni_x2 = UniformDistribution(x, SimpleInterval(0, 1)), UniformDistribution(x, SimpleInterval(1, 2))
     uni_y1, uni_y2 = UniformDistribution(y, SimpleInterval(0, 1)), UniformDistribution(y, SimpleInterval(1, 2))
 
     model.add_node(uni_y1)
@@ -67,35 +51,15 @@ class MyTestCase(unittest.TestCase):
     model.add_edge(sum5, uni_y1, weight=0.1)
     model.add_edge(sum5, uni_y2, weight=0.9)
 
-
-    # @classmethod
-    # def setUpClass(cls):
-    #     data = load_breast_cancer(as_frame=True)
-    #
-    #     df = data.data
-    #     target = data.target
-    #     target[target == 1] = "malignant"
-    #     target[target == 0] = "friendly"
-    #     df["malignant"] = target
-    #     cls.dataset = df
-    #
-    #     variables = infer_variables_from_dataframe(df, min_likelihood_improvement=1)
-    #
-    #     model = JPT(variables, min_samples_leaf=0.9)
-    #     model.fit(df)
-    #     cls.model = model
-
     def test_export_to_drawio(self):
         diagram = DrawIoExporter(self.model.root.probabilistic_circuit).export()
-        with tempfile.NamedTemporaryFile(suffix=".drawio", delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(suffix=".drawio", delete=True) as temp_file:
             temp_file_name = temp_file.name
 
         # Write the diagram data to the temporary file
         diagram.dump_file(temp_file_name)
         print(f"Diagram exported to temporary file: {temp_file_name}")
 
+
 if __name__ == '__main__':
     unittest.main()
-
-
-

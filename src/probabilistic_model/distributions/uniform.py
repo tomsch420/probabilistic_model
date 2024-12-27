@@ -70,7 +70,7 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
                 and self.variable == other.variable)
 
     @property
-    def label(self):
+    def drawio_label(self):
         return "rounded=1;labelPosition=center;verticalLabelPosition=bottom;align=center;verticalAlign=top;html=1;labelBorderColor=default;"
 
     @property

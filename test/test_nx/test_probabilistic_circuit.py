@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 from probabilistic_model.monte_carlo_estimator import MonteCarloEstimator
 
 from probabilistic_model.utils import MissingDict
-
+from probabilistic_model.interfaces.drawio.exporter import DrawIoExporter
 
 class SymbolEnum(SetElement):
     EMPTY_SET = -1
@@ -141,7 +141,7 @@ class ShallowTestCase(unittest.TestCase):
 
     def test_shallow(self):
         shallow_pc = ShallowProbabilisticCircuit.from_probabilistic_circuit(self.model)
-        from src.probabilistic_model.probabilistic_circuit.exporter.draw_io_expoter import DrawIoExporter
+
         diagram = DrawIoExporter(shallow_pc).export()
         diagram.dump_file("test.drawio")
         self.assertTrue(True)

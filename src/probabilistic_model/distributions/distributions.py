@@ -1,23 +1,21 @@
 from __future__ import annotations
 
 import os
-import copy
-from abc import abstractmethod
-from typing import Optional
 
 import numpy as np
 import plotly.graph_objects as go
+from random_events.interval import *
 from random_events.product_algebra import Event, SimpleEvent, VariableMap
 from random_events.variable import *
-from random_events.interval import *
-from random_events.utils import SubclassJSONSerializer
 from typing_extensions import Union, Iterable, Any, Self, Dict, List, Tuple
 
-from probabilistic_model.constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
+from ..constants import SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
+from ..interfaces.drawio.drawio import DrawIOInterface
 from ..probabilistic_model import ProbabilisticModel, OrderType, MomentType, CenterType
 from ..utils import MissingDict, interval_as_array
 
-class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
+
+class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer, DrawIOInterface):
     """
     Abstract Base class for Univariate distributions.
     """
@@ -26,7 +24,7 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
     @property
     def variables(self) -> Tuple[Variable, ...]:
-        return (self.variable, )
+        return (self.variable,)
 
     @property
     def support(self) -> Event:
@@ -61,10 +59,7 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
         return self.variables == other.variables and isinstance(other, self.__class__)
 
     def to_json(self) -> Dict[str, Any]:
-        return {
-            **super().to_json(),
-            "variable": self.variable.to_json()
-        }
+        return {**super().to_json(), "variable": self.variable.to_json()}
 
     def composite_set_from_event(self, event: Event) -> AbstractCompositeSet:
         """
@@ -74,16 +69,10 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer):
         """
         return event.marginal(SortedSet(self.variables)).simple_sets[0][self.variable]
 
-    def label(self):
-        return
+    @property
+    def drawio_style(self) -> Dict[str, Any]:
+        return {"style": self.drawio_label, "width": 30, "height": 30, "label": self.__repr__()}
 
-    def draw_io_style(self) -> Dict[str, Any]:
-        return {
-            "style": self.label,
-            "width": 30,
-            "height": 30,
-            "label": self.__repr__()
-        }
 
 class ContinuousDistribution(UnivariateDistribution):
     """
@@ -108,8 +97,8 @@ class ContinuousDistribution(UnivariateDistribution):
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         interval: Interval = event[self.variable]
         points = interval_as_array(interval)
-        upper_bound_cdf = self.cdf(points[:, (1, )])
-        lower_bound_cdf = self.cdf(points[:, (0, )])
+        upper_bound_cdf = self.cdf(points[:, (1,)])
+        lower_bound_cdf = self.cdf(points[:, (0,)])
         return (upper_bound_cdf - lower_bound_cdf).sum()
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
@@ -252,8 +241,9 @@ class DiscreteDistribution(UnivariateDistribution):
             self.probabilities = probabilities
 
     def __eq__(self, other):
-        return (isinstance(other, DiscreteDistribution) and self.probabilities == other.probabilities and
-                super().__eq__(other))
+        return (isinstance(other,
+                           DiscreteDistribution) and self.probabilities == other.probabilities and super().__eq__(
+            other))
 
     def __hash__(self):
         return hash((self.variable, tuple(self.probabilities.items())))
@@ -302,10 +292,7 @@ class DiscreteDistribution(UnivariateDistribution):
         return traces
 
     def to_json(self) -> Dict[str, Any]:
-        return {
-            **super().to_json(),
-            "probabilities": list(self.probabilities.items())
-        }
+        return {**super().to_json(), "probabilities": list(self.probabilities.items())}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
@@ -357,7 +344,6 @@ class DiscreteDistribution(UnivariateDistribution):
         return np.random.choice(sample_space, size=(amount, 1), replace=True, p=sample_probabilities)
 
 
-
 class SymbolicDistribution(DiscreteDistribution):
     """
     Class for symbolic (categorical) distributions.
@@ -373,8 +359,7 @@ class SymbolicDistribution(DiscreteDistribution):
         return mode, np.log(max_likelihood)
 
     def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
-        return {element.name: self.probabilities[int(element)] for element in
-                self.variable.domain.simple_sets}
+        return {element.name: self.probabilities[int(element)] for element in self.variable.domain.simple_sets}
 
     @property
     def univariate_support(self) -> Set:
@@ -387,14 +372,14 @@ class SymbolicDistribution(DiscreteDistribution):
     @property
     def representation(self):
         return f"Nominal({self.variable.name}, {self.variable.domain.simple_sets[0].all_elements.__name__})"
+
     @property
-    def label(self):
+    def drawio_label(self):
         return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
 
     @property
     def image(self):
-        return os.path.join(os.path.dirname(__file__),"../../../", "resources", "icons", "defaultIcon.png")
-
+        return os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", "defaultIcon.png")
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
@@ -431,7 +416,7 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
         return result
 
     def cdf(self, x: np.array) -> np.array:
-        result = np.zeros((len(x), ))
+        result = np.zeros((len(x),))
         maximum_value = max(x)
         for value, p in self.probabilities.items():
             if value > maximum_value:
@@ -499,7 +484,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
         return result
 
     def cdf(self, x: np.array) -> np.array:
-        result = np.zeros((len(x), ))
+        result = np.zeros((len(x),))
         result[x[:, 0] >= self.location] = 1.
         return result
 
@@ -531,10 +516,8 @@ class DiracDeltaDistribution(ContinuousDistribution):
         return VariableMap({self.variable: moment})
 
     def __eq__(self, other):
-        return (isinstance(other, self.__class__) and
-                super().__eq__(other) and
-                self.location == other.location and
-                self.density_cap == other.density_cap)
+        return (isinstance(other, self.__class__) and super().__eq__(
+            other) and self.location == other.location and self.density_cap == other.density_cap)
 
     def __hash__(self):
         return hash((self.variable, self.location, self.density_cap))
@@ -550,10 +533,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
         return self.__class__(self.variable, self.location, self.density_cap)
 
     def to_json(self) -> Dict[str, Any]:
-        return {
-            **super().to_json(),
-            "location": self.location,
-            "density_cap": self.density_cap}
+        return {**super().to_json(), "location": self.location, "density_cap": self.density_cap}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
@@ -567,13 +547,12 @@ class DiracDeltaDistribution(ContinuousDistribution):
         upper_border = self.location + 1
         pdf_trace = go.Scatter(x=[lower_border, self.location, self.location, self.location, upper_border],
                                y=[0, 0, self.density_cap, 0, 0], mode="lines", name="PDF")
-        cdf_trace = go.Scatter(x=[lower_border, self.location, self.location, upper_border],
-                               y=[0, 0, 1, 1], mode="lines", name="CDF")
-        expectation_trace = go.Scatter(x=[self.location, self.location], y=[0, self.density_cap *
-                                                                            SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT],
+        cdf_trace = go.Scatter(x=[lower_border, self.location, self.location, upper_border], y=[0, 0, 1, 1],
+                               mode="lines", name="CDF")
+        expectation_trace = go.Scatter(x=[self.location, self.location],
+                                       y=[0, self.density_cap * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT],
                                        mode="lines+markers", name="Expectation")
-        mode_trace = go.Scatter(x=[self.location, self.location], y=[0, self.density_cap *
-                                                                     SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT],
-                                mode="lines+markers", name="Mode")
+        mode_trace = go.Scatter(x=[self.location, self.location],
+                                y=[0, self.density_cap * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT], mode="lines+markers",
+                                name="Mode")
         return [pdf_trace, cdf_trace, expectation_trace, mode_trace]
-

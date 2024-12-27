@@ -1,13 +1,18 @@
 import numpy as np
 from N2G import drawio_diagram
 
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit
+from ...probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit
 
 
 class DrawIoExporter:
-    # TODO review
+    """
+    Export a probabilistic circuit to a drawio diagram.
+    """
 
     model: ProbabilisticCircuit
+    """
+    The probabilistic circuit to export.
+    """
 
     def __init__(self, model: ProbabilisticCircuit):
         self.model = model
@@ -28,7 +33,7 @@ class DrawIoExporter:
             positions_in_layer = np.linspace(0, maximum_layer_width, number_of_nodes, endpoint=False)
             positions_in_layer += (maximum_layer_width - len(layer)) / (2 * len(layer))
             for position, node in zip(positions_in_layer, layer):
-                diagram.add_node(id=str(hash(node)), x_pos=position*25, y_pos=i*25, **node.draw_io_style())
+                diagram.add_node(id=str(hash(node)), x_pos=position*25, y_pos=i*25, **node.drawio_style)
 
         # for node in self.model.nodes:
         #     diagram.add_node(id=str(hash(node)), x_pos= 0, y_pos= 0, **node.draw_io_style())
