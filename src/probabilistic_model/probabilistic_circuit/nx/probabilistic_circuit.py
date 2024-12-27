@@ -277,7 +277,6 @@ class LeafUnit(Unit):
     def __repr__(self):
         return repr(self.distribution)
 
-
     def label(self):
         # TODO DRAWIO INTERFACE AS MIXIN
         return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"

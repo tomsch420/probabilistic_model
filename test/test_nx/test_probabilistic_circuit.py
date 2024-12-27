@@ -195,7 +195,7 @@ class L1MetricTestCase(unittest.TestCase):
 
     def test_l1_mc(self):
         mc_esti = MonteCarloEstimator(sample_size=1000, model=self.circuit_1)
-        result = mc_esti.l1(self.circuit_2)
+        result = mc_esti.l1_metric(self.circuit_2)
         self.assertAlmostEqual(result/2, 0.13333333333333336, delta=0.1)
 
 if __name__ == '__main__':
