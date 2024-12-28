@@ -70,8 +70,12 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer, DrawIOI
         return event.marginal(SortedSet(self.variables)).simple_sets[0][self.variable]
 
     @property
+    def abbreviated_symbol(self) -> str:
+        return "P"
+
+    @property
     def drawio_style(self) -> Dict[str, Any]:
-        return {"style": self.drawio_label, "width": 30, "height": 30, "label": self.__repr__()}
+        return {"style": self.drawio_label, "width": 30, "height": 30, "label": self.abbreviated_symbol}
 
 
 class ContinuousDistribution(UnivariateDistribution):
@@ -487,6 +491,10 @@ class DiracDeltaDistribution(ContinuousDistribution):
         result = np.zeros((len(x),))
         result[x[:, 0] >= self.location] = 1.
         return result
+
+    @property
+    def abbreviated_symbol(self) -> str:
+        return "δ"
 
     @property
     def univariate_support(self) -> Interval:

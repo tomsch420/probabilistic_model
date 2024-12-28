@@ -118,6 +118,10 @@ class GaussianDistribution(ContinuousDistribution):
         variable = Continuous.from_json(data["variable"])
         return cls(variable, data["location"], data["scale"])
 
+    @property
+    def abbreviated_symbol(self) -> str:
+        return "N"
+
 
 class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, GaussianDistribution):
     """

@@ -77,6 +77,10 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     def representation(self):
         return f"U({self.variable.name} | {self.interval})"
 
+    @property
+    def abbreviated_symbol(self) -> str:
+        return "U"
+
     def __repr__(self):
         return f"U({self.variable.name})"
 

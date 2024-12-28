@@ -252,7 +252,7 @@ class LeafUnit(Unit):
 
     @property
     def drawio_label(self):
-        return "rounded=1;whiteSpace=wrap;html=1;labelPosition=center;verticalLabelPosition=top;align=center;verticalAlign=bottom;"
+        return "ellipse;whiteSpace=wrap;html=1;aspect=fixed;"
 
     @property
     def drawio_style(self) -> Dict[str, Any]:
@@ -260,7 +260,7 @@ class LeafUnit(Unit):
             "style": self.drawio_label,
             "width": 30,
             "height": 30,
-            "label": self.distribution.representation
+            "label": self.distribution.abbreviated_symbol
         }
 
     @property
