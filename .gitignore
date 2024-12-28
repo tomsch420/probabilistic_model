@@ -7,3 +7,7 @@ doc/_build
 
 mlruns
 mlartifacts
+.drawio
+__pycache__/
+*.pyc
+*.pyo

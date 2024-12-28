@@ -8,7 +8,7 @@ import tqdm
 from random_events.variable import Continuous
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.mlflow_integration import infer_signature, ProbabilisticModelWrapper
+from probabilistic_model.interfaces.mlflow_integration import infer_signature, ProbabilisticModelWrapper
 
 np.random.seed(69)
 

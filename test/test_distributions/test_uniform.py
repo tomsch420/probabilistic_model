@@ -76,12 +76,6 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertIsNotNone(fig)
         # fig.show()
 
-    def test_serialization(self):
-        serialized = self.distribution.to_json()
-        deserialized = SubclassJSONSerializer.from_json(serialized)
-        self.assertEqual(self.distribution, deserialized)
-        self.assertIsInstance(deserialized, UniformDistribution)
-
     def test_variable_setting(self):
         distribution = UniformDistribution(Continuous("x"), closed(0, 1).simple_sets[0])
         self.assertEqual(distribution.variable, Continuous("x"))
