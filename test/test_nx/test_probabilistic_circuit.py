@@ -1,30 +1,24 @@
-import json
-import os.path
 import unittest
 
-import numpy as np
-from matplotlib import pyplot as plt
+import plotly.graph_objects as go
 from random_events.interval import closed, SimpleInterval
-from random_events.set import SetElement
 from random_events.variable import Continuous
 
 from probabilistic_model.distributions import SymbolicDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf, UnivariateDiscreteLeaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
-#from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit, ProductUnit, SimpleEvent, ShallowProbabilisticCircuit
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-import plotly.graph_objects as go
 from probabilistic_model.monte_carlo_estimator import MonteCarloEstimator
-
+from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
+from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
-from    probabilistic_model.interfaces.drawio.exporter import DrawIoExporter
+
 
 class SymbolEnum(SetElement):
     EMPTY_SET = -1
     A = 0
     B = 1
     C = 2
+
 
 class SmallCircuitTestCast(unittest.TestCase):
     """
@@ -74,14 +68,13 @@ class SmallCircuitTestCast(unittest.TestCase):
         event = SimpleEvent({self.x: closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
         conditional, prob = self.model.conditional(event)
         self.assertAlmostEqual(prob, 0.375)
-        conditional.plot_structure()
-        # plt.show()
+        conditional.plot_structure()  # plt.show()
 
     def test_plot(self):
         self.model.plot_structure()
         # plt.show()
-        fig = go.Figure(self.model.plot(600, surface=True))
-        # fig.show()
+        fig = go.Figure(self.model.plot(600, surface=True))  # fig.show()
+
 
 class SymbolicPlottingTestCase(unittest.TestCase):
     x = Symbolic("x", SymbolEnum)
@@ -97,8 +90,7 @@ class SymbolicPlottingTestCase(unittest.TestCase):
         cls.model.add_node(l1)
 
     def test_plot(self):
-        fig = go.Figure(self.model.plot(), self.model.plotly_layout())
-        # fig.show()
+        fig = go.Figure(self.model.plot(), self.model.plotly_layout())  # fig.show()
 
 
 class ShallowTestCase(unittest.TestCase):
@@ -139,7 +131,6 @@ class ShallowTestCase(unittest.TestCase):
 
 
 class L1MetricTestCase(unittest.TestCase):
-
     x = Continuous("x")
     y = Continuous("y")
     standard_circuit = ProductUnit()
@@ -161,7 +152,6 @@ class L1MetricTestCase(unittest.TestCase):
     shallow_3 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_3)
     shallow_4 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_4)
 
-
     def test_jpt_l1(self):
         result = self.shallow_1.l1(self.shallow_2)
 
@@ -178,8 +168,6 @@ class L1MetricTestCase(unittest.TestCase):
         self.assertEqual(result, 0)
 
     def test_jpt_l1_disjunct_input(self):
-
-
         result = self.shallow_3.l1(self.shallow_4)
 
         self.assertEqual(result, 2)
@@ -187,7 +175,8 @@ class L1MetricTestCase(unittest.TestCase):
     def test_l1_mc(self):
         mc_esti = MonteCarloEstimator(sample_size=1000, model=self.circuit_1)
         result = mc_esti.l1_metric(self.circuit_2)
-        self.assertAlmostEqual(result/2, 0.13333333333333336, delta=0.1)
+        self.assertAlmostEqual(result / 2, 0.13333333333333336, delta=0.1)
+
 
 if __name__ == '__main__':
     unittest.main()

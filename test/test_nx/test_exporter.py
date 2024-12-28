@@ -51,10 +51,11 @@ class DrawIOExporterTestCase(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix=".drawio", delete=False) as temp_file:
             temp_file_name = temp_file.name
 
-        temp_file_name = os.path.join(os.path.expanduser("~"), "Documents", "test.drawio")
+        # temp_file_name = os.path.join(os.path.expanduser("~"), "Documents", "test.drawio")
 
         # Write the diagram data to the temporary file
-        diagram.dump_file(temp_file_name)
+        with open(temp_file_name, "w") as f:
+            f.write(diagram.dump_xml())
         print(f"Diagram exported to temporary file: {temp_file_name}")
 
 
