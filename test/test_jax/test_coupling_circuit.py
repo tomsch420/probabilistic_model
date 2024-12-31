@@ -43,6 +43,7 @@ class LessTrivialConditioner(Conditioner):
     def output_length(self):
         return self.linear.out_features
 
+
 class CouplingCircuitTestCase(unittest.TestCase):
 
     data = jnp.array(np.vstack((np.random.uniform(0, 1, (100, 1)),
