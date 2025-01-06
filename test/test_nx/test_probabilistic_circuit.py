@@ -71,10 +71,9 @@ class SmallCircuitTestCast(unittest.TestCase):
         conditional.plot_structure()  # plt.show()
 
     def test_plot(self):
-        self.model.plot_structure()
-        # plt.show()
         fig = go.Figure(self.model.plot(600, surface=True))  # fig.show()
-
+        fig = go.Figure(self.model.plot_structure(), self.model.plotly_layout_structure())
+        fig.show()
 
 class SymbolicPlottingTestCase(unittest.TestCase):
     x = Symbolic("x", SymbolEnum)

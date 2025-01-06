@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import itertools
 import math
-from abc import abstractmethod
-
-
 import queue
 import random
+from abc import abstractmethod
 
 import networkx as nx
 import numpy as np
-
+import plotly.graph_objects as go
+import tqdm
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.utils import SubclassJSONSerializer
@@ -18,14 +17,9 @@ from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable
 
-import tqdm
-import os
-
-
 from ...error import IntractableError
 from ...interfaces.drawio.drawio import DrawIOInterface, circled_product, circled_sum
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
-from ...utils import interval_as_array
 
 
 class Unit(SubclassJSONSerializer, DrawIOInterface):
@@ -175,6 +169,7 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
         :return: The simplified circuit.
         """
         raise NotImplementedError()
+
     def sample(self, *args, **kwargs):
         """
         Draw samples from the circuit.
@@ -197,11 +192,7 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
 
     @property
     def drawio_style(self) -> Dict[str, Any]:
-        return {
-            "style": self.drawio_label,
-            "width": 30,
-            "height": 30,
-        }
+        return {"style": self.drawio_label, "width": 30, "height": 30, }
 
 
 def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
@@ -242,8 +233,7 @@ class LeafUnit(Unit):
     The distribution contained in this leaf unit.
     """
 
-    def __init__(self, distribution: ProbabilisticModel,
-                 probabilistic_circuit: Optional[ProbabilisticCircuit] = None):
+    def __init__(self, distribution: ProbabilisticModel, probabilistic_circuit: Optional[ProbabilisticCircuit] = None):
         super().__init__(probabilistic_circuit)
         self.distribution = distribution
 
@@ -256,12 +246,7 @@ class LeafUnit(Unit):
 
     @property
     def drawio_style(self) -> Dict[str, Any]:
-        return {
-            "style": self.drawio_label,
-            "width": 30,
-            "height": 30,
-            "label": self.distribution.abbreviated_symbol
-        }
+        return {"style": self.drawio_label, "width": 30, "height": 30, "label": self.distribution.abbreviated_symbol}
 
     @property
     def variables(self) -> SortedSet:
@@ -289,7 +274,7 @@ class LeafUnit(Unit):
         self.result_of_current_query = self.distribution.probability_of_simple_event(event)
 
     def support(self):
-        self.result_of_current_query = self.distribution.support# .__deepcopy__()
+        self.result_of_current_query = self.distribution.support  # .__deepcopy__()
 
     def simplify(self):
         if self.distribution is None:
@@ -356,8 +341,7 @@ class InnerUnit(Unit):
 
     @property
     def leaves(self) -> List[LeafUnit]:
-        return [node for node in nx.descendants(self.probabilistic_circuit, self) if
-                node.is_leaf]
+        return [node for node in nx.descendants(self.probabilistic_circuit, self) if node.is_leaf]
 
     @abstractmethod
     def forward(self, *args, **kwargs):
@@ -377,10 +361,11 @@ class InnerUnit(Unit):
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         return cls()
 
+
 class SumUnit(InnerUnit):
 
     def __repr__(self):
-        return "+"
+        return "⊕"
 
     @property
     def representation(self) -> str:
@@ -429,12 +414,13 @@ class SumUnit(InnerUnit):
         self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
 
     def forward(self, *args, **kwargs):
-        self.result_of_current_query = np.sum([weight * subcircuit.result_of_current_query
-                                               for weight, subcircuit in self.weighted_subcircuits], axis=0)
+        self.result_of_current_query = np.sum(
+            [weight * subcircuit.result_of_current_query for weight, subcircuit in self.weighted_subcircuits], axis=0)
 
     def log_forward(self, *args, **kwargs):
-        self.result_of_current_query = np.log(np.sum([weight * np.exp(subcircuit.result_of_current_query)
-                                                      for weight, subcircuit in self.weighted_subcircuits], axis=0))
+        self.result_of_current_query = np.log(np.sum(
+            [weight * np.exp(subcircuit.result_of_current_query) for weight, subcircuit in self.weighted_subcircuits],
+            axis=0))
 
     moment = forward
 
@@ -668,17 +654,18 @@ class ProductUnit(InnerUnit):
         return circled_product
 
     def __repr__(self):
-        return "⨯"
+        return "⊗"
 
     def forward(self, *args, **kwargs):
-        self.result_of_current_query = math.prod([subcircuit.result_of_current_query
-                                                  for subcircuit in self.subcircuits])
+        self.result_of_current_query = math.prod(
+            [subcircuit.result_of_current_query for subcircuit in self.subcircuits])
 
     def log_forward(self, *args, **kwargs):
-        self.result_of_current_query = np.sum([subcircuit.result_of_current_query
-                                               for subcircuit in self.subcircuits], axis=0)
+        self.result_of_current_query = np.sum([subcircuit.result_of_current_query for subcircuit in self.subcircuits],
+                                              axis=0)
 
     moment = log_forward
+
     @property
     def variables(self) -> SortedSet:
         result = SortedSet()
@@ -819,14 +806,13 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def log_likelihood(self, events: np.array) -> np.array:
         variable_to_index_map = self.variable_to_index_map
         for layer in reversed(self.layers):
-            for unit in layer: # open all the procesess
+            for unit in layer:  # open all the procesess
                 if unit.is_leaf:
                     unit: LeafUnit
                     unit.log_likelihood(events[:, [variable_to_index_map[variable] for variable in unit.variables]])
                 else:
                     unit: InnerUnit
-                    unit.log_forward()
-            # Synch trheads 1
+                    unit.log_forward()  # Synch trheads 1
         return self.root.result_of_current_query
 
     def cdf(self, events: np.array) -> np.array:
@@ -884,8 +870,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                     unit.log_forward()
         root = self.root
 
-        [self.remove_node(node) for layer in reversed(self.layers) for node in layer
-         if node.result_of_current_query == -np.inf]
+        [self.remove_node(node) for layer in reversed(self.layers) for node in layer if
+         node.result_of_current_query == -np.inf]
 
         if root not in self.nodes:
             return None, -np.inf
@@ -920,9 +906,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             return result
 
         # create a conditional circuit for every simple event
-        conditional_circuits = [
-            self.__copy__().log_conditional_of_simple_event_in_place(simple_event)
-            for simple_event in event.simple_sets]
+        conditional_circuits = [self.__copy__().log_conditional_of_simple_event_in_place(simple_event) for simple_event
+            in event.simple_sets]
 
         # clear this circuit
         self.remove_nodes_from(list(self.nodes))
@@ -939,8 +924,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         result = SumUnit(self)
 
         # add the conditionals to the sum unit
-        [result.add_subcircuit(conditional.root, np.exp(log_probability))
-         for conditional, log_probability in conditional_circuits]
+        [result.add_subcircuit(conditional.root, np.exp(log_probability)) for conditional, log_probability in
+         conditional_circuits]
         result.log_forward()
         result.normalize()
         return self, result.result_of_current_query
@@ -984,8 +969,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def moment(self, order: OrderType, center: CenterType) -> MomentType:
         variable_to_index_map = self.variable_to_index_map
         [node.moment(order, center, variable_to_index_map) for layer in reversed(self.layers) for node in layer]
-        return MomentType({variable: moment for variable, moment in zip(variable_to_index_map.keys(),
-                                                                        self.root.result_of_current_query)})
+        return MomentType({variable: moment for variable, moment in
+                           zip(variable_to_index_map.keys(), self.root.result_of_current_query)})
 
     def simplify(self) -> Self:
         """
@@ -1007,8 +992,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         :return: if the whole circuit is decomposed
         """
-        return all([subcircuit.is_decomposable() for subcircuit in self.leaves if
-                    isinstance(subcircuit, ProductUnit)])
+        return all([subcircuit.is_decomposable() for subcircuit in self.leaves if isinstance(subcircuit, ProductUnit)])
 
     def __eq__(self, other: 'ProbabilisticCircuit'):
         return self.root == other.root
@@ -1029,8 +1013,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         result.add_nodes_from(new_node_map.values())
         new_unweighted_edges = [(new_node_map[source], new_node_map[target]) for source, target in
                                 self.unweighted_edges]
-        new_weighted_edges = [(new_node_map[source], new_node_map[target], weight)
-                              for source, target, weight in self.weighted_edges]
+        new_weighted_edges = [(new_node_map[source], new_node_map[target], weight) for source, target, weight in
+                              self.weighted_edges]
         result.add_edges_from(new_unweighted_edges)
         result.add_weighted_edges_from(new_weighted_edges)
         return result
@@ -1045,10 +1029,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             node_json = node.to_json()
             hash_to_node_map[hash(node)] = node_json
 
-        unweighted_edges = [(hash(source), hash(target)) for source, target
-                            in self.unweighted_edges]
-        weighted_edges = [(hash(source), hash(target), weight)
-                          for source, target, weight in self.weighted_edges]
+        unweighted_edges = [(hash(source), hash(target)) for source, target in self.unweighted_edges]
+        weighted_edges = [(hash(source), hash(target), weight) for source, target, weight in self.weighted_edges]
         result["hash_to_node_map"] = hash_to_node_map
         result["unweighted_edges"] = unweighted_edges
         result["weighted_edges"] = weighted_edges
@@ -1126,7 +1108,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         # check for determinism of every node
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
 
-
     def normalize(self):
         """
         Normalize every sum node of this circuit in-place.
@@ -1174,23 +1155,45 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return positions
 
-    def plot_structure(self):
+    def plot_structure(self) -> List:
         """
         Plot the structure of the circuit.
         """
 
         positions = self.unit_positions_for_structure_plot()
 
+
+
+        edges_x, edges_y = [], []
+        for source, target in self.edges:
+            x0, y0 = positions[source]
+            x1, y1 = positions[target]
+            edges_x += [x0, x1, None]
+            edges_y += [y0, y1, None]
+
         # draw the edges
-        alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1.
-                           for edge in self.edges]
-        nx.draw_networkx_edges(self, positions, alpha=alpha_for_edges)
+        edge_colors = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1. for edge in
+                           self.edges]
+        edge_colors = [f"rgba(0, 0, 0, {color})" for color in edge_colors]
 
-        # draw the nodes and labels
-        nx.draw_networkx_nodes(self, positions)
-        labels = {node: repr(node) for node in self.nodes}
-        nx.draw_networkx_labels(self, positions, labels)
+        edge_trace = go.Scatter(x=edges_x, y=edges_y, line=dict(width=5), color=edge_colors, hoverinfo='none',
+                                mode='lines')
 
+
+        x_position = [position[0] for position in positions.values()]
+        y_position = [position[1] for position in positions.values()]
+        node_trace = go.Scatter(x=x_position, y=y_position, mode='markers+text',
+                                text=[repr(node) for node in positions.keys()],
+                                textfont=dict(size=50, color="Black"),
+                                marker=dict(size=50, color="White"))
+
+        return [edge_trace, node_trace]
+
+    def plotly_layout_structure(self):
+        return go.Layout(title='Probabilistic Circuit Structure', showlegend=False,
+                         paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor = 'rgba(0,0,0,0)',
+                         yaxis_visible=False, yaxis_showticklabels=False,
+                         xaxis_visible=False, xaxis_showticklabels=False)
 
     def nodes_weights(self) -> dict:
         """
@@ -1240,12 +1243,11 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 self.remove_node(leaf)
 
 
-
-
 class ShallowProbabilisticCircuit(ProbabilisticCircuit):
     """
     class for PC in shallow form, sum unit as root followed by product units which only have leafs as children.
     """
+
     @classmethod
     def from_probabilistic_circuit(cls, probabilistic_circuit: ProbabilisticCircuit):
         """
@@ -1287,7 +1289,8 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
             for sum_succ in new_succ_list:
                 first_weight = probabilistic_circuit.get_edge_data(node, sum_succ, {"weight": 1}).get("weight", 1)
                 for succ_succ in list(probabilistic_circuit.successors(sum_succ)):
-                    second_weight = probabilistic_circuit.get_edge_data(sum_succ, succ_succ, {"weight": 1}).get("weight", 1)
+                    second_weight = probabilistic_circuit.get_edge_data(sum_succ, succ_succ, {"weight": 1}).get(
+                        "weight", 1)
                     probabilistic_circuit.add_edge(node, succ_succ, weight=first_weight * second_weight)
                 probabilistic_circuit.remove_edge(node, sum_succ)
                 if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
@@ -1307,7 +1310,7 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                 if len(list(probabilistic_circuit.predecessors(node))) == 0:
                     probabilistic_circuit.remove_node(node)
             elif presucc is None:
-                #None only happen if this Instance is root
+                # None only happen if this Instance is root
                 probabilistic_circuit.remove_node(node)
             for sum_succ in new_succ_list:
                 pro_li = []
@@ -1352,7 +1355,8 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         if intersection.is_empty():
             return Event()
 
-        center = np.array([assignment.simple_sets[0].center() for variable, assignment in intersection.simple_sets[0].items()]).reshape(1, -1)
+        center = np.array([assignment.simple_sets[0].center() for variable, assignment in
+                           intersection.simple_sets[0].items()]).reshape(1, -1)
 
         likelihood_own = self.likelihood(center)
         likelihood_other = other.likelihood(center)
@@ -1375,7 +1379,7 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
             progress_bar.update()
         return result
 
-    def l1(self, other: Self, tolerance: float = 10e-8)-> float:
+    def l1(self, other: Self, tolerance: float = 10e-8) -> float:
         """
         The L1 metric between shallow Circuits are calculated.
         It is important, that before the shallowing the PC replace_discrete_distribution_with_deterministic_sum called on.´
@@ -1386,8 +1390,7 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         p_e = self.probability(e)
         q_e = other.probability(e)
 
-        return 2*(p_e - q_e)
-
+        return 2 * (p_e - q_e)
 
     def remove_node_and_successor_structure(self, node: Unit):
         """
