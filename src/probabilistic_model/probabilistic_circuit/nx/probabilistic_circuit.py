@@ -194,33 +194,16 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
     def drawio_style(self) -> Dict[str, Any]:
         return {"style": self.drawio_label, "width": 30, "height": 30, }
 
-
-def nodes_weights(circuit: ProbabilisticCircuit) -> dict:
-    """
-    TODO MOVE
-    Calculate the weights of all nodes in a probabilistic circuit.
-    Circuit (ProbabilisticCircuit): The probabilistic circuit containing nodes, edges, and weights.
-
-    Return: A dictionary containing computed weights for every node in the circuit indexed by their hash values.
-    """
-    node_weights = {hash(circuit.root): [1]}
-    seen_nodes = set()
-    seen_nodes.add(hash(circuit.root))
-    to_visit_nodes = queue.Queue()
-
-    to_visit_nodes.put(circuit.root)
-    while not to_visit_nodes.empty():
-        node = to_visit_nodes.get()
-        succ_iter = circuit.successors(node)
-        for succ in succ_iter:
-            if circuit.has_edge(node, succ):
-                weight = circuit.get_edge_data(node, succ)["weight"]
-                node_weights[hash(succ)] = [old * weight for old in node_weights[hash(node)]] + node_weights.get(
-                    hash(succ), [])
-                if hash(succ) not in seen_nodes:
-                    seen_nodes.add(hash(succ))
-                    to_visit_nodes.put(succ)
-    return node_weights
+    def plotly_style(self) -> Dict:
+        """
+        The plotly style for this unit. This style is passed as keyword arguments into the constructor of go.Scatter.
+        The x and y positions are specified by the plotting algorithm, hence they should not be set.
+        """
+        return dict(mode="markers", marker=dict(size=50, symbol="circle", color="rgba(255,255, 255, 1)",
+                                                line=dict(color="rgba(0,0,0,1)", width=2)),
+                    textfont=dict(size=30, color="black"),
+                    textposition="middle center",
+                    )
 
 
 class LeafUnit(Unit):
@@ -247,6 +230,12 @@ class LeafUnit(Unit):
     @property
     def drawio_style(self) -> Dict[str, Any]:
         return {"style": self.drawio_label, "width": 30, "height": 30, "label": self.distribution.abbreviated_symbol}
+
+    def plotly_style(self) -> Dict:
+        result = super().plotly_style()
+        result["text"] = self.distribution.abbreviated_symbol
+        result["mode"] = "markers+text"
+        return result
 
     @property
     def variables(self) -> SortedSet:
@@ -374,6 +363,11 @@ class SumUnit(InnerUnit):
     @property
     def drawio_label(self) -> str:
         return circled_sum
+
+    def plotly_style(self) -> Dict:
+        result = super().plotly_style()
+        result["marker"]["symbol"] = "circle-cross"
+        return result
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, Unit]]:
@@ -656,6 +650,11 @@ class ProductUnit(InnerUnit):
     def __repr__(self):
         return "⊗"
 
+    def plotly_style(self) -> Dict:
+        result = super().plotly_style()
+        result["marker"]["symbol"] = "circle-x"
+        return result
+
     def forward(self, *args, **kwargs):
         self.result_of_current_query = math.prod(
             [subcircuit.result_of_current_query for subcircuit in self.subcircuits])
@@ -907,7 +906,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         # create a conditional circuit for every simple event
         conditional_circuits = [self.__copy__().log_conditional_of_simple_event_in_place(simple_event) for simple_event
-            in event.simple_sets]
+                                in event.simple_sets]
 
         # clear this circuit
         self.remove_nodes_from(list(self.nodes))
@@ -1162,43 +1161,47 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         positions = self.unit_positions_for_structure_plot()
 
+        # draw the edges
+        traces = []
 
-
-        edges_x, edges_y = [], []
         for source, target in self.edges:
+            edge_data = self.get_edge_data(source, target)
+            weight = edge_data.get("weight", 1)
+            color = edge_data.get("color", (0, 0, 0))
+            color = f"rgba({color[0]}, {color[1]}, {color[2]}, {weight})"
             x0, y0 = positions[source]
             x1, y1 = positions[target]
-            edges_x += [x0, x1, None]
-            edges_y += [y0, y1, None]
 
-        # draw the edges
-        edge_colors = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1. for edge in
-                           self.edges]
-        edge_colors = [f"rgba(0, 0, 0, {color})" for color in edge_colors]
+            standoff = target.plotly_style()["marker"]["size"] / 2
 
-        edge_trace = go.Scatter(x=edges_x, y=edges_y, line=dict(width=5), color=edge_colors, hoverinfo='none',
-                                mode='lines')
+            # make the arrow reach the edge of the node
+            edge_trace = go.Scatter(x=[x0, x1], y=[y0, y1], mode="lines+markers",
+                                    line=dict(color=color, width=2),
+                                    marker=dict(size=20, symbol="arrow", angleref="previous", color=color,
+                                                standoff=standoff))
+            traces.append(edge_trace)
+
+            for node, (x, y) in positions.items():
+                node_trace = go.Scatter(x=[x], y=[y], **node.plotly_style())
+
+                if node.is_leaf:
+                    # add variable name to the right of the leaf
+                    text_trace = go.Scatter(x=[x + 0.4], y=[y], text=node.variables[0].name, mode="text",
+                                            textfont=dict(size=30))
+                    traces.append(text_trace)
+
+                traces.append(node_trace)
 
 
-        x_position = [position[0] for position in positions.values()]
-        y_position = [position[1] for position in positions.values()]
-        node_trace = go.Scatter(x=x_position, y=y_position, mode='markers+text',
-                                text=[repr(node) for node in positions.keys()],
-                                textfont=dict(size=50, color="Black"),
-                                marker=dict(size=50, color="White"))
-
-        return [edge_trace, node_trace]
+        return traces
 
     def plotly_layout_structure(self):
-        return go.Layout(title='Probabilistic Circuit Structure', showlegend=False,
-                         paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor = 'rgba(0,0,0,0)',
-                         yaxis_visible=False, yaxis_showticklabels=False,
+        return go.Layout(title='Probabilistic Circuit Structure', showlegend=False, paper_bgcolor='rgba(0,0,0,0)',
+                         plot_bgcolor='rgba(0,0,0,0)', yaxis_visible=False, yaxis_showticklabels=False,
                          xaxis_visible=False, xaxis_showticklabels=False)
 
     def nodes_weights(self) -> dict:
         """
-        TODO COMPARE WITH OTHER NODE WEIGHTS
-
         :return: dict with keys as nodes and values as list of all the weights for the node.
         """
         node_weights = {hash(self.root): [1]}
