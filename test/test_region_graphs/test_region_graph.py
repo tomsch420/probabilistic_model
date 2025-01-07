@@ -31,7 +31,7 @@ class RandomRegionGraphTestCase(unittest.TestCase):
     def test_as_jpc(self):
         model = self.region_graph.as_probabilistic_circuit(input_units=10, sum_units=5)
         nx_model = model.to_nx()
-        fig = go.Figure(nx_model.plot_structure(), nx_model.plotly_layout_structure())
+        # fig = go.Figure(nx_model.plot_structure(), nx_model.plotly_layout_structure())
         # fig.show()
 
         self.assertEqual(len(list(node for node in nx_model.nodes() if isinstance(node, SumUnit))), 21)
