@@ -181,7 +181,7 @@ class JPT(ProbabilisticCircuit):
             if isinstance(variable, ScaledContinuous):
                 column = variable.encode(column)
             if isinstance(variable, Symbolic):
-                column = column.apply(lambda x: int(x))
+                column = column.apply(lambda x: variable.domain.simple_sets[0].all_elements[x].value)
             result[:, variable_index] = column
 
         return result
