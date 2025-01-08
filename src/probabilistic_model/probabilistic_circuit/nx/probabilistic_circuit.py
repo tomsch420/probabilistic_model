@@ -194,17 +194,6 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
     def drawio_style(self) -> Dict[str, Any]:
         return {"style": self.drawio_label, "width": 30, "height": 30, }
 
-    def plotly_style(self) -> Dict:
-        """
-        The plotly style for this unit. This style is passed as keyword arguments into the constructor of go.Scatter.
-        The x and y positions are specified by the plotting algorithm, hence they should not be set.
-        """
-        return dict(mode="markers", marker=dict(size=50, symbol="circle", color="rgba(255,255, 255, 1)",
-                                                line=dict(color="rgba(0,0,0,1)", width=2)),
-                    textfont=dict(size=30, color="black"),
-                    textposition="middle center",
-                    )
-
 
 class LeafUnit(Unit):
     """
@@ -230,12 +219,6 @@ class LeafUnit(Unit):
     @property
     def drawio_style(self) -> Dict[str, Any]:
         return {"style": self.drawio_label, "width": 30, "height": 30, "label": self.distribution.abbreviated_symbol}
-
-    def plotly_style(self) -> Dict:
-        result = super().plotly_style()
-        result["text"] = self.distribution.abbreviated_symbol
-        result["mode"] = "markers+text"
-        return result
 
     @property
     def variables(self) -> SortedSet:
@@ -363,11 +346,6 @@ class SumUnit(InnerUnit):
     @property
     def drawio_label(self) -> str:
         return circled_sum
-
-    def plotly_style(self) -> Dict:
-        result = super().plotly_style()
-        result["marker"]["symbol"] = "circle-cross"
-        return result
 
     @property
     def weighted_subcircuits(self) -> List[Tuple[float, Unit]]:
@@ -649,11 +627,6 @@ class ProductUnit(InnerUnit):
 
     def __repr__(self):
         return "⊗"
-
-    def plotly_style(self) -> Dict:
-        result = super().plotly_style()
-        result["marker"]["symbol"] = "circle-x"
-        return result
 
     def forward(self, *args, **kwargs):
         self.result_of_current_query = math.prod(
@@ -1154,51 +1127,54 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return positions
 
-    def plot_structure(self) -> List:
-        """
-        Plot the structure of the circuit.
-        """
+    def plot_structure(self, node_colors: Optional[Dict[Unit, str]] = None, node_size=550):
 
+        # fill the colors for the nodes
+        if node_colors is None:
+            node_colors = dict()
+        for node in self.nodes:
+            if node not in node_colors:
+                node_colors[node] = "black"
+
+        # get the positions of the nodes
         positions = self.unit_positions_for_structure_plot()
 
         # draw the edges
-        traces = []
+        alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1.
+                           for edge in self.edges]
+        nx.draw_networkx_edges(self, positions, alpha=alpha_for_edges, node_size=node_size)
+        edge_labels = {(s, t): w for (s, t, w) in self.weighted_edges}
+        nx.draw_networkx_edge_labels(self, positions, edge_labels, label_pos=0.25)
 
-        for source, target in self.edges:
-            edge_data = self.get_edge_data(source, target)
-            weight = edge_data.get("weight", 1)
-            color = edge_data.get("color", (0, 0, 0))
-            color = f"rgba({color[0]}, {color[1]}, {color[2]}, {weight})"
-            x0, y0 = positions[source]
-            x1, y1 = positions[target]
+        # filter different types of nodes
+        sum_nodes = [node for node in self.nodes if isinstance(node, SumUnit)]
+        sum_node_colors = [node_colors[node] for node in sum_nodes]
+        product_nodes = [node for node in self.nodes if isinstance(node, ProductUnit)]
+        product_node_colors = [node_colors[node] for node in product_nodes]
+        leaf_nodes = [node for node in self.nodes if isinstance(node, LeafUnit)]
+        leaf_node_colors = [node_colors[node] for node in leaf_nodes]
 
-            standoff = target.plotly_style()["marker"]["size"] / 2
+        # draw sum nodes
+        nx.draw_networkx_nodes(self, positions, nodelist=sum_nodes,
+                               node_color="#FFFFFF",
+                               node_shape="o",
+                               edgecolors=sum_node_colors,
+                               node_size=node_size)
+        nx.draw_networkx_nodes(self, positions, nodelist=sum_nodes, node_color=sum_node_colors, node_shape="+",
+                               node_size=node_size * 0.5)
 
-            # make the arrow reach the edge of the node
-            edge_trace = go.Scatter(x=[x0, x1], y=[y0, y1], mode="lines+markers",
-                                    line=dict(color=color, width=2),
-                                    marker=dict(size=20, symbol="arrow", angleref="previous", color=color,
-                                                standoff=standoff))
-            traces.append(edge_trace)
+        # draw product nodes
+        nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color="#FFFFFF", node_shape="o", edgecolors=product_node_colors, node_size=node_size)
+        nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color=product_node_colors, node_shape="x", edgecolors="black", node_size=node_size * 6/11 * 0.5)
 
-            for node, (x, y) in positions.items():
-                node_trace = go.Scatter(x=[x], y=[y], **node.plotly_style())
+        # draw leaf nodes
+        labels = {node: node.distribution.abbreviated_symbol for node in leaf_nodes}
+        nx.draw_networkx_nodes(self, positions, nodelist=leaf_nodes, node_color="#FFFFFF", node_shape="o", edgecolors=leaf_node_colors, node_size=node_size)
 
-                if node.is_leaf:
-                    # add variable name to the right of the leaf
-                    text_trace = go.Scatter(x=[x + 0.4], y=[y], text=node.variables[0].name, mode="text",
-                                            textfont=dict(size=30))
-                    traces.append(text_trace)
+        for node, label in labels.items():
+            nx.draw_networkx_labels(self, positions, {node:label}, font_size=16, font_color=node_colors[node],
+                                    verticalalignment="center_baseline", horizontalalignment="center")
 
-                traces.append(node_trace)
-
-
-        return traces
-
-    def plotly_layout_structure(self):
-        return go.Layout(title='Probabilistic Circuit Structure', showlegend=False, paper_bgcolor='rgba(0,0,0,0)',
-                         plot_bgcolor='rgba(0,0,0,0)', yaxis_visible=False, yaxis_showticklabels=False,
-                         xaxis_visible=False, xaxis_showticklabels=False)
 
     def nodes_weights(self) -> dict:
         """

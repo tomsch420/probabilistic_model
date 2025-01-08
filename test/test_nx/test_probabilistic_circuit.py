@@ -1,6 +1,7 @@
 import unittest
 
 import plotly.graph_objects as go
+from matplotlib import pyplot as plt
 from random_events.interval import closed, SimpleInterval
 from random_events.variable import Continuous
 
@@ -71,9 +72,10 @@ class SmallCircuitTestCast(unittest.TestCase):
         conditional.plot_structure()  # plt.show()
 
     def test_plot(self):
-        fig = go.Figure(self.model.plot(600, surface=True))  # fig.show()
-        fig = go.Figure(self.model.plot_structure(), self.model.plotly_layout_structure())
-        fig.show()
+        color_map = {self.model.root: "red", self.model.root.subcircuits[0]: "blue", self.model.leaves[0]: "green"}
+        self.model.plot_structure(color_map)
+        plt.show()
+
 
 class SymbolicPlottingTestCase(unittest.TestCase):
     x = Symbolic("x", SymbolEnum)
