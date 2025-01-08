@@ -20,12 +20,7 @@ parts:
     - file: nyga_distribution
     - file: joint_probability_trees
     - file: template_modelling
-
     - file: area_validation_metric
-  - caption: Implementation
-    chapters:
-    - file: layered_circuit
-    - file: uniform_profiling
   - caption: Miscellaneous
     chapters:
     - file: pendulum
