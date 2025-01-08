@@ -74,7 +74,6 @@ class SmallCircuitTestCast(unittest.TestCase):
     def test_plot(self):
         color_map = {self.model.root: "red", self.model.root.subcircuits[0]: "blue", self.model.leaves[0]: "green"}
         self.model.plot_structure(color_map)
-        plt.show()
 
 
 class SymbolicPlottingTestCase(unittest.TestCase):

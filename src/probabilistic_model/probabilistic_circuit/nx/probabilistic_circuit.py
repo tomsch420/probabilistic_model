@@ -10,6 +10,7 @@ import networkx as nx
 import numpy as np
 import plotly.graph_objects as go
 import tqdm
+from matplotlib import pyplot as plt
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import SetElement
 from random_events.utils import SubclassJSONSerializer
@@ -1138,6 +1139,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         # get the positions of the nodes
         positions = self.unit_positions_for_structure_plot()
+        position_for_variable_name = {node: (x + 0.2, y) for node, (x, y) in positions.items()}
 
         # draw the edges
         alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1.
@@ -1165,7 +1167,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         # draw product nodes
         nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color="#FFFFFF", node_shape="o", edgecolors=product_node_colors, node_size=node_size)
-        nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color=product_node_colors, node_shape="x", edgecolors="black", node_size=node_size * 6/11 * 0.5)
+        nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color=product_node_colors, node_shape="x",
+                               node_size=node_size * 6/11 * 0.5)
 
         # draw leaf nodes
         labels = {node: node.distribution.abbreviated_symbol for node in leaf_nodes}
@@ -1174,6 +1177,14 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         for node, label in labels.items():
             nx.draw_networkx_labels(self, positions, {node:label}, font_size=16, font_color=node_colors[node],
                                     verticalalignment="center_baseline", horizontalalignment="center")
+            nx.draw_networkx_labels(self, position_for_variable_name, {node: node.variables[0].name},
+                                    font_size=16, font_color=node_colors[node],)
+
+        # Iterating over all the axes in the figure
+        # and make the Spines Visibility as False
+        for pos in ['right', 'top', 'bottom', 'left']:
+            plt.gca().spines[pos].set_visible(False)
+
 
 
     def nodes_weights(self) -> dict:
