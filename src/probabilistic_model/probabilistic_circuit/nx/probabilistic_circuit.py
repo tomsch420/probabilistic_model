@@ -1121,10 +1121,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         positions = {}
         for depth, layer in enumerate(layers):
             number_of_nodes = len(layer)
-            positions_in_layer = np.linspace(0, maximum_layer_width, number_of_nodes, endpoint=False)
+            positions_in_layer = np.linspace(0., maximum_layer_width, number_of_nodes, endpoint=False)
             positions_in_layer += (maximum_layer_width - len(layer)) / (2 * len(layer))
             for position, node in zip(positions_in_layer, layer):
-                positions[node] = (depth, position)
+                positions[node] = (float(depth), position)
 
         return positions
 
@@ -1184,6 +1184,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         # and make the Spines Visibility as False
         for pos in ['right', 'top', 'bottom', 'left']:
             plt.gca().spines[pos].set_visible(False)
+        xticks, xticklabels = plt.xticks()
+        xmin = (3 * xticks[0] - xticks[1]) / 2.
+        plt.xlim(xmin, max([x for x, _ in positions.values()]) + 1)
 
 
 
