@@ -127,11 +127,6 @@ class ComplexBayesianNetworkTestCase(unittest.TestCase):
         self.d_az.conditional_probability_distributions[1] = (
             SymbolicDistribution(self.a, MissingDict(float, zip([0, 1], [0.6, 0.4]))))
 
-    def plot(self):
-        pos = nx.planar_layout(self.model)
-        nx.draw(self.model, pos=pos, with_labels=True, labels={node: repr(node) for node in self.model.nodes})
-        plt.show()
-
     def test_as_probabilistic_circuit(self):
         circuit = self.model.as_probabilistic_circuit().simplify()
         self.assertLess(len(circuit.weighted_edges), math.prod([len(v.domain.simple_sets) for v in circuit.variables]))
@@ -163,10 +158,10 @@ class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
         self.bayesian_network.add_nodes_from([self.p_x, self.p_yzx])
         self.bayesian_network.add_edge(self.p_x, self.p_yzx)
 
-    def plot(self):
-        pos = nx.planar_layout(self.bayesian_network)
-        nx.draw(self.bayesian_network, pos=pos, with_labels=True)
+    def test_plot(self):
+        self.bayesian_network.plot()
         plt.show()
+
 
     def test_as_probabilistic_circuit(self):
         circuit = self.bayesian_network.as_probabilistic_circuit()

@@ -176,8 +176,7 @@ cpd_xy.conditional_probability_distributions[int(ObjectPosition.CENTER)] = defau
 bn.add_node(cpd_xy)
 bn.add_edge(cpd_object_position, cpd_xy)
 
-pos = nx.planar_layout(bn)
-nx.draw(bn, with_labels=True, pos=pos)
+bn.plot()
 ```
 
 ```{code-cell} ipython3

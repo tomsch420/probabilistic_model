@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from functools import cached_property
 
+from matplotlib import pyplot as plt
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Variable, Symbolic
 from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
@@ -11,6 +12,7 @@ from probabilistic_model.probabilistic_circuit.nx.distributions import (Symbolic
 import networkx as nx
 
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit, SumUnit)
+import numpy as np
 
 
 class BayesianNetworkMixin:
@@ -164,6 +166,37 @@ class BayesianNetwork(nx.DiGraph):
         if len(possible_roots) > 1:
             raise ValueError(f"More than one root found. Possible roots are {possible_roots}")
         return possible_roots[0]
+
+    def node_positions_for_structure_plot(self) -> Dict[BayesianNetworkMixin, Tuple[int, int]]:
+        """
+        Calculate the positions of the nodes in the structure plot.
+
+        :return: The positions of the nodes as dictionary from unit to (x, y) coordinate.
+        """
+        # do a layer-wise BFS
+        layers = list(nx.bfs_layers(self, self.root))
+
+        # calculate the positions of the nodes
+        maximum_layer_width = max([len(layer) for layer in layers])
+        positions = {}
+        for depth, layer in enumerate(layers):
+            number_of_nodes = len(layer)
+            positions_in_layer = np.linspace(0, maximum_layer_width, number_of_nodes, endpoint=False)
+            positions_in_layer += (maximum_layer_width - len(layer)) / (2 * len(layer))
+            for position, node in zip(positions_in_layer, layer):
+                positions[node] = (position, -depth)
+
+        return positions
+
+    def plot(self):
+        """
+        Plot the Bayesian Network.
+        """
+        positions = self.node_positions_for_structure_plot()
+        labels = {node: ", ".join([v.name for v in node.variables]) for node in self.nodes}
+        nx.draw(self, positions, node_color="#FFFFFF", node_shape="o", edgecolors="#000000", node_size=500,
+                labels=labels)
+
 
     def as_probabilistic_circuit(self) -> ProbabilisticCircuit:
         """

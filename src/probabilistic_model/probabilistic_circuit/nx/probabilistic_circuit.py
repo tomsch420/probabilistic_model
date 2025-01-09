@@ -1145,7 +1145,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1.
                            for edge in self.edges]
         nx.draw_networkx_edges(self, positions, alpha=alpha_for_edges, node_size=node_size)
-        edge_labels = {(s, t): w for (s, t, w) in self.weighted_edges}
+        edge_labels = {(s, t): round(w, 2) for (s, t, w) in self.weighted_edges}
         nx.draw_networkx_edge_labels(self, positions, edge_labels, label_pos=0.25)
 
         # filter different types of nodes
