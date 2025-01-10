@@ -72,8 +72,11 @@ class SmallCircuitTestCast(unittest.TestCase):
         conditional.plot_structure()  # plt.show()
 
     def test_plot(self):
+        self.model.log_likelihood(np.array([[0.5, 0.5]]))
         color_map = {self.model.root: "red", self.model.root.subcircuits[0]: "blue", self.model.leaves[0]: "green"}
-        self.model.plot_structure(color_map)
+        self.model.plot_structure(color_map, plot_inference=True,
+                                  inference_representation=lambda node: round(node.result_of_current_query[0].item(), 2))
+        # plt.show()
 
 
 class SymbolicPlottingTestCase(unittest.TestCase):

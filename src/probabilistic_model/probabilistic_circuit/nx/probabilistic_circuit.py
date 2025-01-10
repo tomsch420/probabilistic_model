@@ -8,7 +8,6 @@ from abc import abstractmethod
 
 import networkx as nx
 import numpy as np
-import plotly.graph_objects as go
 import tqdm
 from matplotlib import pyplot as plt
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
@@ -16,7 +15,7 @@ from random_events.set import SetElement
 from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
-from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable
+from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, Callable
 
 from ...error import IntractableError
 from ...interfaces.drawio.drawio import DrawIOInterface, circled_product, circled_sum
@@ -1128,22 +1127,46 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return positions
 
-    def plot_structure(self, node_colors: Optional[Dict[Unit, str]] = None, node_size=550):
+    def fill_node_colors(self, node_colors: Dict[Unit, str]):
+        """
+        Fill the node colors for the structure plot.
 
+        :param node_colors: The node colors to fill.
+        """
         # fill the colors for the nodes
         if node_colors is None:
             node_colors = dict()
         for node in self.nodes:
             if node not in node_colors:
                 node_colors[node] = "black"
+        return node_colors
+
+    def plot_structure(self, node_colors: Optional[Dict[Unit, str]] = None, node_size=550, variable_name_offset=0.2,
+                       plot_inference=False,
+                       inference_representation: Callable = lambda node: str(node.result_of_current_query),
+                       inference_result_offset: float = -0.25):
+        """
+        Plot the structure of the circuit using matplotlib.
+
+        :param node_colors: Optionally specified colors of the node.
+        If nodes are not specified in the dictionary, they will be black.
+        :param node_size: The size of the nodes
+        :param variable_name_offset: The offset to the right of the variable names.
+        :param plot_inference: If the results of the inference should be plotted.
+        :param inference_representation: The representation of the inference results as a function from node to string.
+        :param inference_result_offset: The vertical offset of the inference results.
+        """
+
+        # fill the colors for the nodes
+        node_colors = self.fill_node_colors(node_colors)
 
         # get the positions of the nodes
         positions = self.unit_positions_for_structure_plot()
-        position_for_variable_name = {node: (x + 0.2, y) for node, (x, y) in positions.items()}
+        position_for_variable_name = {node: (x + variable_name_offset, y) for node, (x, y) in positions.items()}
 
         # draw the edges
-        alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1.
-                           for edge in self.edges]
+        alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1. for edge in
+                           self.edges]
         nx.draw_networkx_edges(self, positions, alpha=alpha_for_edges, node_size=node_size)
         edge_labels = {(s, t): round(w, 2) for (s, t, w) in self.weighted_edges}
         nx.draw_networkx_edge_labels(self, positions, edge_labels, label_pos=0.25)
@@ -1157,38 +1180,47 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         leaf_node_colors = [node_colors[node] for node in leaf_nodes]
 
         # draw sum nodes
-        nx.draw_networkx_nodes(self, positions, nodelist=sum_nodes,
-                               node_color="#FFFFFF",
-                               node_shape="o",
-                               edgecolors=sum_node_colors,
-                               node_size=node_size)
+        nx.draw_networkx_nodes(self, positions, nodelist=sum_nodes, node_color="#FFFFFF", node_shape="o",
+                               edgecolors=sum_node_colors, node_size=node_size)
         nx.draw_networkx_nodes(self, positions, nodelist=sum_nodes, node_color=sum_node_colors, node_shape="+",
                                node_size=node_size * 0.5)
 
         # draw product nodes
-        nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color="#FFFFFF", node_shape="o", edgecolors=product_node_colors, node_size=node_size)
+        nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color="#FFFFFF", node_shape="o",
+                               edgecolors=product_node_colors, node_size=node_size)
         nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color=product_node_colors, node_shape="x",
-                               node_size=node_size * 6/11 * 0.5)
+                               node_size=node_size * 6 / 11 * 0.5)
 
         # draw leaf nodes
         labels = {node: node.distribution.abbreviated_symbol for node in leaf_nodes}
-        nx.draw_networkx_nodes(self, positions, nodelist=leaf_nodes, node_color="#FFFFFF", node_shape="o", edgecolors=leaf_node_colors, node_size=node_size)
+        nx.draw_networkx_nodes(self, positions, nodelist=leaf_nodes, node_color="#FFFFFF", node_shape="o",
+                               edgecolors=leaf_node_colors, node_size=node_size)
 
         for node, label in labels.items():
-            nx.draw_networkx_labels(self, positions, {node:label}, font_size=16, font_color=node_colors[node],
+            nx.draw_networkx_labels(self, positions, {node: label}, font_size=16, font_color=node_colors[node],
                                     verticalalignment="center_baseline", horizontalalignment="center")
-            nx.draw_networkx_labels(self, position_for_variable_name, {node: node.variables[0].name},
-                                    font_size=16, font_color=node_colors[node],)
+            nx.draw_networkx_labels(self, position_for_variable_name, {node: node.variables[0].name}, font_size=16,
+                                    font_color=node_colors[node], )
 
         # Iterating over all the axes in the figure
         # and make the Spines Visibility as False
         for pos in ['right', 'top', 'bottom', 'left']:
             plt.gca().spines[pos].set_visible(False)
+
+        # adjust plot size
         xticks, xticklabels = plt.xticks()
         xmin = (3 * xticks[0] - xticks[1]) / 2.
         plt.xlim(xmin, max([x for x, _ in positions.values()]) + 1)
 
+        if not plot_inference:
+            return
 
+        # plot the results of the queries
+        positions_for_results = {node: (x, y + inference_result_offset) for node, (x, y) in positions.items()}
+        inference_labels = {node: inference_representation(node) for node in self.nodes if
+                            node.result_of_current_query is not None}
+        nx.draw_networkx_labels(self, positions_for_results, inference_labels, font_size=8, font_color="black",
+                                verticalalignment="center_baseline", horizontalalignment="center")
 
     def nodes_weights(self) -> dict:
         """
