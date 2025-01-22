@@ -1,15 +1,13 @@
 from __future__ import annotations
+
 import unittest
-from dataclasses import dataclass
 
 import networkx as nx
 from matplotlib import pyplot as plt
-from random_events.set import SetElement
-from random_events.utils import recursive_subclasses
-from sqlalchemy import create_engine, select, ForeignKey, Column, Integer, UniqueConstraint, Engine, inspect, Table, \
+from sqlalchemy import create_engine, ForeignKey, UniqueConstraint, Engine, inspect, Table, \
     MetaData
 from sqlalchemy.orm import MappedAsDataclass, DeclarativeBase, mapped_column, Mapped, Session, relationship
-from typing_extensions import List, Iterable, Type
+from typing_extensions import List, Type
 
 from probabilistic_model.probabilistic_circuit.nx.helper import fully_factorized
 from probabilistic_model.probabilistic_model import ProbabilisticModel
@@ -19,10 +17,12 @@ def attributes_of_table(table: Table):
     return [column for column in table.columns if column.primary_key is False
             and not column.foreign_keys]
 
+
 def exchangeable_parts_of_table(table: Table):
     for fk in table.foreign_keys:
         if fk.column.table == table:
             yield fk.column.table
+
 
 def unique_parts_of_table(table: Table, engine: Engine):
     inspector = inspect(engine)
@@ -36,15 +36,17 @@ def unique_parts_of_table(table: Table, engine: Engine):
 
     return result
 
+
 def relations_of_table(table: Table):
     ...
+
 
 class Base(MappedAsDataclass, DeclarativeBase):
 
     @classmethod
     def attributes(cls):
         return [column for column in cls.__table__.columns if column.primary_key is False
-                and not column.foreign_keys ]
+                and not column.foreign_keys]
 
     @classmethod
     def exchangeable_parts(cls):
@@ -66,6 +68,8 @@ class Base(MappedAsDataclass, DeclarativeBase):
             result.append((constraint['name'], constraint_columns))
 
         return result
+
+
 class Government(Base):
     __tablename__ = "Government"
 
@@ -77,13 +81,15 @@ class Government(Base):
     nation: Mapped[Nation] = relationship(back_populates="government", single_parent=True)
     __table_args__ = (UniqueConstraint("nation_id"),)
 
+
 class Person(Base):
     __tablename__ = "Person"
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
     name: Mapped[str]
     age: Mapped[int]
     nation_id: Mapped[int] = mapped_column(ForeignKey('Nation.id'), init=False)
-    nation: Mapped[Nation] = relationship("Nation", foreign_keys=[nation_id])
+    nation: Mapped[Nation] = relationship("Nation", foreign_keys=[nation_id], back_populates="persons")
+
 
 class Region(Base):
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
@@ -91,13 +97,21 @@ class Region(Base):
     nations: Mapped[List[Nation]] = relationship("Nation", back_populates="region", init=False)
     __tablename__ = "Region"
 
+
 class Nation(Base):
     __tablename__ = "Nation"
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
+
     region_id: Mapped[int] = mapped_column(ForeignKey('Region.id'), init=False)
     region: Mapped[Region] = relationship("Region", foreign_keys=[region_id], back_populates="nations")
+
+    high_gdp: Mapped[bool]  # this is an attribute
+
     government: Mapped[Government] = relationship(back_populates="nation", init=False)
-    high_gdp: Mapped[bool] # this is an attribute
+
+    persons: Mapped[List[Person]] = relationship("Person", back_populates="nation", init=False)
+
+
 
 class Adjacent(Base):
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
@@ -107,6 +121,7 @@ class Adjacent(Base):
     nation_1: Mapped[Nation] = relationship("Nation", foreign_keys=[nation_1_id])
     nation_2: Mapped[Nation] = relationship("Nation", foreign_keys=[nation_2_id])
 
+
 class Conflict(Base):
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
     __tablename__ = "Conflict"
@@ -114,6 +129,7 @@ class Conflict(Base):
     nation_2_id: Mapped[int] = mapped_column(ForeignKey('Nation.id'), init=False)
     nation_1: Mapped[Nation] = relationship("Nation", foreign_keys=[nation_1_id])
     nation_2: Mapped[Nation] = relationship("Nation", foreign_keys=[nation_2_id])
+
 
 class Supports(Base):
     __tablename__ = "Supports"
@@ -123,6 +139,7 @@ class Supports(Base):
     nation_id: Mapped[int] = mapped_column(ForeignKey('Nation.id'), primary_key=True, init=False)
     nation: Mapped[Nation] = relationship("Nation", foreign_keys=[nation_id])
     value: Mapped[bool]
+
 
 class RSPNClass:
     attributes: set
@@ -138,7 +155,6 @@ class ExchangeableDistributionTemplate:
 
 
 class RelationalSPN:
-
     base_table: Type[Base]
     session: Session
 
@@ -172,11 +188,10 @@ class RelationalSPN:
             #         part_decomposition.add_node(column)
             #         part_decomposition.add_edge(name, column, label="unique")
 
-
         return part_decomposition
 
-class RSPNTestCase(unittest.TestCase):
 
+class RSPNTestCase(unittest.TestCase):
     session: Session
 
     @classmethod
@@ -186,7 +201,6 @@ class RSPNTestCase(unittest.TestCase):
         cls.session = Session(engine)
 
     def setUp(self):
-
         na = Region("North America")
         usa = Nation(na, True)
         usa_gov = Government("Trump", "Republic", usa)
@@ -197,6 +211,10 @@ class RSPNTestCase(unittest.TestCase):
 
         self.session.add_all([anna, bob, na, usa, s1, s2])
         self.session.commit()
+
+    def test_get_persons_from_nation(self):
+        nation = self.session.query(Nation).first()
+        self.assertEqual(len(nation.persons), 2)
 
     def test_learn(self):
         model = RelationalSPN(Base, self.session)
@@ -209,6 +227,7 @@ class RSPNTestCase(unittest.TestCase):
         nx.draw(pd, pos=pos, with_labels=True)
         nx.draw_networkx_edge_labels(pd, pos=pos, edge_labels=edge_labels)
         plt.show()
+
 
 if __name__ == '__main__':
     unittest.main()
