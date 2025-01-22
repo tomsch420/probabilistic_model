@@ -1,6 +1,6 @@
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous, Integer, Symbolic, Variable
-from typing_extensions import Iterable
+from typing_extensions import Iterable, Optional, Dict
 
 from .distributions import UnivariateContinuousLeaf, UnivariateDiscreteLeaf
 from .probabilistic_circuit import ProductUnit, SumUnit, ProbabilisticCircuit
@@ -70,7 +70,8 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
     return uniform_model.probabilistic_circuit
 
 
-def fully_factorized(variables: Iterable[Variable], means: dict, variances: dict) -> ProbabilisticCircuit:
+def fully_factorized(variables: Iterable[Variable], means: Optional[Dict[Continuous, float]] = None,
+                     variances: Optional[Dict[Continuous, float]] = None) -> ProbabilisticCircuit:
     """
     Create a fully factorized distribution over a set of variables.
     For symbolic variables, the distribution is uniform.
@@ -81,6 +82,11 @@ def fully_factorized(variables: Iterable[Variable], means: dict, variances: dict
     :param variances: The variances of the normal distributions.
     :return: The circuit describing the fully factorized normal distribution
     """
+
+    if means is None:
+        means = {variable: 0. for variable in variables}
+    if variances is None:
+        variances = {variable: 1. for variable in variables}
 
     # initialize the root of the circuit
     root = ProductUnit()
