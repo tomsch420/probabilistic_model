@@ -69,7 +69,8 @@ class SmallCircuitTestCast(unittest.TestCase):
         event = SimpleEvent({self.x: closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
         conditional, prob = self.model.conditional(event)
         self.assertAlmostEqual(prob, 0.375)
-        conditional.plot_structure()  # plt.show()
+        conditional.plot_structure()
+        # plt.show()
 
     def test_plot(self):
         self.model.log_likelihood(np.array([[0.5, 0.5]]))

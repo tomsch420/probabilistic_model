@@ -7,6 +7,7 @@ import random
 from abc import abstractmethod
 
 import networkx as nx
+import networkx.drawing
 import numpy as np
 import tqdm
 from matplotlib import pyplot as plt
@@ -1112,20 +1113,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         :return: The positions of the nodes as dictionary from unit to (x, y) coordinate.
         """
-        # do a layer-wise BFS
-        layers = self.layers
+        return networkx.drawing.bfs_layout(self, self.root)
 
-        # calculate the positions of the nodes
-        maximum_layer_width = max([len(layer) for layer in layers])
-        positions = {}
-        for depth, layer in enumerate(layers):
-            number_of_nodes = len(layer)
-            positions_in_layer = np.linspace(0., maximum_layer_width, number_of_nodes, endpoint=False)
-            positions_in_layer += (maximum_layer_width - len(layer)) / (2 * len(layer))
-            for position, node in zip(positions_in_layer, layer):
-                positions[node] = (float(depth), position)
-
-        return positions
 
     def fill_node_colors(self, node_colors: Dict[Unit, str]):
         """
