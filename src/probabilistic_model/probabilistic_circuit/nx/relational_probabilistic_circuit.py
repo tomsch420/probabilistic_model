@@ -31,6 +31,8 @@ class PartDecompositionBaseMixin(DeclarativeBase):
     For details on the definitions check https://www.scrofula.org/papers/nath-domingos15.pdf.
     """
 
+    _aggregated_columns = dict()
+
     @classmethod
     def attributes(cls) -> Iterable[Column]:
         """
@@ -88,7 +90,17 @@ class PartDecompositionBaseMixin(DeclarativeBase):
         :param table: A table
         :return: The python class that corresponds to the table
         """
-        return cls.registry._class_registry[table.name]
+
+        for key, value in cls.registry._class_registry.items():
+            if isclass(value):
+                if value.__tablename__ == table.name:
+                    return value
+
+    def aggregation_statistics_for_relations(self) -> Dict[Type[PartDecompositionBaseMixin], Any]:
+        """
+        Calculate the aggregation statistics for all relations.
+        """
+        ...
 
 
 class AssociationMixin(PartDecompositionBaseMixin):
@@ -198,6 +210,11 @@ class PartDecomposition(nx.DiGraph):
 
         for wrapped_relation in self.all_wrapped_relations():
             self.add_node(wrapped_relation)
+
+            for attribute in wrapped_relation.table.attributes():
+                self.add_node(attribute)
+                self.add_edge(wrapped_relation, attribute, label=EdgeType.ATTRIBUTE)
+
             association: AssociationMixin = wrapped_relation.table
             t1, t2 = association.associated_tables()
             t1, t2 = WrappedTable(t1), WrappedTable(t2)
@@ -264,5 +281,10 @@ class RelationalProbabilisticCircuit(ProbabilisticCircuit):
     def gather_data(self, cls: Type[PartDecompositionBaseMixin]):
         node = WrappedTable(cls)
         result = self.session.scalars(select(cls)).all()
-        print(list(result))
 
+        attributes = cls.attributes()
+
+        for element in result:
+            for attribute in attributes:
+                print(attribute.name, element.__dict__[attribute.name])
+            print("-----------------")
