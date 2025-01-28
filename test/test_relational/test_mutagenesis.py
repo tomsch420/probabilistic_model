@@ -7,7 +7,7 @@ from typing import List
 import numpy as np
 from matplotlib import pyplot as plt
 from sqlalchemy import create_engine, select, ForeignKey
-from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column, relationship, Session
+from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column, relationship, Session, column_property
 
 from probabilistic_model.probabilistic_circuit.nx.relational_probabilistic_circuit import PartDecompositionBaseMixin, \
     AssociationMixin, PartDecomposition, RelationalProbabilisticCircuit
@@ -80,12 +80,9 @@ class MutagenesisTestCase(unittest.TestCase):
             self.assertGreater(len(r), 0)
 
     def test_aggregation_statistics(self):
-        print(Molecule._aggregated_columns)
-        print(Atom._aggregated_columns)
-        exit()
         for m in self.session.scalars(select(Molecule)).all():
-            print(m.mean_charge_of_atoms)
-            exit()
+            for k, v in m._aggregated_columns.items():
+                self.assertIsInstance(m.__getattribute__(v.attrname), float)
 
     def test_pd(self):
         pd = PartDecomposition(Base).make_graph()
@@ -94,4 +91,4 @@ class MutagenesisTestCase(unittest.TestCase):
 
     def test_rspn(self):
         model = RelationalProbabilisticCircuit(Base, self.session)
-        model.gather_data(Atom)
+        model.learn()
