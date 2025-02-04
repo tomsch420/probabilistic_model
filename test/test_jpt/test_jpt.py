@@ -3,6 +3,7 @@ import math
 import tempfile
 import unittest
 from datetime import datetime
+from enum import IntEnum
 
 import numpy as np
 import pandas as pd
@@ -26,11 +27,10 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import S
     ProductUnit
 
 
-class SymbolEnum(SetElement):
+class SymbolEnum(IntEnum):
     """
     A simple enum for testing purposes.
     """
-    EMPTY_SET = -1
     A = 0
     B = 1
     C = 2

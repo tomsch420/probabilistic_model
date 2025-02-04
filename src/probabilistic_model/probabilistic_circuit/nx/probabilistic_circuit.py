@@ -846,8 +846,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 else:
                     unit: InnerUnit
                     unit.log_forward()
-        root = self.root
 
+        root = self.root
         [self.remove_node(node) for layer in reversed(self.layers) for node in layer if
          node.result_of_current_query == -np.inf]
 
@@ -877,6 +877,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         if event.is_empty():
             self.remove_nodes_from(list(self.nodes))
             return None, -np.inf
+
 
         # if the event is easy, don't create a proxy node
         elif len(event.simple_sets) == 1:

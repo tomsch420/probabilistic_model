@@ -31,9 +31,11 @@ class FullyFactorizedTestCase(unittest.TestCase):
     def test_conditioning_on_mode(self):
         event = SimpleEvent({self.x: closed(0, 2), self.y: closed(0, 2)}).as_composite_set().complement()
         model = self.model
-        print(event)
         model, _ = model.conditional(event)
         mode, _ = model.mode()
+
+        # this does not work due to numeric imprecisions i guess
+
         conditional, _ = model.conditional(mode)
         self.assertIsNotNone(conditional)
 

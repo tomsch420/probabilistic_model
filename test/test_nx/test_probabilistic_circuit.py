@@ -93,7 +93,8 @@ class SymbolicPlottingTestCase(unittest.TestCase):
         cls.model.add_node(l1)
 
     def test_plot(self):
-        fig = go.Figure(self.model.plot(), self.model.plotly_layout())  # fig.show()
+        fig = go.Figure(self.model.plot(), self.model.plotly_layout())
+        # fig.show()
 
 
 class ShallowTestCase(unittest.TestCase):

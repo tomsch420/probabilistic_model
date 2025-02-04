@@ -28,7 +28,11 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
         return self.univariate_log_conditional_of_simple_event_in_place(event[self.variable])
 
     def univariate_log_conditional_of_simple_event_in_place(self, event: Interval):
-
+        """
+        Condition this distribution on a simple event in-place but use sum units to create conditions on composite
+        intervals.
+        :param event: The simple event to condition on.
+        """
         event = self.distribution.univariate_support & event
 
         if event.is_empty():
@@ -74,7 +78,6 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
         # update result
         result.normalize()
         result.result_of_current_query = np.log(total_probability)
-
         return result
 
 

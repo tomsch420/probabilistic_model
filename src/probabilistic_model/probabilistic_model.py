@@ -180,8 +180,7 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event to condition on.
         :return: The conditional distribution and the probability of the event.
         """
-        for simple_event in event.simple_sets:
-            simple_event.fill_missing_variables(self.variables)
+        event.fill_missing_variables(SortedSet(self.variables))
         conditional, log_probability = self.log_conditional(event)
         return conditional, np.exp(log_probability)
 
@@ -328,7 +327,7 @@ class ProbabilisticModel(abc.ABC):
         variable: Symbolic = self.variables[0]
 
         # calculate probabilities of every element in the domain
-        probabilities = {element.name: self.probability_of_simple_event(SimpleEvent({variable: element})) for element in
+        probabilities = {str(element): self.probability_of_simple_event(SimpleEvent({variable: element})) for element in
                          variable.domain}
 
         maximum = max(probabilities.values())
