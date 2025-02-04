@@ -232,8 +232,7 @@ class DiscreteDistribution(UnivariateDistribution):
 
     probabilities: MissingDict[int, float] = MissingDict(float)
     """
-    A dict that maps from integers to probabilities.
-    In Symbolic cases, the integers are obtained by casting the elements, which inherit from int, to integers.
+    A dict that maps from integers (hash(symbol) for symbols) to probabilities.
     """
 
     def __init__(self, variable: Union[Symbolic, Integer],
@@ -356,26 +355,29 @@ class SymbolicDistribution(DiscreteDistribution):
     variable: Symbolic
 
     def univariate_log_mode(self) -> Tuple[Set, float]:
-        clazz = self.variable.domain_type()
         max_likelihood = max(self.probabilities.values())
-        mode = Set(*(clazz(key) for key, value in self.probabilities.items() if value == max_likelihood))
 
+        mode_hashes = {key for key, value in self.probabilities.items() if value == max_likelihood}
+        domain_hash_map = self.variable.domain.hash_map
+
+        mode_symbols = {domain_hash_map[hash_value] for hash_value in mode_hashes}
+        mode = Set(*mode_symbols)
         return mode, np.log(max_likelihood)
 
     def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
-        return {element.name: self.probabilities[int(element)] for element in self.variable.domain.simple_sets}
+        return {str(element): self.probabilities[hash(element)] for element in self.variable.domain.simple_sets}
 
     @property
     def univariate_support(self) -> Set:
-        clazz = self.variable.domain_type()
-        return Set(*[clazz(key) for key, value in self.probabilities.items() if value > 0])
+        hash_map = self.variable.domain.hash_map
+        return Set(*[hash_map[key] for key, value in self.probabilities.items() if value > 0])
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
-        return sum(self.probabilities[int(key)] for key in event[self.variable].simple_sets)
+        return sum(self.probabilities[hash(key)] for key in event[self.variable].simple_sets)
 
     @property
     def representation(self):
-        return f"Nominal({self.variable.name}, {self.variable.domain.simple_sets[0].all_elements.__name__})"
+        return f"Nominal({self.variable.name})"
 
     @property
     def drawio_label(self):

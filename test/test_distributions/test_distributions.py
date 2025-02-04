@@ -1,12 +1,12 @@
 import unittest
+from enum import IntEnum
 
 from probabilistic_model.distributions.distributions import *
 from probabilistic_model.utils import MissingDict
 from random_events.utils import SubclassJSONSerializer
 
 
-class TestEnum(SetElement):
-    EMPTY_SET = -1
+class TestEnum(IntEnum):
     A = 0
     B = 1
     C = 2
@@ -98,13 +98,13 @@ class IntegerDistributionTestCase(unittest.TestCase):
 
 
 class SymbolicDistributionTestCase(unittest.TestCase):
-    x = Symbolic("x", TestEnum)
+    x = Symbolic("x", Set.from_iterable(TestEnum))
     model: SymbolicDistribution
 
     def setUp(self):
         probabilities = MissingDict(float)
-        probabilities[int(TestEnum.A)] = 7 / 20
-        probabilities[int(TestEnum.B)] = 13 / 20
+        probabilities[hash(TestEnum.A)] = 7 / 20
+        probabilities[hash(TestEnum.B)] = 13 / 20
         self.model = SymbolicDistribution(self.x, probabilities)
 
     def test_sample(self):
@@ -122,19 +122,22 @@ class SymbolicDistributionTestCase(unittest.TestCase):
         # fig.show()
 
     def test_probability(self):
-        event = SimpleEvent({self.x: Set(TestEnum.A, TestEnum.C)}).as_composite_set()
+        event = SimpleEvent({self.x: (TestEnum.A, TestEnum.C)}).as_composite_set()
         self.assertEqual(self.model.probability(event), 7 / 20)
 
     def test_support(self):
         support = self.model.univariate_support
-        self.assertEqual(support, Set(TestEnum.A, TestEnum.B))
+        self.assertEqual(support, Set(SetElement(TestEnum.A, self.x.domain.simple_sets[0].all_elements),
+                                      SetElement(TestEnum.B, self.x.domain.simple_sets[0].all_elements)))
 
     def test_fit(self):
         data = [0, 1, 1, 1]
         self.model.fit(data)
         self.assertEqual(self.model.probabilities[0], [1 / 4])
         self.assertEqual(self.model.probabilities[1], [3 / 4])
-        prob = self.model.probability(SimpleEvent({self.x: Set(TestEnum.A, TestEnum.B)}).as_composite_set())
+        event = SimpleEvent({self.x: (TestEnum.A, TestEnum.B)}).as_composite_set()
+
+        prob = self.model.probability(event)
         self.assertEqual(prob, 1)
 
 

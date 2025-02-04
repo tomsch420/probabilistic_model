@@ -108,7 +108,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         """
         columns = [[var.name for var in self.variables] + ["P"]]
         events = list(list(event) for event in itertools.product(
-            *[[simple_set.name for simple_set in var.domain.simple_sets] for var in self.variables]))
+            *[[simple_set.element for simple_set in var.domain.simple_sets] for var in self.variables]))
         events = np.concatenate((events, self.probabilities.reshape(-1, 1)), axis=1).tolist()
         table = columns + events
         return table
@@ -174,7 +174,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
                 # create probabilities for the current variables state as one hot encoding
                 weights = MissingDict(float)
-                weights[int(value)] = 1.
+                weights[hash(value)] = 1.
 
                 # create a distribution for the current variable
                 distribution = SymbolicDistribution(variable, weights)

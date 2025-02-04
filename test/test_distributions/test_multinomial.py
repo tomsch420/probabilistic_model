@@ -1,5 +1,6 @@
 import itertools
 import unittest
+from enum import IntEnum
 
 import numpy as np
 from random_events.product_algebra import Event, SetElement, SimpleEvent
@@ -10,21 +11,18 @@ from sortedcontainers import SortedSet
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 
 
-class XEnum(SetElement):
-    EMPTY_SET = -1
+class XEnum(IntEnum):
     A = 0
     B = 1
 
 
-class YEnum(SetElement):
-    EMPTY_SET = -1
+class YEnum(IntEnum):
     A = 0
     B = 1
     C = 2
 
 
-class ZEnum(SetElement):
-    EMPTY_SET = -1
+class ZEnum(IntEnum):
     A = 0
     B = 1
     C = 2
@@ -39,9 +37,9 @@ class MultinomialConstructionTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         np.random.seed(69)
-        cls.x = Symbolic("X", XEnum)
-        cls.y = Symbolic("Y", YEnum)
-        cls.z = Symbolic("Z", ZEnum)
+        cls.x = Symbolic("X", {e for e in XEnum})
+        cls.y = Symbolic("Y", {e for e in YEnum})
+        cls.z = Symbolic("Z", {e for e in ZEnum})
 
     def test_creation_with_probabilities(self):
         distribution = MultinomialDistribution([self.x, self.y, self.z], np.random.rand(len(self.x.domain.simple_sets),
@@ -78,9 +76,9 @@ class MultinomialConstructionTestCase(unittest.TestCase):
 
 
 class MultinomialInferenceTestCase(unittest.TestCase):
-    x = Symbolic("X", XEnum)
-    y = Symbolic("Y", YEnum)
-    z = Symbolic("Z", ZEnum)
+    x = Symbolic("X", {e for e in XEnum})
+    y = Symbolic("Y", {e for e in YEnum})
+    z = Symbolic("Z", {e for e in ZEnum})
     random_distribution: MultinomialDistribution
     random_distribution_mass: float
     crafted_distribution: MultinomialDistribution

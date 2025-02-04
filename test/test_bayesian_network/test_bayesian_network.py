@@ -19,13 +19,13 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import P
 from probabilistic_model.utils import MissingDict
 
 
-class YEnum(SetElement):
+class YEnum:
     EMPTY_SET = -1
     ZERO = 0
     ONE = 1
 
 
-class XEnum(SetElement):
+class XEnum:
     EMPTY_SET = -1
     ZERO = 0
     ONE = 1
