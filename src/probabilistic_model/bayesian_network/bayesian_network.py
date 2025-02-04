@@ -201,7 +201,7 @@ class BayesianNetwork(nx.DiGraph):
     def as_probabilistic_circuit(self) -> ProbabilisticCircuit:
         """
         Convert the BayesianNetwork to a probabilistic circuit that expresses the same probability distribution.
-        :return:
+        :return: The probabilistic circuit.
         """
 
         # this only works for bayesian trees

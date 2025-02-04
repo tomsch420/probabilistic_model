@@ -1,5 +1,6 @@
 import math
 import unittest
+from enum import IntEnum
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -8,6 +9,7 @@ from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
 from random_events.set import SetElement, Set
 from random_events.variable import Symbolic, Continuous
+from sortedcontainers import SortedSet
 
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
@@ -19,14 +21,12 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import P
 from probabilistic_model.utils import MissingDict
 
 
-class YEnum:
-    EMPTY_SET = -1
+class YEnum(IntEnum):
     ZERO = 0
     ONE = 1
 
 
-class XEnum:
-    EMPTY_SET = -1
+class XEnum(IntEnum):
     ZERO = 0
     ONE = 1
     TWO = 2
@@ -34,8 +34,8 @@ class XEnum:
 
 class MinimalBayesianNetworkTestCase(unittest.TestCase):
     model: BayesianNetwork
-    x: Symbolic = Symbolic('x', XEnum)
-    y: Symbolic = Symbolic('y', YEnum)
+    x: Symbolic = Symbolic('x', Set.from_iterable(XEnum))
+    y: Symbolic = Symbolic('y', Set.from_iterable(YEnum))
     p_x: RootDistribution
     p_yx: ConditionalProbabilityTable = ConditionalProbabilityTable(y)
 
@@ -86,10 +86,10 @@ class MinimalBayesianNetworkTestCase(unittest.TestCase):
 
 class ComplexBayesianNetworkTestCase(unittest.TestCase):
     model: BayesianNetwork
-    x: Symbolic = Symbolic('x', XEnum)
-    y: Symbolic = Symbolic('y', YEnum)
-    z: Symbolic = Symbolic('z', YEnum)
-    a: Symbolic = Symbolic('a', YEnum)
+    x: Symbolic = Symbolic('x', Set.from_iterable(XEnum))
+    y: Symbolic = Symbolic('y', Set.from_iterable(YEnum))
+    z: Symbolic = Symbolic('z', Set.from_iterable(XEnum))
+    a: Symbolic = Symbolic('a', Set.from_iterable(YEnum))
 
     d_x: RootDistribution
     d_yx = ConditionalProbabilityTable(y)
@@ -129,11 +129,16 @@ class ComplexBayesianNetworkTestCase(unittest.TestCase):
 
     def test_as_probabilistic_circuit(self):
         circuit = self.model.as_probabilistic_circuit().simplify()
+        self.model.plot()
+        plt.show()
+        circuit.plot_structure()
+        plt.show()
+        self.assertEqual(circuit.variables, SortedSet([self.x, self.y, self.z, self.a]))
         self.assertLess(len(circuit.weighted_edges), math.prod([len(v.domain.simple_sets) for v in circuit.variables]))
 
 
 class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
-    x: Symbolic = Symbolic("x", YEnum)
+    x: Symbolic = Symbolic("x", Set.from_iterable(YEnum))
     y: Continuous = Continuous("y")
     z: Continuous = Continuous("z")
     p_x: RootDistribution
@@ -160,14 +165,13 @@ class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
 
     def test_plot(self):
         self.bayesian_network.plot()
-        plt.show()
-
+        # plt.show()
 
     def test_as_probabilistic_circuit(self):
         circuit = self.bayesian_network.as_probabilistic_circuit()
         circuit.simplify()
         self.assertEqual(circuit.probability(circuit.universal_simple_event().as_composite_set()), 1.)
-        event = SimpleEvent({self.x: Set(XEnum.ZERO, XEnum(1)), self.y: closed(1.5, 2)})
+        event = SimpleEvent({self.x: (XEnum.ZERO, XEnum(1)), self.y: closed(1.5, 2)})
         self.assertAlmostEqual(0.075, circuit.probability(event.as_composite_set()))
 
 

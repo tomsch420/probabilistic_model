@@ -137,10 +137,10 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         mode, likelihood = distribution.mode()
         self.assertEqual(likelihood, 0.7)
         self.assertEqual(len(mode.simple_sets), 2)
-        self.assertEqual(mode.simple_sets[0]["X"], XEnum.A.as_composite_set())
-        self.assertEqual(mode.simple_sets[0]["Y"], YEnum.B.as_composite_set())
-        self.assertEqual(mode.simple_sets[1]["X"], XEnum.B.as_composite_set())
-        self.assertEqual(mode.simple_sets[1]["Y"], YEnum.A.as_composite_set())
+        self.assertEqual(mode.simple_sets[0]["X"], self.x.make_value(XEnum.A).as_composite_set())
+        self.assertEqual(mode.simple_sets[0]["Y"], self.y.make_value(YEnum.B).as_composite_set())
+        self.assertEqual(mode.simple_sets[1]["X"], self.x.make_value(XEnum.B).as_composite_set())
+        self.assertEqual(mode.simple_sets[1]["Y"], self.y.make_value(YEnum.A).as_composite_set())
 
     def test_crafted_probability(self):
         distribution = self.crafted_distribution
@@ -152,7 +152,7 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         event[self.x] = XEnum.A
         self.assertAlmostEqual(distribution.probability(event.as_composite_set()), 1 / 3)
 
-        event[self.y] = Set(YEnum.A, YEnum.B)
+        event[self.y] = (YEnum.A, YEnum.B)
         self.assertAlmostEqual(distribution.probability(event.as_composite_set()), 0.3 / self.crafted_distribution_mass)
 
     def test_random_probability(self):
@@ -164,11 +164,11 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         event[self.x] = XEnum.A
         self.assertLessEqual(self.random_distribution.probability(event.as_composite_set()), 1.)
 
-        event[self.y] = Set(YEnum.A, YEnum.B)
+        event[self.y] = (YEnum.A, YEnum.B)
         self.assertLessEqual(self.random_distribution.probability(event.as_composite_set()), 1.)
 
     def test_crafted_conditional(self):
-        event = SimpleEvent({self.y: Set(YEnum.A, YEnum.B)})
+        event = SimpleEvent({self.y: (YEnum.A, YEnum.B)})
         event.fill_missing_variables(self.crafted_distribution.variables)
         conditional, probability = self.crafted_distribution.conditional(event.as_composite_set())
         self.assertEqual(conditional.probability(event.as_composite_set()), 1)

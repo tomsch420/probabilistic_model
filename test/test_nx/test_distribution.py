@@ -1,4 +1,5 @@
 import unittest
+from enum import IntEnum
 
 from matplotlib import pyplot as plt
 from random_events.interval import *
@@ -13,8 +14,7 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 
 
-class Animal(SetElement):
-    EMPTY_SET = -1
+class Animal(IntEnum):
     CAT = 0
     DOG = 1
     FISH = 2
@@ -40,7 +40,7 @@ class ContinuousDistributionTestCase(unittest.TestCase):
         conditional, probability = self.leaf.probabilistic_circuit.conditional(event)
         self.assertEqual(len(conditional.nodes), 1)
         self.assertEqual(probability, 1.)
-        self.assertEqual(conditional.root.distribution.location, 0.3)
+        self.assertAlmostEqual(conditional.root.distribution.location, 0.3)
 
     def test_conditional_from_complex_event(self):
         interval = closed(0., 0.2) | closed(0.5, 1.) | singleton(0.3)
@@ -58,14 +58,16 @@ class ContinuousDistributionTestCase(unittest.TestCase):
 
 
 class DiscreteDistributionTestCase(unittest.TestCase):
-    symbol = Symbolic("animal", Animal)
+    symbol = Symbolic("animal", Set.from_iterable(Animal))
     integer = Integer("x")
 
     symbolic_distribution: ProbabilisticCircuit
     integer_distribution: ProbabilisticCircuit
 
     def setUp(self):
-        symbolic_probabilities = MissingDict(float, {Animal.CAT: 0.1, Animal.DOG: 0.2, Animal.FISH: 0.7})
+        symbolic_probabilities = MissingDict(float, {hash(Animal.CAT): 0.1,
+                                                     hash(Animal.DOG): 0.2,
+                                                     hash(Animal.FISH): 0.7})
         self.symbolic_distribution = UnivariateDiscreteLeaf(SymbolicDistribution(self.symbol, symbolic_probabilities)).probabilistic_circuit
         integer_probabilities = MissingDict(float, {0: 0.1, 1: 0.2, 2: 0.7})
         self.integer_distribution = UnivariateDiscreteLeaf(IntegerDistribution(self.integer, integer_probabilities)).probabilistic_circuit

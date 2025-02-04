@@ -264,7 +264,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
 
         for state, weight in self.parent.forward_message.probabilities.items():
             probabilities = MissingDict(float)
-            probabilities[int(state)] = 1
+            probabilities[state] = 1
             product_unit = ProductUnit()
             product_unit.add_subcircuit(UnivariateDiscreteLeaf(SymbolicDistribution(parent_latent_variable, probabilities)))
             product_unit.add_subcircuit(UnivariateDiscreteLeaf(SymbolicDistribution(node_latent_variable, probabilities)))

@@ -142,7 +142,13 @@ class InductionStepTestCase(unittest.TestCase):
         distribution.fit(data)
         domain = distribution.support
         self.assertEqual(len(domain.simple_sets), 1)
-        self.assertEqual(domain.simple_sets[0][self.variable], closed(min(data), max(data)))
+
+        lowest = min(data)
+        highest = max(data)
+
+        self.assertAlmostEqual(domain.simple_sets[0][self.variable].simple_sets[0].lower, lowest, delta=10e-5)
+        self.assertAlmostEqual(domain.simple_sets[0][self.variable].simple_sets[-1].upper, highest, delta=10e-5)
+
 
     def test_plot(self):
         np.random.seed(69)

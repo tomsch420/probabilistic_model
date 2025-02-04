@@ -11,7 +11,7 @@ import numpy as np
 import tqdm
 from matplotlib import pyplot as plt
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
-from random_events.set import SetElement
+from random_events.set import SetElement, Set
 from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
@@ -362,10 +362,7 @@ class SumUnit(InnerUnit):
     @property
     def latent_variable(self) -> Symbolic:
         name = f"{hash(self)}.latent"
-        enum_elements = {"EMPTY_SET": -1}
-        enum_elements.update({str(hash(subcircuit)): index for index, subcircuit in enumerate(self.subcircuits)})
-        domain = SetElement(name, enum_elements)
-        return Symbolic(name, domain)
+        return Symbolic(name, Set.from_iterable([hash(ss) for ss in self.subcircuits]))
 
     def add_subcircuit(self, subcircuit: Unit, weight: float, mount: bool = True):
         """
@@ -466,11 +463,16 @@ class SumUnit(InnerUnit):
         own_subcircuits = self.subcircuits
         other_subcircuits = other.subcircuits
 
-        for own_index, own_subcircuit in zip(own_latent_variable.domain.simple_sets, own_subcircuits):
+        for own_subcircuit in own_subcircuits:
+
+            own_index = hash(own_subcircuit)
 
             # create denominator of weight
             condition = SimpleEvent({own_latent_variable: own_index}).as_composite_set()
+            print(condition)
+            print(interaction_model)
             p_condition = interaction_model.probability(condition)
+            print(p_condition)
 
             # skip iterations that are impossible
             if p_condition == 0:
@@ -646,9 +648,12 @@ class ProductUnit(InnerUnit):
         return result
 
     def support(self):
-        support = self.subcircuits[0].result_of_current_query
+        support: Event = self.subcircuits[0].result_of_current_query
+        support.fill_missing_variables(self.variables)
+
         for subcircuit in self.subcircuits[1:]:
             support &= subcircuit.result_of_current_query
+
         self.result_of_current_query = support
 
     def add_subcircuit(self, subcircuit: Unit, mount: bool = True):
@@ -672,6 +677,7 @@ class ProductUnit(InnerUnit):
 
     def log_mode(self):
         arg_log_max, log_max = self.subcircuits[0].result_of_current_query
+        arg_log_max.fill_missing_variables(self.variables)
         for subcircuit in self.subcircuits[1:]:
             arg_log_max = arg_log_max.intersection_with(subcircuit.result_of_current_query[0])
             log_max += subcircuit.result_of_current_query[1]

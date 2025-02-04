@@ -1,4 +1,5 @@
 import unittest
+from enum import IntEnum
 
 import plotly.graph_objects as go
 from matplotlib import pyplot as plt
@@ -14,8 +15,7 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 
 
-class SymbolEnum(SetElement):
-    EMPTY_SET = -1
+class SymbolEnum(IntEnum):
     A = 0
     B = 1
     C = 2
@@ -80,7 +80,7 @@ class SmallCircuitTestCast(unittest.TestCase):
 
 
 class SymbolicPlottingTestCase(unittest.TestCase):
-    x = Symbolic("x", SymbolEnum)
+    x = Symbolic("x", Set.from_iterable(SymbolEnum))
     model: ProbabilisticCircuit
 
     @classmethod

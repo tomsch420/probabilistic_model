@@ -1,4 +1,5 @@
 import unittest
+from enum import IntEnum
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -10,13 +11,6 @@ from probabilistic_model.probabilistic_circuit.nx.helper import fully_factorized
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, LeafUnit
 import json
 import plotly.graph_objects as go
-
-
-class Animal(SetElement):
-    EMPTY_SET = -1
-    CAT = 0
-    DOG = 1
-    FISH = 2
 
 class FullyFactorizedTestCase(unittest.TestCase):
 
@@ -37,6 +31,7 @@ class FullyFactorizedTestCase(unittest.TestCase):
     def test_conditioning_on_mode(self):
         event = SimpleEvent({self.x: closed(0, 2), self.y: closed(0, 2)}).as_composite_set().complement()
         model = self.model
+        print(event)
         model, _ = model.conditional(event)
         mode, _ = model.mode()
         conditional, _ = model.conditional(mode)

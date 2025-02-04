@@ -1,6 +1,7 @@
 import unittest
+from enum import IntEnum
 
-from random_events.set import SetElement
+from random_events.set import SetElement, Set
 from random_events.variable import Continuous, Symbolic
 from sortedcontainers import SortedSet
 
@@ -16,8 +17,7 @@ import jax.numpy as jnp
 from probabilistic_model.utils import MissingDict
 
 
-class Animal(SetElement):
-    EMPTY_SET = -1
+class Animal(IntEnum):
     CAT = 0
     DOG = 1
     FISH = 2
@@ -25,7 +25,7 @@ class Animal(SetElement):
 class DiscreteLayerTestCase(unittest.TestCase):
 
     model: DiscreteLayer
-    x = Symbolic("x", Animal)
+    x = Symbolic("x", Set.from_iterable(Animal))
 
     @classmethod
     def setUpClass(cls):
@@ -52,10 +52,10 @@ class DiscreteLayerTestCase(unittest.TestCase):
 
     def test_from_nx(self):
 
-        p1 = MissingDict(float, {Animal.CAT: 0., Animal.DOG: 1, Animal.FISH: 2})
+        p1 = MissingDict(float, {hash(Animal.CAT): 0., hash(Animal.DOG): 1, hash(Animal.FISH): 2})
         d1 = UnivariateDiscreteLeaf(SymbolicDistribution(self.x, p1))
 
-        p2 = MissingDict(float, {Animal.CAT: 3, Animal.DOG: 4, Animal.FISH: 0})
+        p2 = MissingDict(float, {hash(Animal.CAT): 3, hash(Animal.DOG): 4, hash(Animal.FISH): 0})
         d2 = UnivariateDiscreteLeaf(SymbolicDistribution(self.x, p2))
         s = SumUnit()
         s.add_subcircuit(d1, 0.5)

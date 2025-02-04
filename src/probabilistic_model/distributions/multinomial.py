@@ -2,6 +2,7 @@ import itertools
 
 import numpy as np
 from random_events.product_algebra import SimpleEvent, Event
+from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.variable import Symbolic, Variable
 from typing_extensions import Self, Any, Iterable, List, Optional, Tuple, Dict
 
@@ -114,7 +115,8 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         return table
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
-        indices = tuple(list(event[variable].simple_sets) for variable in self.variables)
+        indices = tuple([variable.domain.simple_sets.index(simple_set) for simple_set in event[variable]]
+                        for variable in self.variables)
         return self.probabilities[np.ix_(*indices)].sum()
 
     def log_likelihood(self, events: np.array) -> np.array:
@@ -140,7 +142,8 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         :param event: The simple event.
         :return: The array of probabilities that apply to this event.
         """
-        indices = tuple(list(event[variable].simple_sets) for variable in self.variables)
+        indices = tuple([variable.domain.simple_sets.index(simple_set) for simple_set in event[variable]]
+                        for variable in self.variables)
         indices = np.ix_(*indices)
         probabilities = np.zeros_like(self.probabilities)
         probabilities[indices] = self.probabilities[indices]
@@ -164,7 +167,8 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         result = SumUnit()
 
         # iterate through all states of this distribution
-        for event in itertools.product(*[variable.domain.simple_sets for variable in self.variables]):
+        for event in itertools.product(*[list(range(len(variable.domain.simple_sets)))
+                                         for variable in self.variables]):
 
             # create a product unit for the current state
             product_unit = ProductUnit()
