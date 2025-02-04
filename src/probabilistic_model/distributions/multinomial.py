@@ -73,7 +73,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
         mode = None
         for index_of_maximum in indices_of_maximum:
-            current_mode = SimpleEvent({variable: variable.domain.simple_sets[0].all_elements(value) for
+            current_mode = SimpleEvent({variable: variable.domain.simple_sets[0].all_elements[value] for
                                         variable, value in zip(self.variables, index_of_maximum)}).as_composite_set()
             if mode is None:
                 mode = current_mode

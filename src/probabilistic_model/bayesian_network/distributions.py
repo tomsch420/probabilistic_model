@@ -74,12 +74,12 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         for parent_state in event[self.parent.variable].simple_sets:
 
             # calculate the probability P(self.parent.variable = parent_state)
-            parent_state_probability = self.parent.forward_message.probabilities[int(parent_state)]
+            parent_state_probability = self.parent.forward_message.probabilities[hash(parent_state)]
             if parent_state_probability == 0:
                 continue
 
             # construct the conditional distribution P(self.variable | self.parent.variable = parent_state)
-            conditional, current_log_probability = (self.conditional_probability_distributions[int(parent_state)].
+            conditional, current_log_probability = (self.conditional_probability_distributions[hash(parent_state)].
                                                     log_conditional_of_composite_set(event[self.variable]))
 
             # if the conditional is None, skip
@@ -106,11 +106,20 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         return f"P({self.variable.name}|{self.parent.variable.name})"
 
     def to_tabulate(self) -> List[List[str]]:
+        """
+        Tabulate the conditional probability table.
+
+        :return: A table with the conditional probability table that can be printed using tabulate.
+        """
         table = [[self.parent.variable.name, self.variable.name, repr(self)]]
-        for parent_event, distribution in self.conditional_probability_distributions.items():
-            for index, probability in distribution.probabilities.items():
-                table.append([self.parent.variable.domain_type()(parent_event),
-                              self.variable.domain_type()(index), str(probability)])
+
+        parent_domain_hash_map = self.parent.variable.domain.hash_map
+        own_domain_hash_map = self.variable.domain.hash_map
+
+        for parent_hash, distribution in self.conditional_probability_distributions.items():
+            for own_hash, probability in distribution.probabilities.items():
+                table.append([str(parent_domain_hash_map[parent_hash]), str(own_domain_hash_map[own_hash]),
+                              str(probability)])
         return table
 
     def joint_distribution_with_parent(self) -> SumUnit:
@@ -118,20 +127,23 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         # initialize result
         result = SumUnit()
 
+        # get parent hash map
+        parent_hash_map = self.parent.variable.domain.hash_map
+
         # a map from the state of this nodes variable to the distribution
         distribution_nodes: Dict[int, UnivariateDiscreteLeaf] = dict()
-        template_probabilities = MissingDict(float, {int(element): 1 / len(self.variable.domain.simple_sets) for element
+        template_probabilities = MissingDict(float, {hash(element): 1 / len(self.variable.domain.simple_sets) for element
                                                      in self.variable.domain.simple_sets})
         distribution_template = SymbolicDistribution(self.variable, template_probabilities)
         for value in self.variable.domain.simple_sets:
             distribution_node, _ = distribution_template.log_conditional_of_composite_set(value.as_composite_set())
-            distribution_nodes[int(value)] = UnivariateDiscreteLeaf(distribution_node)
+            distribution_nodes[hash(value)] = UnivariateDiscreteLeaf(distribution_node)
 
         # for every parent event and conditional distribution
         for parent_event, distribution in self.conditional_probability_distributions.items():
 
             # wrap the parent event
-            parent_event = SimpleEvent({self.parent.variable: self.parent.variable.domain_type()(parent_event)})
+            parent_event = SimpleEvent({self.parent.variable: parent_hash_map[parent_event]})
 
             # encode the parent state as distribution
             parent_distribution, parent_log_probability = (
@@ -222,9 +234,10 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
     def joint_distribution_with_parent(self) -> SumUnit:
 
         result = SumUnit()
+        parent_hash_map = self.parent.variable.domain.hash_map
 
         for parent_event, distribution in self.conditional_probability_distributions.items():
-            parent_event = SimpleEvent({self.parent.variable: self.parent.variable.domain_type()(parent_event)})
+            parent_event = SimpleEvent({self.parent.variable: parent_hash_map[parent_event]})
             parent_distribution, parent_log_probability = self.parent.forward_message.log_conditional_of_composite_set(
                 parent_event[self.parent.variable])
 

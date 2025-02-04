@@ -1,4 +1,5 @@
 import unittest
+from enum import IntEnum
 
 import networkx as nx
 import numpy as np
@@ -18,22 +19,20 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import  
 from probabilistic_model.utils import MissingDict
 
 
-class YEnum(SetElement):
-    EMPTY_SET = -1
+class YEnum(IntEnum):
     ZERO = 0
     ONE = 1
 
 
-class XEnum(SetElement):
-    EMPTY_SET = -1
+class XEnum(IntEnum):
     ZERO = 0
     ONE = 1
     TWO = 2
 
 
 class DistributionTestCase(unittest.TestCase):
-    x = Symbolic("x", XEnum)
-    y = Symbolic("y", YEnum)
+    x = Symbolic("x", Set.from_iterable(XEnum))
+    y = Symbolic("y", Set.from_iterable(YEnum))
 
     p_x = ConditionalProbabilityTable(x)
     p_yx = ConditionalProbabilityTable(y)
@@ -61,13 +60,13 @@ class DistributionTestCase(unittest.TestCase):
 
     def test_to_tabulate(self):
         table = tabulate.tabulate(self.p_yx.to_tabulate())
-        self.assertIsInstance(table, str)  # print(table)
+        self.assertIsInstance(table, str)
 
     # def test_likelihood(self):
     #     self.assertEqual(self.p_yx.likelihood([0, 1]), 0.5)
 
     def test_forward_pass(self):
-        event = SimpleEvent({self.x: Set(XEnum.ZERO, XEnum.ONE), self.y: YEnum.ZERO})
+        event = SimpleEvent({self.x: (XEnum.ZERO, XEnum.ONE), self.y: YEnum.ZERO})
         self.p_x.forward_pass(event)
 
         self.assertEqual(list(self.p_x.forward_message.probabilities.values()), [0.5 / 0.8, 0.3 / 0.8])
@@ -79,7 +78,7 @@ class DistributionTestCase(unittest.TestCase):
 
     def test_forward_pass_impossible_event(self):
         self.p_x.probabilities = MissingDict(float, zip([0], [1.]))
-        event = SimpleEvent({self.x: Set(XEnum.ONE), self.y: self.y.domain})
+        event = SimpleEvent({self.x: XEnum.ONE, self.y: self.y.domain})
 
         self.p_x.forward_pass(event)
         self.assertIsNone(self.p_x.forward_message)
@@ -111,7 +110,7 @@ class DistributionTestCase(unittest.TestCase):
 
 
 class CircuitDistributionTestCase(unittest.TestCase):
-    x: Symbolic = Symbolic("x", YEnum)
+    x: Symbolic = Symbolic("x", Set.from_iterable(YEnum))
     y: Continuous = Continuous("y")
     z: Continuous = Continuous("z")
     p_x: RootDistribution

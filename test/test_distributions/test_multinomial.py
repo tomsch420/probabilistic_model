@@ -76,9 +76,9 @@ class MultinomialConstructionTestCase(unittest.TestCase):
 
 
 class MultinomialInferenceTestCase(unittest.TestCase):
-    x = Symbolic("X", {e for e in XEnum})
-    y = Symbolic("Y", {e for e in YEnum})
-    z = Symbolic("Z", {e for e in ZEnum})
+    x = Symbolic("X", Set.from_iterable(XEnum))
+    y = Symbolic("Y", Set.from_iterable(YEnum))
+    z = Symbolic("Z", Set.from_iterable(ZEnum))
     random_distribution: MultinomialDistribution
     random_distribution_mass: float
     crafted_distribution: MultinomialDistribution
@@ -115,15 +115,15 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         mode, probability = self.random_distribution.mode()
         mode = mode.simple_sets[0]
         self.assertAlmostEqual(probability, self.random_distribution.probabilities.max())
-        self.assertEqual(mode["X"], XEnum.A.as_composite_set())
-        self.assertEqual(mode["Y"], YEnum.A.as_composite_set())
+        self.assertEqual(mode["X"], self.x.make_value(XEnum.A).as_composite_set())
+        self.assertEqual(mode["Y"], self.y.make_value(YEnum.A).as_composite_set())
 
     def test_crafted_mode(self):
         mode, probability = self.crafted_distribution.mode()
         mode = mode.simple_sets[0]
         self.assertEqual(probability, self.crafted_distribution.probabilities.max())
-        self.assertEqual(mode["X"], XEnum.B.as_composite_set())
-        self.assertEqual(mode["Y"], YEnum.A.as_composite_set())
+        self.assertEqual(mode["X"], self.x.make_value(XEnum.B).as_composite_set())
+        self.assertEqual(mode["Y"], self.x.make_value(YEnum.A).as_composite_set())
 
     def test_likelihood(self):
         data = np.array([[XEnum.A, YEnum.A], [XEnum.B, YEnum.B]])

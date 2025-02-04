@@ -364,6 +364,22 @@ class SymbolicDistribution(DiscreteDistribution):
         mode = Set(*mode_symbols)
         return mode, np.log(max_likelihood)
 
+    def log_conditional_of_composite_set(self, event: AbstractCompositeSet) -> Tuple[Optional[Self], float]:
+        new_probabilities = MissingDict(float)
+        for x in event:
+            hash_x = hash(x)
+            if self.probabilities[hash_x] > 0:
+                new_probabilities[hash_x] = self.probabilities[hash_x]
+
+        probability = sum(new_probabilities.values())
+
+        if probability == 0:
+            return None, -np.inf
+
+        result = self.__class__(self.variable, new_probabilities)
+        result.normalize()
+        return result, np.log(probability)
+
     def probabilities_for_plotting(self) -> Dict[Union[int, str], float]:
         return {str(element): self.probabilities[hash(element)] for element in self.variable.domain.simple_sets}
 
