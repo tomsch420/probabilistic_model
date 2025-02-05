@@ -120,7 +120,7 @@ class UnivariateDiscreteLeaf(UnivariateLeaf):
                 SimpleEvent({variable: element}))
             if isinstance(element, SimpleInterval):
                 element = element.lower
-            probabilities[int(element)] = probability
+            probabilities[hash(element)] = probability
 
         distribution_class = IntegerDistribution if isinstance(variable, Integer) else SymbolicDistribution
         distribution = distribution_class(variable, probabilities)

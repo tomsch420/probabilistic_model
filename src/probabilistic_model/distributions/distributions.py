@@ -263,6 +263,7 @@ class DiscreteDistribution(UnivariateDistribution):
         Fit the distribution to the data.
 
         The probabilities are set equal to the frequencies in the data.
+        The data contains the indices of the domain elements (if symbolic) or the values (if integer).
 
         :param data: The data.
         :return: The fitted distribution
@@ -270,7 +271,7 @@ class DiscreteDistribution(UnivariateDistribution):
         unique, counts = np.unique(data, return_counts=True)
         probabilities = MissingDict(float)
         for value, count in zip(unique, counts):
-            probabilities[int(value)] = count / len(data)
+            probabilities[hash(value)] = count / len(data)
         self.probabilities = probabilities
         return self
 
@@ -386,6 +387,8 @@ class SymbolicDistribution(DiscreteDistribution):
     @property
     def univariate_support(self) -> Set:
         hash_map = self.variable.domain.hash_map
+        print(hash_map)
+        print(self.probabilities)
         return Set(*[hash_map[key] for key, value in self.probabilities.items() if value > 0])
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
@@ -402,6 +405,14 @@ class SymbolicDistribution(DiscreteDistribution):
     @property
     def image(self):
         return os.path.join(os.path.dirname(__file__), "../../../", "resources", "icons", "defaultIcon.png")
+
+    def fit(self, data: np.array) -> Self:
+        unique, counts = np.unique(data, return_counts=True)
+        probabilities = MissingDict(float)
+        for value, count in zip(unique, counts):
+            probabilities[hash(self.variable.domain.simple_sets[int(value)])] = count / len(data)
+        self.probabilities = probabilities
+        return self
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):

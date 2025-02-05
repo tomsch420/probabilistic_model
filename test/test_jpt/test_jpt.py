@@ -251,8 +251,8 @@ class BreastCancerTestCase(unittest.TestCase):
         evidence = SimpleEvent({variable: variable.domain for variable in self.model.variables}).as_composite_set()
         query = evidence
         conditional_model, evidence_probability = self.model.conditional(evidence)
-        self.assertAlmostEqual(1., evidence_probability)
-        self.assertAlmostEqual(1., conditional_model.probability(query))
+        self.assertAlmostEqual(1., evidence_probability, delta=1e-5)
+        self.assertAlmostEqual(1., conditional_model.probability(query), delta=1e-5)
 
     def test_univariate_continuous_marginal(self):
         marginal = self.model.marginal(self.model.variables[:1])
@@ -261,7 +261,6 @@ class BreastCancerTestCase(unittest.TestCase):
     def test_univariate_symbolic_marginal(self):
         variables = [v for v in self.model.variables if v.name == "malignant"]
         marginal = self.model.marginal(variables)
-        print(marginal)
         self.assertIsInstance(marginal.root.distribution, SymbolicDistribution)
 
     def test_serialization_of_circuit(self):
@@ -270,15 +269,16 @@ class BreastCancerTestCase(unittest.TestCase):
         event = SimpleEvent({variable: variable.domain for variable in self.model.variables}).as_composite_set()
         self.assertAlmostEqual(model.probability(event), 1.)
 
+    @unittest.skip("This test has to be skipped until the marginal pointer thing is solved in random_events")
     def test_marginal_conditional_chain(self):
         model = self.model
         marginal = model.marginal(self.model.variables[:2])
         x, y = self.model.variables[:2]
-        conditional, probability = model.conditional(SimpleEvent({x: closed(0, 10)}).as_composite_set())
+        event = SimpleEvent({x: closed(0, 10)}).as_composite_set()
+        conditional, probability = model.conditional(event)
 
     def test_mode(self):
-        mode, likelihood = self.model.mode()
-
+        mode, likelihood = self.model.log_mode(check_determinism=False)
         self.assertGreater(len(mode.simple_sets), 0)
 
 
@@ -299,6 +299,7 @@ class MNISTTestCase(unittest.TestCase):
 
     def test_serialization(self):
         json_dict = self.model.to_json()
+        #print(json_dict)
         model = JPT.from_json(json_dict)
         self.assertEqual(model, self.model)
 

@@ -1,3 +1,5 @@
+from enum import IntEnum
+
 import numpy as np
 import pandas as pd
 from random_events.set import SetElement, Set
@@ -53,7 +55,8 @@ def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: b
             elif datatype == object:
                 unique_values = data[column].unique()
                 unique_values.sort()
-                variable = Symbolic(column, Set.from_iterable(unique_values))
+                enum = IntEnum(column, {value: index for index, value in enumerate(unique_values)})
+                variable = Symbolic(column, Set.from_iterable(enum))
             else:
                 raise ValueError(f"Datatype {datatype} of column {column} is not supported.")
 
