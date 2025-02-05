@@ -5,6 +5,7 @@ import math
 import queue
 import random
 from abc import abstractmethod
+from enum import IntEnum
 
 import networkx as nx
 import numpy as np
@@ -362,7 +363,9 @@ class SumUnit(InnerUnit):
     @property
     def latent_variable(self) -> Symbolic:
         name = f"{hash(self)}.latent"
-        return Symbolic(name, Set.from_iterable([hash(ss) for ss in self.subcircuits]))
+        subcircuit_enum = IntEnum(name, {str(hash(subcircuit)): index
+                                         for index, subcircuit in enumerate(self.subcircuits)})
+        return Symbolic(name, Set.from_iterable(subcircuit_enum))
 
     def add_subcircuit(self, subcircuit: Unit, weight: float, mount: bool = True):
         """
@@ -458,21 +461,19 @@ class SumUnit(InnerUnit):
         assert set(self.variables).intersection(set(other.variables)) == set()
         assert set(interaction_model.variables) == {self.latent_variable, other.latent_variable}
 
+        # load latent variables
         own_latent_variable = self.latent_variable
         other_latent_variable = other.latent_variable
+
+        # load subircuits
         own_subcircuits = self.subcircuits
         other_subcircuits = other.subcircuits
 
-        for own_subcircuit in own_subcircuits:
-
-            own_index = hash(own_subcircuit)
+        for own_index, own_subcircuit in zip(own_latent_variable.domain.simple_sets, own_subcircuits):
 
             # create denominator of weight
             condition = SimpleEvent({own_latent_variable: own_index}).as_composite_set()
-            print(condition)
-            print(interaction_model)
             p_condition = interaction_model.probability(condition)
-            print(p_condition)
 
             # skip iterations that are impossible
             if p_condition == 0:
@@ -508,6 +509,7 @@ class SumUnit(InnerUnit):
 
                 # create edge from proxy to subcircuit
                 proxy_sum_node.add_subcircuit(other_subcircuit, weight=weight)
+            proxy_sum_node.normalize()
 
     def mount_from_bayesian_network(self, other: 'SumUnit'):
         """
@@ -1174,6 +1176,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         # draw the edges
         alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1. for edge in
                            self.edges]
+
         nx.draw_networkx_edges(self, positions, alpha=alpha_for_edges, node_size=node_size)
         edge_labels = {(s, t): round(w, 2) for (s, t, w) in self.weighted_edges}
         nx.draw_networkx_edge_labels(self, positions, edge_labels, label_pos=0.25)

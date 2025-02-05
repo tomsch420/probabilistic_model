@@ -130,9 +130,9 @@ class ComplexBayesianNetworkTestCase(unittest.TestCase):
     def test_as_probabilistic_circuit(self):
         circuit = self.model.as_probabilistic_circuit().simplify()
         self.model.plot()
-        plt.show()
-        circuit.plot_structure()
-        plt.show()
+        # plt.show()
+        # circuit.plot_structure()
+        # plt.show()
         self.assertEqual(circuit.variables, SortedSet([self.x, self.y, self.z, self.a]))
         self.assertLess(len(circuit.weighted_edges), math.prod([len(v.domain.simple_sets) for v in circuit.variables]))
 
