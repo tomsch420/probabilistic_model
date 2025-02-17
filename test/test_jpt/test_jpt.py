@@ -108,8 +108,8 @@ class JPTTestCase(unittest.TestCase):
     def setUp(self):
         np.random.seed(69)
         data = pd.DataFrame()
-        data["integer"] = np.concatenate((np.random.randint(low=0, high=4, size=50), np.random.randint(7, 10, 50)))
-        data["real"] = np.random.normal(2, 4, 100)
+        data["integer"] = np.concatenate((np.random.randint(low=0, high=4, size=50), np.random.randint(7, 10, 50))).astype(int)
+        data["real"] = np.random.normal(2, 4, 100).astype(np.float32)
         data["symbol"] = np.random.randint(0, 4, 100).astype(str)
         self.data = data
         self.real, self.integer, self.symbol = infer_variables_from_dataframe(self.data, scale_continuous_types=False)
@@ -269,7 +269,6 @@ class BreastCancerTestCase(unittest.TestCase):
         event = SimpleEvent({variable: variable.domain for variable in self.model.variables}).as_composite_set()
         self.assertAlmostEqual(model.probability(event), 1.)
 
-    @unittest.skip("This test has to be skipped until the marginal pointer thing is solved in random_events")
     def test_marginal_conditional_chain(self):
         model = self.model
         marginal = model.marginal(self.model.variables[:2])

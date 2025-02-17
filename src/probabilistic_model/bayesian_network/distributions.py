@@ -237,6 +237,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
         parent_hash_map = self.parent.variable.domain.hash_map
 
         for parent_event, distribution in self.conditional_probability_distributions.items():
+
             parent_event = SimpleEvent({self.parent.variable: parent_hash_map[parent_event]})
             parent_distribution, parent_log_probability = self.parent.forward_message.log_conditional_of_composite_set(
                 parent_event[self.parent.variable])

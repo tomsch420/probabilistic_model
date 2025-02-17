@@ -204,8 +204,10 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
     data: np.array
 
     def setUp(self) -> None:
+        np.random.seed(420)
         self.model = NygaDistribution(self.x, min_likelihood_improvement=0.001, min_samples_per_quantile=300)
-        data = np.random.normal(0, 1, 1000)
+        data = np.random.normal(0., 1., 1000).astype(np.float32)
+        data.sort()
         self.model.fit(data)
         self.data = data
 

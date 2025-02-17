@@ -157,8 +157,8 @@ class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
         d2.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.y, closed(0, 2).simple_sets[0])))
         d2.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.z, closed(0, 3).simple_sets[0])))
 
-        self.p_yzx.conditional_probability_distributions[0] = d1.probabilistic_circuit
-        self.p_yzx.conditional_probability_distributions[1] = d2.probabilistic_circuit
+        self.p_yzx.conditional_probability_distributions[hash(YEnum.ZERO)] = d1.probabilistic_circuit
+        self.p_yzx.conditional_probability_distributions[hash(YEnum.ONE)] = d2.probabilistic_circuit
 
         self.bayesian_network.add_nodes_from([self.p_x, self.p_yzx])
         self.bayesian_network.add_edge(self.p_x, self.p_yzx)
@@ -172,7 +172,7 @@ class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
         circuit.simplify()
         self.assertEqual(circuit.probability(circuit.universal_simple_event().as_composite_set()), 1.)
         event = SimpleEvent({self.x: (XEnum.ZERO, XEnum(1)), self.y: closed(1.5, 2)})
-        self.assertAlmostEqual(0.075, circuit.probability(event.as_composite_set()))
+        self.assertAlmostEqual(0.3 * 0.25, circuit.probability(event.as_composite_set()))
 
 
 if __name__ == '__main__':

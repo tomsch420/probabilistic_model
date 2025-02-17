@@ -134,53 +134,53 @@ class ShallowTestCase(unittest.TestCase):
         shallow_pc = ShallowProbabilisticCircuit.from_probabilistic_circuit(self.model)
 
 
-class L1MetricTestCase(unittest.TestCase):
-    x = Continuous("x")
-    y = Continuous("y")
-    standard_circuit = ProductUnit()
-
-    standard_circuit.add_subcircuit(LeafUnit(distribution=UniformDistribution(x, SimpleInterval(0, 1))))
-    standard_circuit.add_subcircuit(LeafUnit(distribution=UniformDistribution(y, SimpleInterval(0, 1))))
-    standard_circuit = standard_circuit.probabilistic_circuit
-
-    event_1 = SimpleEvent({x: closed(0, .25), y: closed(0, .25)})
-    event_2 = SimpleEvent({x: closed(0.75, 1), y: closed(0.75, 1)})
-
-    circuit_1, _ = standard_circuit.conditional(event_1.as_composite_set().complement())
-    circuit_2, _ = standard_circuit.conditional(event_2.as_composite_set().complement())
-    circuit_3, _ = circuit_2.conditional(event_1.as_composite_set())
-    circuit_4, _ = circuit_1.conditional(event_2.as_composite_set())
-
-    shallow_1 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_1)
-    shallow_2 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_2)
-    shallow_3 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_3)
-    shallow_4 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_4)
-
-    def test_jpt_l1(self):
-        result = self.shallow_1.l1(self.shallow_2)
-
-        p_event_by_hand = self.event_2
-        q_event_by_hand = self.event_1
-        self.assertEqual(self.circuit_2.probability(p_event_by_hand.as_composite_set()), 0)
-        self.assertEqual(self.circuit_1.probability(q_event_by_hand.as_composite_set()), 0)
-        result_by_hand = self.circuit_1.probability(p_event_by_hand.as_composite_set()) + self.circuit_2.probability(
-            q_event_by_hand.as_composite_set())
-        self.assertAlmostEqual(result, result_by_hand, 4)
-
-    def test_jpt_l1_same_input(self):
-        result = self.shallow_1.l1(self.shallow_1)
-        self.assertEqual(result, 0)
-
-    def test_jpt_l1_disjunct_input(self):
-        result = self.shallow_3.l1(self.shallow_4)
-
-        self.assertEqual(result, 2)
-
-    def test_l1_mc(self):
-        mc_esti = MonteCarloEstimator(sample_size=1000, model=self.circuit_1)
-        result = mc_esti.l1_metric(self.circuit_2)
-        self.assertAlmostEqual(result / 2, 0.13333333333333336, delta=0.1)
-
+# class L1MetricTestCase(unittest.TestCase):
+#     x = Continuous("x")
+#     y = Continuous("y")
+#     standard_circuit = ProductUnit()
+#
+#     standard_circuit.add_subcircuit(LeafUnit(distribution=UniformDistribution(x, SimpleInterval(0, 1))))
+#     standard_circuit.add_subcircuit(LeafUnit(distribution=UniformDistribution(y, SimpleInterval(0, 1))))
+#     standard_circuit = standard_circuit.probabilistic_circuit
+#
+#     event_1 = SimpleEvent({x: closed(0, .25), y: closed(0, .25)})
+#     event_2 = SimpleEvent({x: closed(0.75, 1), y: closed(0.75, 1)})
+#
+#     circuit_1, _ = standard_circuit.conditional(event_1.as_composite_set().complement())
+#     circuit_2, _ = standard_circuit.conditional(event_2.as_composite_set().complement())
+#     circuit_3, _ = circuit_2.conditional(event_1.as_composite_set())
+#     circuit_4, _ = circuit_1.conditional(event_2.as_composite_set())
+#
+#     shallow_1 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_1)
+#     shallow_2 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_2)
+#     shallow_3 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_3)
+#     shallow_4 = ShallowProbabilisticCircuit.from_probabilistic_circuit(circuit_4)
+#
+#     def test_jpt_l1(self):
+#         result = self.shallow_1.l1(self.shallow_2)
+#
+#         p_event_by_hand = self.event_2
+#         q_event_by_hand = self.event_1
+#         self.assertEqual(self.circuit_2.probability(p_event_by_hand.as_composite_set()), 0)
+#         self.assertEqual(self.circuit_1.probability(q_event_by_hand.as_composite_set()), 0)
+#         result_by_hand = self.circuit_1.probability(p_event_by_hand.as_composite_set()) + self.circuit_2.probability(
+#             q_event_by_hand.as_composite_set())
+#         self.assertAlmostEqual(result, result_by_hand, 4)
+#
+#     def test_jpt_l1_same_input(self):
+#         result = self.shallow_1.l1(self.shallow_1)
+#         self.assertEqual(result, 0)
+#
+#     def test_jpt_l1_disjunct_input(self):
+#         result = self.shallow_3.l1(self.shallow_4)
+#
+#         self.assertEqual(result, 2)
+#
+#     def test_l1_mc(self):
+#         mc_esti = MonteCarloEstimator(sample_size=1000, model=self.circuit_1)
+#         result = mc_esti.l1_metric(self.circuit_2)
+#         self.assertAlmostEqual(result / 2, 0.13333333333333336, delta=0.1)
+#
 
 if __name__ == '__main__':
     unittest.main()

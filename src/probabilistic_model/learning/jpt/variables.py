@@ -27,7 +27,7 @@ def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: b
         unique_values = data[column].unique()
 
         # handle continuous variables
-        if datatype in [float]:
+        if np.issubdtype(datatype, np.number) and datatype != int:
 
             if len(unique_values) == 1:
                 minimal_distance_between_values = 1.

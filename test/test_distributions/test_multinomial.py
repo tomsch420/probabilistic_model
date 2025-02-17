@@ -146,10 +146,10 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         distribution = self.crafted_distribution
         distribution.normalize()
         event = SimpleEvent()
-        event.fill_missing_variables(set(distribution.variables))
         self.assertAlmostEqual(distribution.probability(event.as_composite_set()), 1)
 
         event[self.x] = XEnum.A
+        event._update_cpp_object()
         self.assertAlmostEqual(distribution.probability(event.as_composite_set()), 1 / 3)
 
         event[self.y] = (YEnum.A, YEnum.B)
@@ -169,7 +169,6 @@ class MultinomialInferenceTestCase(unittest.TestCase):
 
     def test_crafted_conditional(self):
         event = SimpleEvent({self.y: (YEnum.A, YEnum.B)})
-        event.fill_missing_variables(self.crafted_distribution.variables)
         conditional, probability = self.crafted_distribution.conditional(event.as_composite_set())
         self.assertAlmostEqual(conditional.probability(event.as_composite_set()), 1)
 

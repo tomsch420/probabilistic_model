@@ -337,6 +337,15 @@ class InnerUnit(Unit):
 
 class SumUnit(InnerUnit):
 
+
+    _latent_variable: Optional[Symbolic] = None
+    """
+    The latent variable of this unit.
+    This has to be here due to the rvalue/lvalue problem in random events.
+    
+    TODO remove this when RE is fixed
+    """
+
     def __repr__(self):
         return "⊕"
 
@@ -365,7 +374,9 @@ class SumUnit(InnerUnit):
         name = f"{hash(self)}.latent"
         subcircuit_enum = IntEnum(name, {str(hash(subcircuit)): index
                                          for index, subcircuit in enumerate(self.subcircuits)})
-        return Symbolic(name, Set.from_iterable(subcircuit_enum))
+        result = Symbolic(name, Set.from_iterable(subcircuit_enum))
+        self._latent_variable = result
+        return result
 
     def add_subcircuit(self, subcircuit: Unit, weight: float, mount: bool = True):
         """
@@ -469,9 +480,10 @@ class SumUnit(InnerUnit):
         own_subcircuits = self.subcircuits
         other_subcircuits = other.subcircuits
 
-        for own_index, own_subcircuit in zip(own_latent_variable.domain.simple_sets, own_subcircuits):
+        for own_index, own_subcircuit in enumerate(own_subcircuits):
 
             # create denominator of weight
+            own_index = own_latent_variable.domain.simple_sets[0].element.__class__(own_index)
             condition = SimpleEvent({own_latent_variable: own_index}).as_composite_set()
             p_condition = interaction_model.probability(condition)
 
@@ -494,9 +506,10 @@ class SumUnit(InnerUnit):
             # mount the proxy for the children from other in the product proxy
             proxy_product_node.add_subcircuit(proxy_sum_node)
 
-            for other_index, other_subcircuit in zip(other_latent_variable.domain, other_subcircuits):
+            for other_index, other_subcircuit in enumerate(other_subcircuits):
 
                 # create numerator of weight
+                other_index = other_latent_variable.domain.simple_sets[0].element.__class__(other_index)
                 query = SimpleEvent({other_latent_variable: other_index}).as_composite_set() & condition
                 p_query = interaction_model.probability(query)
 

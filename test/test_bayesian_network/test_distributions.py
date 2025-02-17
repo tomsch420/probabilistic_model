@@ -68,8 +68,8 @@ class DistributionTestCase(unittest.TestCase):
     def test_forward_pass(self):
         event = SimpleEvent({self.x: (XEnum.ZERO, XEnum.ONE), self.y: YEnum.ZERO})
         self.p_x.forward_pass(event)
-
-        self.assertEqual(list(self.p_x.forward_message.probabilities.values()), [0.5 / 0.8, 0.3 / 0.8])
+        self.assertAlmostEqual(self.p_x.forward_message.probabilities[0], 0.5/0.8)
+        self.assertAlmostEqual(self.p_x.forward_message.probabilities[1], 0.3/0.8)
         self.assertEqual(self.p_x.forward_probability, 0.8)
 
         self.p_yx.forward_pass(event)

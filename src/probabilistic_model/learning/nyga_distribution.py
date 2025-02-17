@@ -7,7 +7,7 @@ from typing import Optional, List, Deque, Tuple, Dict, Any
 import numpy as np
 import plotly.graph_objects as go
 import random_events
-from random_events.interval import closed, closed_open
+from random_events.interval import closed, closed_open, SimpleInterval, Bound
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous, Variable
 from sortedcontainers import SortedSet
@@ -147,12 +147,14 @@ class InductionStep:
         :param end_index: The index of the last datapoint.
         """
         if end_index == len(self.data):
-            interval = closed(self.left_connecting_point_from_index(begin_index),
-                              self.right_connecting_point_from_index(end_index))
+            interval = SimpleInterval(self.left_connecting_point_from_index(begin_index),
+                                      self.right_connecting_point(),
+                                      Bound.CLOSED, Bound.CLOSED)
         else:
-            interval = closed_open(self.left_connecting_point_from_index(begin_index),
-                                   self.right_connecting_point_from_index(end_index))
-        return UniformDistribution(self.variable, interval.simple_sets[0])
+            interval = SimpleInterval(self.left_connecting_point_from_index(begin_index),
+                                        self.right_connecting_point_from_index(end_index),
+                                        Bound.CLOSED, Bound.OPEN)
+        return UniformDistribution(self.variable, interval)
 
     def sum_weights_from_indices(self, begin_index: int, end_index: int) -> float:
         """
