@@ -67,7 +67,7 @@ class UnivariateDistribution(ProbabilisticModel, SubclassJSONSerializer, DrawIOI
         :param event: The event
         :return: The composite set
         """
-        return event.marginal(SortedSet(self.variables)).simple_sets[0][self.variable]
+        return event.marginal(set(self.variables)).simple_sets[0][self.variable]
 
     @property
     def abbreviated_symbol(self) -> str:
@@ -362,7 +362,7 @@ class SymbolicDistribution(DiscreteDistribution):
         domain_hash_map = self.variable.domain.hash_map
 
         mode_symbols = {domain_hash_map[hash_value] for hash_value in mode_hashes}
-        mode = Set(*mode_symbols)
+        mode = self.variable.make_value(mode_symbols)
         return mode, np.log(max_likelihood)
 
     def log_conditional_of_composite_set(self, event: AbstractCompositeSet) -> Tuple[Optional[Self], float]:
@@ -387,9 +387,7 @@ class SymbolicDistribution(DiscreteDistribution):
     @property
     def univariate_support(self) -> Set:
         hash_map = self.variable.domain.hash_map
-        print(hash_map)
-        print(self.probabilities)
-        return Set(*[hash_map[key] for key, value in self.probabilities.items() if value > 0])
+        return self.variable.make_value([hash_map[key] for key, value in self.probabilities.items() if value > 0])
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         return sum(self.probabilities[hash(key)] for key in event[self.variable].simple_sets)
@@ -410,7 +408,8 @@ class SymbolicDistribution(DiscreteDistribution):
         unique, counts = np.unique(data, return_counts=True)
         probabilities = MissingDict(float)
         for value, count in zip(unique, counts):
-            probabilities[hash(self.variable.domain.simple_sets[int(value)])] = count / len(data)
+            set_element = [element for element in self.variable.domain.simple_sets if element.element == value][0]
+            probabilities[hash(set_element)] = count / len(data)
         self.probabilities = probabilities
         return self
 

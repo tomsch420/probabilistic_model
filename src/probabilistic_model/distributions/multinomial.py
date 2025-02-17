@@ -72,16 +72,19 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         likelihood = np.max(self.probabilities)
         indices_of_maximum = np.transpose(np.asarray(self.probabilities == likelihood).nonzero())
 
+        hash_map_variable_values = {variable: list(variable.domain.hash_map.values()) for variable in self.variables}
+
         mode = None
         for index_of_maximum in indices_of_maximum:
-            current_mode = SimpleEvent({variable: variable.domain.simple_sets[0].all_elements[value] for
+
+            current_mode = SimpleEvent({variable: hash_map_variable_values[variable][value] for
                                         variable, value in zip(self.variables, index_of_maximum)}).as_composite_set()
             if mode is None:
                 mode = current_mode
             else:
                 mode |= current_mode
 
-        return mode.simplify(), np.log(likelihood)
+        return mode, np.log(likelihood)
 
     def __copy__(self) -> Self:
         """
@@ -115,8 +118,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         return table
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
-        indices = tuple([variable.domain.simple_sets.index(simple_set) for simple_set in event[variable]]
-                        for variable in self.variables)
+        indices = self.indices_from_simple_event(event)
         return self.probabilities[np.ix_(*indices)].sum()
 
     def log_likelihood(self, events: np.array) -> np.array:
@@ -136,15 +138,25 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         result.normalize()
         return result, np.log(sum_of_probabilities)
 
+    def indices_from_simple_event(self, event: SimpleEvent) -> Tuple[List[int], ...]:
+        """
+        Calculate the indices that can be used to access the underlying probability array from a simple event.
+
+        :param event: The simple event.
+        :return: The indices.
+        """
+        hash_map_variable_keys = {variable: list(variable.domain.hash_map) for variable in self.variables}
+        return tuple([hash_map_variable_keys[variable].index(hash(simple_set))
+                      for simple_set in event[variable]] for variable in self.variables)
+
     def probabilities_from_simple_event(self, event: SimpleEvent) -> np.ndarray:
         """
         Calculate the probabilities array for a simple event.
+
         :param event: The simple event.
         :return: The array of probabilities that apply to this event.
         """
-        indices = tuple([variable.domain.simple_sets.index(simple_set) for simple_set in event[variable]]
-                        for variable in self.variables)
-        indices = np.ix_(*indices)
+        indices = np.ix_(*self.indices_from_simple_event(event))
         probabilities = np.zeros_like(self.probabilities)
         probabilities[indices] = self.probabilities[indices]
         return probabilities

@@ -3,10 +3,9 @@ import unittest
 from enum import IntEnum
 
 import numpy as np
-from random_events.product_algebra import Event, SetElement, SimpleEvent
+from random_events.product_algebra import SimpleEvent
 from random_events.set import Set
 from random_events.variable import Symbolic
-from sortedcontainers import SortedSet
 
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 
@@ -37,9 +36,9 @@ class MultinomialConstructionTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         np.random.seed(69)
-        cls.x = Symbolic("X", {e for e in XEnum})
-        cls.y = Symbolic("Y", {e for e in YEnum})
-        cls.z = Symbolic("Z", {e for e in ZEnum})
+        cls.x = Symbolic("X", Set.from_iterable(XEnum))
+        cls.y = Symbolic("Y", Set.from_iterable(YEnum))
+        cls.z = Symbolic("Z", Set.from_iterable(ZEnum))
 
     def test_creation_with_probabilities(self):
         distribution = MultinomialDistribution([self.x, self.y, self.z], np.random.rand(len(self.x.domain.simple_sets),
@@ -49,7 +48,7 @@ class MultinomialConstructionTestCase(unittest.TestCase):
 
     def test_creation_without_probabilities(self):
         distribution = MultinomialDistribution([self.x])
-        self.assertTrue(np.allclose(1./2., distribution.probabilities))
+        self.assertTrue(np.allclose(1. / 2., distribution.probabilities))
 
     def test_creation_with_invalid_probabilities_shape(self):
         probabilities = np.array([[0.1, 0.1], [0.2, 0.2]])
@@ -115,38 +114,39 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         mode, probability = self.random_distribution.mode()
         mode = mode.simple_sets[0]
         self.assertAlmostEqual(probability, self.random_distribution.probabilities.max())
-        self.assertEqual(mode["X"], self.x.make_value(XEnum.A).as_composite_set())
-        self.assertEqual(mode["Y"], self.y.make_value(YEnum.A).as_composite_set())
+        self.assertEqual(mode["X"], self.x.make_value(XEnum.A))
+        self.assertEqual(mode["Y"], self.y.make_value(YEnum.A))
 
     def test_crafted_mode(self):
         mode, probability = self.crafted_distribution.mode()
         mode = mode.simple_sets[0]
         self.assertEqual(probability, self.crafted_distribution.probabilities.max())
-        self.assertEqual(mode["X"], self.x.make_value(XEnum.B).as_composite_set())
-        self.assertEqual(mode["Y"], self.x.make_value(YEnum.A).as_composite_set())
+        self.assertEqual(mode["X"], self.x.make_value(XEnum.B))
+        self.assertEqual(mode["Y"], self.x.make_value(YEnum.A))
 
     def test_likelihood(self):
         data = np.array([[XEnum.A, YEnum.A], [XEnum.B, YEnum.B]])
         likelihood = self.crafted_distribution.likelihood(data)
         self.assertEqual(likelihood.shape, (2,))
-        self.assertAlmostEqual(likelihood[0], 0.1/self.crafted_distribution_mass)
-        self.assertAlmostEqual(likelihood[1], 0.4/self.crafted_distribution_mass)
+        self.assertAlmostEqual(likelihood[0], 0.1 / self.crafted_distribution_mass)
+        self.assertAlmostEqual(likelihood[1], 0.4 / self.crafted_distribution_mass)
 
     def test_multiple_modes(self):
         distribution = MultinomialDistribution([self.x, self.y], np.array([[0.1, 0.7, 0.3], [0.7, 0.4, 0.1]]), )
         mode, likelihood = distribution.mode()
+
+        mode_by_hand = SimpleEvent({self.x: XEnum.A, self.y: YEnum.B}).as_composite_set() | SimpleEvent(
+            {self.x: XEnum.B, self.y: YEnum.A}).as_composite_set()
+
         self.assertEqual(likelihood, 0.7)
         self.assertEqual(len(mode.simple_sets), 2)
-        self.assertEqual(mode.simple_sets[0]["X"], self.x.make_value(XEnum.A).as_composite_set())
-        self.assertEqual(mode.simple_sets[0]["Y"], self.y.make_value(YEnum.B).as_composite_set())
-        self.assertEqual(mode.simple_sets[1]["X"], self.x.make_value(XEnum.B).as_composite_set())
-        self.assertEqual(mode.simple_sets[1]["Y"], self.y.make_value(YEnum.A).as_composite_set())
+        self.assertEqual(mode, mode_by_hand)
 
     def test_crafted_probability(self):
         distribution = self.crafted_distribution
         distribution.normalize()
         event = SimpleEvent()
-        event.fill_missing_variables(distribution.variables)
+        event.fill_missing_variables(set(distribution.variables))
         self.assertAlmostEqual(distribution.probability(event.as_composite_set()), 1)
 
         event[self.x] = XEnum.A
@@ -171,7 +171,7 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         event = SimpleEvent({self.y: (YEnum.A, YEnum.B)})
         event.fill_missing_variables(self.crafted_distribution.variables)
         conditional, probability = self.crafted_distribution.conditional(event.as_composite_set())
-        self.assertEqual(conditional.probability(event.as_composite_set()), 1)
+        self.assertAlmostEqual(conditional.probability(event.as_composite_set()), 1)
 
         impossible_event = SimpleEvent({self.y: YEnum.C})
         impossible_event.fill_missing_variables(self.crafted_distribution.variables)
@@ -182,10 +182,10 @@ class MultinomialInferenceTestCase(unittest.TestCase):
         self.random_distribution.normalize()
         circuit = self.random_distribution.as_probabilistic_circuit()
 
-        for event in itertools.product(self.x.domain.simple_sets, self.y.domain.simple_sets,
-                                       self.z.domain.simple_sets):
+        for event in itertools.product(self.x.domain.simple_sets, self.y.domain.simple_sets, self.z.domain.simple_sets):
             event = SimpleEvent(zip([self.x, self.y, self.z], event)).as_composite_set()
-            self.assertAlmostEqual(self.random_distribution.probability(event), circuit.probabilistic_circuit.probability(event))
+            self.assertAlmostEqual(self.random_distribution.probability(event),
+                                   circuit.probabilistic_circuit.probability(event))
 
     def test_serialization(self):
         distribution = self.random_distribution
