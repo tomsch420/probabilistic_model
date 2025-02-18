@@ -16,12 +16,12 @@ build:
       - "pip install -r doc/requirements.txt"
       - "jupyter-book config sphinx doc/"
 
-#python:
-#  install:
-#    - method: pip
-#      path: .
-#      extra_requirements:
-#      - sphinx
+python:
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+      - sphinx
 
 sphinx:
   builder: html
