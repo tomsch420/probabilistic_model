@@ -50,7 +50,15 @@ sphinx:
       - https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js
     autoapi_dirs: ['../src']
     autoapi_add_toctree_entry: True
-    mathjax_path: https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+    mathjax_path: https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.0/es5/tex-mml-chtml.js
+    mathjax2_config: {
+        'tex2jax': {
+            'inlineMath': [['$', '$'], ['\\(', '\\)']],
+            'processEscapes': True,
+            'ignoreClass': 'document',
+            'processClass': 'math|output_area',
+        }
+    }
 
 parse:
   myst_enable_extensions:
