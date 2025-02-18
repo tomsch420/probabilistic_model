@@ -14,7 +14,7 @@ build:
     pre_build:
       # Generate the Sphinx configuration for this Jupyter Book so it builds.
       - "pip install -r doc/requirements.txt"
-      - "jupyter-book config sphinx docs/"
+      - "jupyter-book config sphinx doc/"
 
 #python:
 #  install:
