@@ -170,9 +170,8 @@ print("-" * 80)
 print("Expectation:", expanded_model.expectation(expanded_model.variables))
 print("-" * 80)
 modes, ml = expanded_model.mode()
-print("First possible Mode:", modes.simple_sets[0])
-print("-" * 80)
-print("Second possible Mode:", modes.simple_sets[1])
+print("Modes:")
+print(modes)
 ```
 
 While this example is fairly simple, the concept of dynamic expansions of circuits into full joint distributions 

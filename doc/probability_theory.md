@@ -26,21 +26,6 @@ At the end of this book, you will understand ...
 - Learning probabilistic models from data
 - Applying probabilistic models to practical problems
 
-If you are interested in a more mathematical and less engineering introduction to probability, Mario recommends the
-following resources:
-
-| Level         | Resource                                                                                           | Marios Comment                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-|---------------|----------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Undergraduate | {cite}`case2001statistical`                                                                        | A Good Introductory book on Statistical Methods from a Frequentist viewpoint. (e.g. Hypothesis Test, ANOVA etc.                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Undergraduate | {cite}`hogg2019introduction`                                                                     | This book provides a good introduction to pre-Machine Learning models, as an added bonus the authors redid the exercises in Python (previous versions had them in R).                                                                                                                                                                                                                                                                                                                                                                        |
-| Graduate      | {cite}`hastie2009elements`                                                                       | Same as the previous one from the same authors, but with more math depth and understanding (e.g. optimizing the regression penalty is done by means of Lagrangian functions)                                                                                                                                                                                                                                                                                                                                                                 |
-| Graduate      | {cite}`gelman2014bayesian`                                                                       | Solid book on Bayesian Inference, plus it provides an extensive overview on Sampling methods from the Bayesian perspective.                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Graduate      | {cite}`bishop2006pattern`                                                                        | This is considered by many to be the Holy Bible of Machine Learning (Especially Bayesian Networks). It provides a really useful read for understanding the next 3 books in Deep Learning.                                                                                                                                                                                                                                                                                                                                                    |
-| Baby          | [Deep Learning by  <br> Yoshua Bengio](https://www.deeplearningbook.org/)                          | Deep Learning. You can get away with not knowing measure theory                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Papa          | [Probabilistic Machine Learning: <br> An Introduction](https://probml.github.io/pml-book/book1.html) | Deep Learning. You can get away with not knowing measure theory                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Grandpa       | [Probabilistic Machine Learning: <br> Advanced Topics](https://probml.github.io/pml-book/book2.html) | Deep Learning. It's measure theory galore                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Bonus         | {cite}`mackay2003information`                                                                    | This is Probability Theory Bonanza at its finest. On a serious note, this seems to be like a really good reference manual to have once you understand mostly anything in Prob & Statistics (It starts from the basic measure theoretic arguments and builds up until it touches modern probability research areas, e.g. Malliavin Calculus and Stochastic Diff. Geometry), otherwise it's just an hipster book to show off in your library to your colleagues. Recommended Level: Alessandro's Hobo potential level after finishing his PhD. |
-
 ## Concepts of Probability
 
 The first section walks through the essential concepts of probability that lay the foundation to understand modern
@@ -341,30 +326,29 @@ Let's look at a practical example where we construct a joint probability distrib
 ```{code-cell} ipython3
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 import numpy as np
+from enum import IntEnum
+from random_events.set import Set
 
-
-class Color(SetElement):
-    EMPTY_SET = -1
+class Color(IntEnum):
     BLUE = 0
     RED = 1
+    
 
-
-class Shape(SetElement):
-    EMPTY_SET = -1
+class Shape(IntEnum):
     CIRCLE = 0
     RECTANGLE = 1
     TRIANGLE = 2
 
 
-color = Symbolic("color", Color)
-shape = Symbolic("shape", Shape)
+color = Symbolic("color", Set.from_iterable(Color))
+shape = Symbolic("shape", Set.from_iterable(Shape))
 
 probabilities = np.array([[2 / 15, 1 / 15, 1 / 5],
                           [1 / 5, 1 / 10, 3 / 10]])
 
 distribution = MultinomialDistribution((color, shape), probabilities)
 color_event = SimpleEvent({color: Color.BLUE}).as_composite_set()
-shape_event = SimpleEvent({shape: Set(Shape.CIRCLE, Shape.TRIANGLE)}).as_composite_set()
+shape_event = SimpleEvent({shape: (Shape.CIRCLE, Shape.TRIANGLE)}).as_composite_set()
 joint_event = color_event & shape_event
 print(f"P({joint_event}) = {distribution.probability(joint_event)}")
 print(
@@ -416,12 +400,11 @@ Let's explore this in another example.
 ```{code-cell} ipython3
 :tag:
 
-class Size(SetElement):
-    EMPTY_SET = -1
+class Size(IntEnum):
     SMALL = 0
     LARGE = 1
     
-size = Symbolic("size", Size)
+size = Symbolic("size", Set.from_iterable(Size))
 
 probabilities = np.array([[[2 / 30, 1 / 30, 1 / 10], [0, 0.3, 0.05]],
                           [[1 / 10, 1 / 20, 3 / 20], [ 0.15, 0, 0.,]]])
@@ -439,7 +422,7 @@ color_and_large = color_event & large_event
 p_color_and_small = distribution.probability(color_and_small)
 p_color_and_large = distribution.probability(color_and_large)
 
-shape_event = SimpleEvent({shape: Set(Shape.CIRCLE)}).as_composite_set()
+shape_event = SimpleEvent({shape: Shape.CIRCLE}).as_composite_set()
 shape_and_small = shape_event & small_event
 shape_and_large = shape_event & large_event
 p_shape_and_small = distribution.probability(shape_and_small)

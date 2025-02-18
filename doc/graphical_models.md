@@ -65,63 +65,61 @@ from probabilistic_model.bayesian_network.bayesian_network import *
 from probabilistic_model.bayesian_network.distributions import *
 from random_events.set import *
 from random_events.variable import *
-from probabilistic_model.distributions import *
-from probabilistic_model.probabilistic_circuit.nx.distributions import *
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from random_events.interval import *
 import networkx as nx
+from enum import IntEnum
+from probabilistic_model.distributions import *
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import *
 
 # Declare variable types and variables
-class Success(SetElement):
-    EMPTY_SET = -1
+class Success(IntEnum):
     FAILURE = 0
     SUCCESS = 1
     
-class ObjectPosition(SetElement):
-    EMPTY_SET = -1
+class ObjectPosition(IntEnum):
     LEFT = 0
     RIGHT = 1
     CENTER = 2
     
-class Mood(SetElement):
-    EMPTY_SET = -1
+class Mood(IntEnum):
     HAPPY = 0
     SAD = 1
 
-success = Symbolic("Success", Success)
-object_position = Symbolic("ObjectPosition", ObjectPosition)
-mood = Symbolic("Mood", Mood)
-x = Continuous("X")
-y = Continuous("Y")
+success = Symbolic("Success", Set.from_iterable(Success))
+object_position = Symbolic("ObjectPosition", Set.from_iterable(ObjectPosition))
+mood = Symbolic("Mood", Set.from_iterable(Mood))
+x = Continuous("x")
+y = Continuous("y")
 
 # construct Bayesian network
 bn = BayesianNetwork()
 
 # create root
-cpd_success = RootDistribution(success, MissingDict(float, {int(Success.FAILURE): 0.8, int(Success.SUCCESS): 0.2}))
+cpd_success = RootDistribution(success, MissingDict(float, {hash(Success.FAILURE): 0.8, hash(Success.SUCCESS): 0.2}))
 bn.add_node(cpd_success)
 
 # create P(ObjectPosition | Success)
 cpd_object_position = ConditionalProbabilityTable(object_position)
 cpd_object_position.conditional_probability_distributions[int(Success.FAILURE)] = SymbolicDistribution(object_position, 
-                                                                                                       MissingDict(float, {int(ObjectPosition.LEFT): 0.3, 
-                                                                                                                           int(ObjectPosition.RIGHT): 0.3, 
-                                                                                                                           int(ObjectPosition.CENTER): 0.4}))
+                                                                                                       MissingDict(float, {hash(ObjectPosition.LEFT): 0.3, 
+                                                                                                                           hash(ObjectPosition.RIGHT): 0.3, 
+                                                                                                                           hash(ObjectPosition.CENTER): 0.4}))
 cpd_object_position.conditional_probability_distributions[ int(Success.SUCCESS)] = SymbolicDistribution(object_position,
-                                                                                                        MissingDict(float, {int(ObjectPosition.LEFT): 0.3, 
-                                                                                                                            int(ObjectPosition.RIGHT): 0.3, 
-                                                                                                                            int(ObjectPosition.CENTER): 0.4}))
+                                                                                                        MissingDict(float, {hash(ObjectPosition.LEFT): 0.3, 
+                                                                                                                            hash(ObjectPosition.RIGHT): 0.3, 
+                                                                                                                            hash(ObjectPosition.CENTER): 0.4}))
 bn.add_node(cpd_object_position)
 bn.add_edge(cpd_success, cpd_object_position)
 
 # create P(Mood | Success)
 cpd_mood = ConditionalProbabilityTable(mood)
-cpd_mood.conditional_probability_distributions[int(Success.FAILURE)] = SymbolicDistribution(mood, 
-                                                                                            MissingDict(float, {int(Mood.HAPPY): 0.2, 
-                                                                                                                int(Mood.SAD): 0.8}))
-cpd_mood.conditional_probability_distributions[int(Success.SUCCESS)] = SymbolicDistribution(mood, 
-                                                                                            MissingDict(float, {int(Mood.HAPPY): 0.9, 
-                                                                                                                int(Mood.SAD): 0.1}))
+cpd_mood.conditional_probability_distributions[hash(Success.FAILURE)] = SymbolicDistribution(mood, 
+                                                                                            MissingDict(float, {hash(Mood.HAPPY): 0.2, 
+                                                                                                                hash(Mood.SAD): 0.8}))
+cpd_mood.conditional_probability_distributions[hash(Success.SUCCESS)] = SymbolicDistribution(mood, 
+                                                                                            MissingDict(float, {hash(Mood.HAPPY): 0.9, 
+                                                                                                                hash(Mood.SAD): 0.1}))
 bn.add_node(cpd_mood)
 bn.add_edge(cpd_success, cpd_mood)
 
@@ -132,15 +130,14 @@ product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(x, 0, 
 product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(y, 0, 1)))
 default_circuit = product_unit.probabilistic_circuit
 
-cpd_xy.conditional_probability_distributions[int(ObjectPosition.LEFT)] = default_circuit.conditional(SimpleEvent({x: closed(-np.inf, -0.5)}).as_composite_set())[0]
-cpd_xy.conditional_probability_distributions[int(ObjectPosition.RIGHT)] = default_circuit.conditional(SimpleEvent({x: open(0.5, np.inf)}).as_composite_set())[0]
-cpd_xy.conditional_probability_distributions[int(ObjectPosition.CENTER)] = default_circuit.conditional(SimpleEvent({x: open_closed(-0.5, 0.5)}).as_composite_set())[0]
+cpd_xy.conditional_probability_distributions[hash(ObjectPosition.LEFT)] = default_circuit.conditional(SimpleEvent({x: closed(-np.inf, -0.5)}).as_composite_set())[0]
+cpd_xy.conditional_probability_distributions[hash(ObjectPosition.RIGHT)] = default_circuit.conditional(SimpleEvent({x: open(0.5, np.inf)}).as_composite_set())[0]
+cpd_xy.conditional_probability_distributions[hash(ObjectPosition.CENTER)] = default_circuit.conditional(SimpleEvent({x: open_closed(-0.5, 0.5)}).as_composite_set())[0]
 
 bn.add_node(cpd_xy)
 bn.add_edge(cpd_object_position, cpd_xy)
 
-pos = nx.planar_layout(bn)
-nx.draw(bn, with_labels=True, pos=pos)
+bn.plot()
 ```
 
 The Bayesian network above models a scenario with the following variables:

@@ -41,23 +41,22 @@ from plotly.subplots import make_subplots
 import itertools
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 import numpy as np
+from enum import IntEnum
 
 
-class Color(SetElement):
-    EMPTY_SET = -1
+class Color(IntEnum):
     BLUE = 0
     RED = 1
 
 
-class Shape(SetElement):
-    EMPTY_SET = -1
+class Shape(IntEnum):
     CIRCLE = 0
     RECTANGLE = 1
     TRIANGLE = 2
 
 
-color = Symbolic("color", Color)
-shape = Symbolic("shape", Shape)
+color = Symbolic("color", Set.from_iterable(Color))
+shape = Symbolic("shape", Set.from_iterable(Shape))
 
 probabilities = np.array([[2 / 15, 1 / 15, 1 / 5],
                           [1 / 5, 1 / 10, 3 / 10]])
@@ -230,8 +229,6 @@ Consider the multidimensional distribution over colors and shapes from above. We
 
 ```{code-cell} ipython3
 import tabulate
-color = Symbolic("color", Color)
-shape = Symbolic("shape", Shape)
 
 probabilities = np.array([[2/15, 1/15, 1/5],
                           [1/5, 1/10, 3/10]])
