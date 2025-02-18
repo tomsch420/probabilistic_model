@@ -8,4 +8,4 @@ jaxtyping
 equinox
 mlflow
 optax
-pyjpt
+pyjpt>=0.1.32

@@ -50,7 +50,7 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
 
         # create uniform distribution for symbolic variables
         elif isinstance(variable, Symbolic):
-            distribution = SymbolicDistribution(variable, MissingDict(float, {value: 1 / len(assignment.simple_sets) for
+            distribution = SymbolicDistribution(variable, MissingDict(float, {hash(value): 1 / len(assignment.simple_sets) for
                                                                               value in assignment}))
             distribution = UnivariateDiscreteLeaf(distribution)
 
@@ -94,7 +94,7 @@ def fully_factorized(variables: Iterable[Variable], means: dict, variances: dict
         # create uniform distribution for symbolic variables
         elif isinstance(variable, Symbolic):
             domain_elements = list(variable.domain.simple_sets)
-            distribution = SymbolicDistribution(variable, MissingDict(float, {int(v): 1/len(domain_elements)
+            distribution = SymbolicDistribution(variable, MissingDict(float, {hash(v): 1/len(domain_elements)
                                                                               for v in domain_elements}))
             distribution = UnivariateDiscreteLeaf(distribution)
         else:

@@ -175,7 +175,7 @@ class JPTTestCase(unittest.TestCase):
             self.assertSetEqual(set(original_leaf.s_indices), set(new_leaf.sample_indices))
 
     def test_jpt_continuous_variables_only(self):
-        data = self.data[["real"]]
+        data = self.data[["real"]].astype(float)
         variables = infer_variables_from_dataframe(data)
         model = JPT(variables)
         model.fit(data)
