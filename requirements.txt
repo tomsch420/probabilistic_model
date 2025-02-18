@@ -3,7 +3,7 @@ networkx
 plotly
 scipy
 typing_extensions
-numpy>=2.2.3
+numpy>=2.0.0
 sortedcontainers
 tqdm
 tabulate
