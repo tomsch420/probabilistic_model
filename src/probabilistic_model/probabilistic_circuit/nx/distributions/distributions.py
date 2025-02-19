@@ -67,6 +67,7 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
         if total_probability == 0:
             self.result_of_current_query = -np.inf
             self.distribution = None
+            self.probabilistic_circuit.remove_node(result)
             return None
 
         # reroute the parent to the new sum unit

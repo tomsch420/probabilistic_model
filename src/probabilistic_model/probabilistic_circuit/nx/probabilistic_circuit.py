@@ -12,7 +12,7 @@ import numpy as np
 import tqdm
 from matplotlib import pyplot as plt
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
-from random_events.set import SetElement, Set
+from random_events.set import Set
 from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable, Symbolic
 from sortedcontainers import SortedSet
@@ -336,8 +336,6 @@ class InnerUnit(Unit):
 
 
 class SumUnit(InnerUnit):
-
-
     _latent_variable: Optional[Symbolic] = None
     """
     The latent variable of this unit.

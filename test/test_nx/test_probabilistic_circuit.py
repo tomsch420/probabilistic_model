@@ -1,14 +1,12 @@
 import unittest
-from enum import IntEnum
 
 import plotly.graph_objects as go
-from matplotlib import pyplot as plt
+import random_events.interval
 from random_events.interval import closed, SimpleInterval
 from random_events.variable import Continuous
 
-from probabilistic_model.distributions import SymbolicDistribution
+from probabilistic_model.distributions import SymbolicDistribution, GaussianDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.monte_carlo_estimator import MonteCarloEstimator
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
@@ -75,7 +73,8 @@ class SmallCircuitTestCast(unittest.TestCase):
         self.model.log_likelihood(np.array([[0.5, 0.5]]))
         color_map = {self.model.root: "red", self.model.root.subcircuits[0]: "blue", self.model.leaves[0]: "green"}
         self.model.plot_structure(color_map, plot_inference=True,
-                                  inference_representation=lambda node: round(node.result_of_current_query[0].item(), 2))
+                                  inference_representation=lambda node: round(node.result_of_current_query[0].item(),
+                                                                              2))
         # plt.show()
 
 
@@ -95,6 +94,29 @@ class SymbolicPlottingTestCase(unittest.TestCase):
     def test_plot(self):
         fig = go.Figure(self.model.plot(), self.model.plotly_layout())
         # fig.show()
+
+
+class ConditioningWithOrphansTestCase(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+
+    prod = ProductUnit()
+    px = UnivariateContinuousLeaf(GaussianDistribution(x, 1, 1))
+    py = UnivariateContinuousLeaf(GaussianDistribution(y, 1, 1))
+
+    prod.add_subcircuit(px)
+    prod.add_subcircuit(py)
+
+    model = prod.probabilistic_circuit
+
+    def test_conditioning(self):
+        event = SimpleEvent({
+            self.x: closed(1.191472053527832, 1.2024999856948853),
+            self.y: random_events.interval.open(1500.0009765625, np.inf) |
+                    random_events.interval.open(-np.inf, -1500.0009765625)}).as_composite_set()
+
+        result, probability = self.model.conditional(event)
+        self.assertIsNone(result)
 
 
 class ShallowTestCase(unittest.TestCase):
