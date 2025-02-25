@@ -115,7 +115,7 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event.
         :return: The probability of the event.
         """
-        event = event.fill_missing_variables_pure(set(self.variables))
+        event.fill_missing_variables(set(self.variables))
         return sum(self.probability_of_simple_event(simple_set) for simple_set in event.simple_sets)
 
     @abstractmethod
@@ -179,7 +179,7 @@ class ProbabilisticModel(abc.ABC):
         :param event: The event to condition on.
         :return: The conditional distribution and the probability of the event.
         """
-        event = event.fill_missing_variables_pure(set(self.variables))
+        event.fill_missing_variables(set(self.variables))
         conditional, log_probability = self.log_conditional(event)
         return conditional, np.exp(log_probability)
 
