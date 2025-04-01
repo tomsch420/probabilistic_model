@@ -122,6 +122,12 @@ class GaussianDistribution(ContinuousDistribution):
     def abbreviated_symbol(self) -> str:
         return "N"
 
+    def translate(self, translation: VariableMap[Variable, float]):
+        self.location += translation[self.variable]
+
+    def scale(self, scaling: VariableMap[Variable, float]):
+        self.location *= scaling[self.variable]
+        self.scale *= scaling[self.variable]
 
 class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, GaussianDistribution):
     """
@@ -353,3 +359,11 @@ class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, Gau
         if self.upper == np.inf and self.lower == -np.inf:
             return super().sample(amount)
         return self.robert_rejection_sample(amount).reshape(-1, 1)
+
+    def translate(self, translation: VariableMap[Variable, float]):
+        super().translate(translation)
+        GaussianDistribution.translate(self, translation)
+
+    def scale(self, scale: VariableMap[Variable, float]):
+        super().scale(scale)
+        GaussianDistribution.scale(self, scale)

@@ -259,6 +259,28 @@ class ProbabilisticModel(abc.ABC):
         """
         return SimpleEvent({variable: variable.domain for variable in self.variables})
 
+    def translate(self, translation: Dict[Variable, float]):
+        """
+        Translate the model in-place.
+        Translation is done by adding the translation to the variable location influencing values.
+        The translation can be viewed as what happens
+        when you shift the numeric variables of the model by a constant vector.
+
+        :param translation: The variable value pairs to translate the model by.
+        """
+        raise NotImplementedError
+
+    def scale(self, scaling: Dict[Variable, float]):
+        """
+        Scale the model in-place.
+        Scaling is done by multiplying the variable location influencing values.
+        The scaling can be viewed as what happens
+        when you multiply the numeric variables of the model by a constant vector.
+
+        :param scaling: The variable value pairs to scale the model by.
+        """
+        ...
+
     def __copy__(self):
         raise NotImplementedError
 

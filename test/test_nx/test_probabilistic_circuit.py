@@ -9,6 +9,7 @@ from probabilistic_model.distributions import SymbolicDistribution, GaussianDist
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
+from probabilistic_model.probabilistic_circuit.nx.helper import leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 
@@ -41,10 +42,10 @@ class SmallCircuitTestCast(unittest.TestCase):
         prod2.add_subcircuit(sum3)
         prod2.add_subcircuit(sum5)
 
-        d_x1 = UnivariateContinuousLeaf(UniformDistribution(self.x, SimpleInterval(0, 1)))
-        d_x2 = UnivariateContinuousLeaf(UniformDistribution(self.x, SimpleInterval(2, 3)))
-        d_y1 = UnivariateContinuousLeaf(UniformDistribution(self.y, SimpleInterval(0, 1)))
-        d_y2 = UnivariateContinuousLeaf(UniformDistribution(self.y, SimpleInterval(3, 4)))
+        d_x1 = leaf(UniformDistribution(self.x, SimpleInterval(0, 1)))
+        d_x2 = leaf(UniformDistribution(self.x, SimpleInterval(2, 3)))
+        d_y1 = leaf(UniformDistribution(self.y, SimpleInterval(0, 1)))
+        d_y2 = leaf(UniformDistribution(self.y, SimpleInterval(3, 4)))
 
         sum2.add_subcircuit(d_x1, np.log(0.8))
         sum2.add_subcircuit(d_x2, np.log(0.2))
@@ -77,6 +78,13 @@ class SmallCircuitTestCast(unittest.TestCase):
                                   inference_representation=lambda node: round(node.result_of_current_query[0].item(),
                                                                               2))
         # plt.show()
+
+    def test_translation(self):
+        translation = {self.x: 5, self.y: 10}
+        self.model.translate(translation)
+        event = SimpleEvent({self.x: closed(5, 5.25) | closed(5.5, 5.75)}).as_composite_set()
+        probability = self.model.probability(event)
+        self.assertAlmostEqual(probability, 0.375)
 
 
 class SymbolicPlottingTestCase(unittest.TestCase):

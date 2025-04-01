@@ -81,3 +81,9 @@ class UniformDistributionTestCase(unittest.TestCase):
         self.assertEqual(distribution.variable, Continuous("x"))
         distribution.variable = Continuous("y")
         self.assertEqual(distribution.variable, Continuous("y"))
+
+    def test_translation(self):
+        distribution = UniformDistribution(self.x, SimpleInterval(0, 1))
+        distribution.translate({self.x: 2.})
+        expected_distribution = UniformDistribution(self.x, SimpleInterval(2, 3))
+        self.assertEqual(distribution, expected_distribution)

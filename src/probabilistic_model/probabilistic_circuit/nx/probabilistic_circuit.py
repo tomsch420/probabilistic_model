@@ -1297,6 +1297,13 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                     self.remove_edge(predecessor, leaf)
                 self.remove_node(leaf)
 
+    def translate(self, translation: Dict[Variable, float]):
+        for leaf in self.leaves:
+            leaf.distribution.translate(translation)
+
+    def scale(self, scale: Dict[Variable, float]):
+        for leaf in self.leaves:
+            leaf.distribution.scale(scale)
 
 class ShallowProbabilisticCircuit(ProbabilisticCircuit):
     """

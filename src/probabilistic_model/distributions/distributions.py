@@ -222,6 +222,17 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
         """
         raise NotImplementedError
 
+    def translate(self, translation: Dict[Variable, float]):
+        new_interval = SimpleInterval(self.interval.lower + translation[self.variable],
+                                      self.interval.upper + translation[self.variable],
+                                      self.interval.left, self.interval.right)
+        self.interval = new_interval
+
+    def scale(self, scaling: Dict[Variable, float]):
+        new_interval = SimpleInterval(self.interval.lower * scaling[self.variable],
+                                      self.interval.upper * scaling[self.variable],
+                                      self.interval.left, self.interval.right)
+        self.interval = new_interval
 
 class DiscreteDistribution(UnivariateDistribution):
     """
@@ -482,6 +493,17 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
         height = max(self.probabilities.values()) * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT
         return super().plot() + [self.univariate_expectation_trace(height)]
 
+    def translate(self, translation: Dict[Variable, int]):
+        new_probabilities = MissingDict(float)
+        for key, value in self.probabilities.items():
+            new_probabilities[key + translation[self.variable]] = value
+        self.probabilities = new_probabilities
+
+    def scale(self, scaling: Dict[Variable, int]):
+        new_probabilities = MissingDict(float)
+        for key, value in self.probabilities.items():
+            new_probabilities[key * scaling[self.variable]] = value
+        self.probabilities = new_probabilities
 
 class DiracDeltaDistribution(ContinuousDistribution):
     """
@@ -592,3 +614,9 @@ class DiracDeltaDistribution(ContinuousDistribution):
                                 y=[0, self.density_cap * SCALING_FACTOR_FOR_EXPECTATION_IN_PLOT], mode="lines+markers",
                                 name="Mode")
         return [pdf_trace, cdf_trace, expectation_trace, mode_trace]
+
+    def translate(self, translation: VariableMap[Variable, float]):
+        self.location += translation[self.variable]
+
+    def scale(self, scaling: VariableMap[Variable, float]):
+        self.location += scaling[self.variable]
