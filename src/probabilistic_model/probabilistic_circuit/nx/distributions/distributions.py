@@ -99,7 +99,7 @@ class UnivariateDiscreteLeaf(UnivariateLeaf):
         for element, probability in self.distribution.probabilities.items():
             result.add_subcircuit(UnivariateDiscreteLeaf(self.distribution.__class__(self.variable,
                                                                                      MissingDict(float, {element: 1.})),
-                                                         self.probabilistic_circuit), probability, mount=False)
+                                                         self.probabilistic_circuit), np.log(probability), mount=False)
         self.connect_incoming_edges_to(result)
         self.probabilistic_circuit.remove_node(self)
         return result

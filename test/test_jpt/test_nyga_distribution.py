@@ -5,10 +5,12 @@ import plotly.graph_objects as go
 from numpy import testing
 from random_events.interval import closed, closed_open
 from random_events.variable import Continuous
+from scipy.special import logsumexp
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
 from probabilistic_model.distributions import UniformDistribution, DiracDeltaDistribution
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
+from probabilistic_model.probabilistic_circuit.nx.helper import leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit
 from random_events.utils import SubclassJSONSerializer
 
@@ -133,7 +135,7 @@ class InductionStepTestCase(unittest.TestCase):
         distribution.fit(data)
         self.assertLessEqual(len(distribution.root.subcircuits),
                              int(len(data) / self.induction_step.nyga_distribution.min_samples_per_quantile))
-        self.assertAlmostEqual(sum(distribution.root.weights), 1.)
+        self.assertAlmostEqual(logsumexp(distribution.root.log_weights), 0.)
 
     def test_domain(self):
         np.random.seed(69)
@@ -177,11 +179,11 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertEqual(distribution.root, deserialized.root)
 
     def test_from_mixture_of_uniform_distributions(self):
-        u1 = UnivariateContinuousLeaf(UniformDistribution(self.variable, closed(0, 5).simple_sets[0]))
-        u2 = UnivariateContinuousLeaf(UniformDistribution(self.variable, closed(2, 3).simple_sets[0]))
+        u1 = leaf(UniformDistribution(self.variable, closed(0, 5).simple_sets[0]))
+        u2 = leaf(UniformDistribution(self.variable, closed(2, 3).simple_sets[0]))
         sum_unit = SumUnit()
-        sum_unit.add_subcircuit(u1, 0.5)
-        sum_unit.add_subcircuit(u2, 0.5)
+        sum_unit.add_subcircuit(u1, np.log(0.5))
+        sum_unit.add_subcircuit(u2, np.log(0.5))
         distribution = NygaDistribution.from_uniform_mixture(sum_unit.probabilistic_circuit)
 
         solution_by_hand = NygaDistribution(self.variable)
@@ -190,9 +192,9 @@ class InductionStepTestCase(unittest.TestCase):
         leaf_2 = UniformDistribution(self.variable, closed_open(2, 3).simple_sets[0])
         leaf_3 = UniformDistribution(self.variable, closed(3, 5).simple_sets[0])
 
-        root_of_solution.add_subcircuit(UnivariateContinuousLeaf(leaf_1), 0.2)
-        root_of_solution.add_subcircuit(UnivariateContinuousLeaf(leaf_2), 0.6)
-        root_of_solution.add_subcircuit(UnivariateContinuousLeaf(leaf_3), 0.2)
+        root_of_solution.add_subcircuit(UnivariateContinuousLeaf(leaf_1), np.log(0.2))
+        root_of_solution.add_subcircuit(UnivariateContinuousLeaf(leaf_2), np.log(0.6))
+        root_of_solution.add_subcircuit(UnivariateContinuousLeaf(leaf_3), np.log(0.2))
 
         self.assertEqual(len(distribution.leaves), 3)
         self.assertEqual(distribution.root, solution_by_hand.root)

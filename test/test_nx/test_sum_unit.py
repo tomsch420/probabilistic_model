@@ -7,6 +7,7 @@ from typing_extensions import Union
 
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
+from probabilistic_model.probabilistic_circuit.nx.helper import leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 import plotly.graph_objects as go
 
@@ -15,16 +16,17 @@ class NormalizationTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
 
     def test_normalization(self):
-        u1 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
-        u2 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]))
+        u1 = leaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
+        u2 = leaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]))
         sum_unit = SumUnit()
-        sum_unit.add_subcircuit(u1, 0.5)
-        sum_unit.add_subcircuit(u2, 0.3)
+        sum_unit.add_subcircuit(u1, np.log(0.5))
+        sum_unit.add_subcircuit(u2, np.log(0.3))
         sum_unit.normalize()
-        self.assertAlmostEqual(sum_unit.log_weights[0], 0.5 / 0.8)
-        self.assertAlmostEqual(sum_unit.log_weights[1], 0.3 / 0.8)
+        self.assertAlmostEqual(sum_unit.log_weights[0], np.log(0.5 / 0.8))
+        self.assertAlmostEqual(sum_unit.log_weights[1], np.log(0.3 / 0.8))
         traces = sum_unit.probabilistic_circuit.plot()
-        self.assertGreater(len(traces), 0) # go.Figure(traces, sum_unit.probabilistic_circuit.plotly_layout()).show()
+        self.assertGreater(len(traces), 0)
+        # go.Figure(traces, sum_unit.probabilistic_circuit.plotly_layout()).show()
 
 
 class SumUnitTestCase(unittest.TestCase):
@@ -32,12 +34,12 @@ class SumUnitTestCase(unittest.TestCase):
     model: ProbabilisticCircuit
 
     def setUp(self):
-        u1 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
-        u2 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]))
+        u1 = leaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
+        u2 = leaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]))
 
         model = SumUnit()
-        model.add_subcircuit(u1, 0.6)
-        model.add_subcircuit(u2, 0.4)
+        model.add_subcircuit(u1, np.log(0.6))
+        model.add_subcircuit(u2, np.log(0.4))
         self.model = model.probabilistic_circuit
 
     def test_setup(self):
@@ -56,9 +58,9 @@ class SumUnitTestCase(unittest.TestCase):
         self.assertEqual(domain, domain_by_hand)
 
     def test_weighted_subcircuits(self):
-        weighted_subcircuits = self.model.root.weighted_subcircuits
+        weighted_subcircuits = self.model.root.log_weighted_subcircuits
         self.assertEqual(len(weighted_subcircuits), 2)
-        self.assertEqual([weighted_subcircuit[0] for weighted_subcircuit in weighted_subcircuits], [0.6, 0.4])
+        self.assertEqual([weighted_subcircuit[0] for weighted_subcircuit in weighted_subcircuits], [np.log(0.6), np.log(0.4)])
 
     def test_likelihood(self):
         event = np.array([[0.5]])

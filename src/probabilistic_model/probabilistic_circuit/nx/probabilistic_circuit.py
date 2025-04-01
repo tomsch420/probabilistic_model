@@ -402,7 +402,7 @@ class SumUnit(InnerUnit):
     def log_forward(self, *args, **kwargs):
 
         result = [lw + s.result_of_current_query for lw, s in self.log_weighted_subcircuits]
-        self.result_of_current_query = logsumexp(result)
+        self.result_of_current_query = logsumexp(result, axis=0)
     moment = forward
 
     def support(self):
@@ -608,7 +608,7 @@ class SumUnit(InnerUnit):
         return True
 
     def log_mode(self):
-        log_maxima = [np.log(weight) + subcircuit.result_of_current_query[1] for weight, subcircuit in
+        log_maxima = [log_weight + subcircuit.result_of_current_query[1] for log_weight, subcircuit in
                       self.log_weighted_subcircuits]
         log_max = max(log_maxima)
         arg_log_maxima = [subcircuit.result_of_current_query[0] for lm, subcircuit in zip(log_maxima, self.subcircuits)
@@ -1198,7 +1198,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                            self.edges]
 
         nx.draw_networkx_edges(self, positions, alpha=alpha_for_edges, node_size=node_size)
-        edge_labels = {(s, t): round(w, 2) for (s, t, w) in self.log_weighted_edges}
+        edge_labels = {(s, t): round(np.exp(w), 2) for (s, t, w) in self.log_weighted_edges}
         nx.draw_networkx_edge_labels(self, positions, edge_labels, label_pos=0.25)
 
         # filter different types of nodes

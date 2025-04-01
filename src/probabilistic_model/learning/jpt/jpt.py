@@ -187,7 +187,7 @@ class JPT(ProbabilisticCircuit):
 
         return result
 
-    def fit(self, data: pd.DataFrame) -> 'JPT':
+    def fit(self, data: pd.DataFrame) -> Self:
         """
         Fit the model to the data.
 
@@ -235,7 +235,7 @@ class JPT(ProbabilisticCircuit):
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
             weight = number_of_samples / len(data)
-            root.add_subcircuit(leaf_node, weight)
+            root.add_subcircuit(leaf_node, np.log(weight))
 
             if self.keep_sample_indices:
                 leaf_node.sample_indices = self.indices[start:end]

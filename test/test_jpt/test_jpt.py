@@ -136,14 +136,14 @@ class JPTTestCase(unittest.TestCase):
         self.model.min_impurity_improvement = 1
         self.model.fit(self.data)
         self.assertEqual(len(self.model.root.subcircuits), 1)
-        self.assertEqual(self.model.root.weighted_subcircuits[0][0], 1.)
+        self.assertEqual(self.model.root.log_weighted_subcircuits[0][0], 0.)
         self.assertEqual(len(self.model.root.subcircuits[0].subcircuits), 3)
 
     def test_fit(self):
         self.model._min_samples_leaf = 10
         self.model.fit(self.data)
         self.assertTrue(len(self.model.root.subcircuits) <= math.floor(len(self.data) / self.model.min_samples_leaf))
-        self.assertTrue(all([weight > 0 for weight, _ in self.model.root.weighted_subcircuits]))
+        self.assertTrue(all([weight > -np.inf for weight, _ in self.model.root.log_weighted_subcircuits]))
 
         # check that all likelihoods are greater than 0
         preprocessed_data = self.model.preprocess_data(self.data)

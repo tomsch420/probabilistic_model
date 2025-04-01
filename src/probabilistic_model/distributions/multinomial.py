@@ -202,7 +202,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
             probability = self.likelihood(np.array([event]))[0]
 
             # mount the product unit to the result
-            result.add_subcircuit(product_unit, probability)
+            result.add_subcircuit(product_unit, np.log(probability))
 
         return result
 

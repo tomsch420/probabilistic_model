@@ -318,7 +318,7 @@ class InductionStep:
             # mount a uniform distribution
             distribution = self.create_uniform_distribution()
             distribution = UnivariateContinuousLeaf(distribution)
-            self.nyga_distribution.root.add_subcircuit(distribution, weight)
+            self.nyga_distribution.root.add_subcircuit(distribution, np.log(weight))
 
             return []
 
@@ -442,7 +442,7 @@ class NygaDistribution(ProbabilisticCircuit):
             distribution = UniformDistribution(variable, interval.simple_sets[0])
             leaf = UnivariateContinuousLeaf(distribution)
             weight = mixture.probability_of_simple_event(SimpleEvent({variable: interval}))
-            root.add_subcircuit(leaf, weight)
+            root.add_subcircuit(leaf, np.log(weight))
 
         return result
 
