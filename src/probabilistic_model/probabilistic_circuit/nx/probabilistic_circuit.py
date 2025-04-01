@@ -9,6 +9,7 @@ from enum import IntEnum
 
 import networkx as nx
 import numpy as np
+from scipy.special import logsumexp
 import tqdm
 from matplotlib import pyplot as plt
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
@@ -356,11 +357,11 @@ class SumUnit(InnerUnit):
         return circled_sum
 
     @property
-    def weighted_subcircuits(self) -> List[Tuple[float, Unit]]:
+    def log_weighted_subcircuits(self) -> List[Tuple[float, Unit]]:
         """
         :return: The weighted subcircuits of this unit.
         """
-        return [(self.probabilistic_circuit.edges[self, subcircuit]["weight"], subcircuit) for subcircuit in
+        return [(self.probabilistic_circuit.edges[self, subcircuit]["log_weight"], subcircuit) for subcircuit in
                 self.subcircuits]
 
     @property
@@ -376,7 +377,7 @@ class SumUnit(InnerUnit):
         self._latent_variable = result
         return result
 
-    def add_subcircuit(self, subcircuit: Unit, weight: float, mount: bool = True):
+    def add_subcircuit(self, subcircuit: Unit, log_weight: float, mount: bool = True):
         """
         Add a subcircuit to the subcircuits of this unit.
 
@@ -386,23 +387,22 @@ class SumUnit(InnerUnit):
 
 
         :param subcircuit: The subcircuit to add.
-        :param weight: The weight of the subcircuit.
+        :param log_weight: The logarithmic weight of the subcircuit.
         :param mount: If the subcircuit should be mounted to the pc of this unit.
 
         """
         if mount:
             self.mount(subcircuit)
-        self.probabilistic_circuit.add_edge(self, subcircuit, weight=weight)
+        self.probabilistic_circuit.add_edge(self, subcircuit, log_weight=log_weight)
 
     def forward(self, *args, **kwargs):
         self.result_of_current_query = np.sum(
-            [weight * subcircuit.result_of_current_query for weight, subcircuit in self.weighted_subcircuits], axis=0)
+            [np.exp(weight) * subcircuit.result_of_current_query for weight, subcircuit in self.log_weighted_subcircuits], axis=0)
 
     def log_forward(self, *args, **kwargs):
-        self.result_of_current_query = np.log(np.sum(
-            [weight * np.exp(subcircuit.result_of_current_query) for weight, subcircuit in self.weighted_subcircuits],
-            axis=0))
 
+        result = [lw + s.result_of_current_query for lw, s in self.log_weighted_subcircuits]
+        self.result_of_current_query = logsumexp(result)
     moment = forward
 
     def support(self):
@@ -412,21 +412,21 @@ class SumUnit(InnerUnit):
         self.result_of_current_query = support
 
     @property
-    def weights(self) -> np.array:
+    def log_weights(self) -> np.array:
         """
-        :return: The weights of the subcircuits.
+        :return: The log_weights of the subcircuits.
         """
-        return np.array([weight for weight, _ in self.weighted_subcircuits])
+        return np.array([weight for weight, _ in self.log_weighted_subcircuits])
 
     def sample(self, *args, **kwargs) -> np.array:
-        weights, subcircuits = self.weights, self.subcircuits
+        weights, subcircuits = self.log_weights, self.subcircuits
 
         subcircuit_indices = list(range(len(subcircuits)))
         # for every sampling request
         for start_index, amount in self.result_of_current_query:
 
             # calculate the numbers of samples requested from the sub circuits
-            counts = np.random.multinomial(amount, pvals=weights)
+            counts = np.random.multinomial(amount, pvals=np.exp(weights))
             total = 0
 
             # shuffle the order to sample from the subcircuits to avoid bias
@@ -443,7 +443,7 @@ class SumUnit(InnerUnit):
         return id(self)
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.weighted_subcircuits == other.weighted_subcircuits
+        return isinstance(other, self.__class__) and self.log_weighted_subcircuits == other.log_weighted_subcircuits
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
@@ -496,7 +496,7 @@ class SumUnit(InnerUnit):
 
             # remove edge to old child and replace it by product proxy
             self.probabilistic_circuit.remove_edge(self, own_subcircuit)
-            self.add_subcircuit(proxy_product_node, p_condition)
+            self.add_subcircuit(proxy_product_node, np.log(p_condition))
 
             # mount current child on the product proxy
             proxy_product_node.add_subcircuit(own_subcircuit)
@@ -519,7 +519,7 @@ class SumUnit(InnerUnit):
                 weight = p_query / p_condition
 
                 # create edge from proxy to subcircuit
-                proxy_sum_node.add_subcircuit(other_subcircuit, weight=weight)
+                proxy_sum_node.add_subcircuit(other_subcircuit, log_weight=np.log(weight))
             proxy_sum_node.normalize()
 
     def mount_from_bayesian_network(self, other: 'SumUnit'):
@@ -535,14 +535,14 @@ class SumUnit(InnerUnit):
         assert len(self.subcircuits) == len(other.subcircuits)
         # mount the other subcircuit
 
-        for (own_weight, own_subcircuit), other_subcircuit in zip(self.weighted_subcircuits, other.subcircuits):
+        for (own_weight, own_subcircuit), other_subcircuit in zip(self.log_weighted_subcircuits, other.subcircuits):
             # create proxy nodes for mounting
             proxy_product_node = ProductUnit()
             self.probabilistic_circuit.add_node(proxy_product_node)
 
             # remove edge to old child and replace it by product proxy
             self.probabilistic_circuit.remove_edge(self, own_subcircuit)
-            self.add_subcircuit(proxy_product_node, own_weight)
+            self.add_subcircuit(proxy_product_node, np.log(own_weight))
             proxy_product_node.add_subcircuit(own_subcircuit)
             proxy_product_node.add_subcircuit(other_subcircuit)
 
@@ -562,10 +562,10 @@ class SumUnit(InnerUnit):
             return
 
         # for every subcircuit
-        for weight, subcircuit in self.weighted_subcircuits:
+        for weight, subcircuit in self.log_weighted_subcircuits:
 
             # if the weight is 0, skip this subcircuit
-            if weight == 0:
+            if weight == -np.inf:
                 # remove the edge
                 self.probabilistic_circuit.remove_edge(self, subcircuit)
 
@@ -576,8 +576,8 @@ class SumUnit(InnerUnit):
                 subcircuit: Self
 
                 # mount the children of that circuit directly
-                for sub_weight, sub_subcircuit in subcircuit.weighted_subcircuits:
-                    new_weight = sub_weight * weight
+                for sub_weight, sub_subcircuit in subcircuit.log_weighted_subcircuits:
+                    new_weight = sub_weight + weight
 
                     # add an edge to that subcircuit
                     self.add_subcircuit(sub_subcircuit, new_weight, mount=False)
@@ -587,11 +587,11 @@ class SumUnit(InnerUnit):
 
     def normalize(self):
         """
-        Normalize the weights of the subcircuits such that they sum up to 1 inplace.
+        Normalize the log_weights of the subcircuits such that they sum up to 1 inplace.
         """
-        total_weight = sum([weight for weight, _ in self.weighted_subcircuits])
+        total_weight = logsumexp(self.log_weights)
         for subcircuit in self.subcircuits:
-            self.probabilistic_circuit.edges[self, subcircuit]["weight"] /= total_weight
+            self.probabilistic_circuit.edges[self, subcircuit]["log_weight"] -= total_weight
 
     def is_deterministic(self) -> bool:
         """
@@ -609,7 +609,7 @@ class SumUnit(InnerUnit):
 
     def log_mode(self):
         log_maxima = [np.log(weight) + subcircuit.result_of_current_query[1] for weight, subcircuit in
-                      self.weighted_subcircuits]
+                      self.log_weighted_subcircuits]
         log_max = max(log_maxima)
         arg_log_maxima = [subcircuit.result_of_current_query[0] for lm, subcircuit in zip(log_maxima, self.subcircuits)
                           if lm == log_max]
@@ -729,6 +729,10 @@ class ProductUnit(InnerUnit):
 class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerializer):
     """
     Probabilistic Circuits as a directed, rooted, acyclic graph.
+
+    The nodes of the graph are the units of the circuit.
+    The edges of the graph indicate how the units are connected.
+    The outgoing edges of a sum unit contain the log-log_weights of the subcircuits.
     """
 
     def __init__(self):
@@ -916,7 +920,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         result = SumUnit(self)
 
         # add the conditionals to the sum unit
-        [result.add_subcircuit(conditional.root, np.exp(log_probability)) for conditional, log_probability in
+        [result.add_subcircuit(conditional.root, log_probability) for conditional, log_probability in
          conditional_circuits]
         result.log_forward()
         result.normalize()
@@ -1005,10 +1009,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         result.add_nodes_from(new_node_map.values())
         new_unweighted_edges = [(new_node_map[source], new_node_map[target]) for source, target in
                                 self.unweighted_edges]
-        new_weighted_edges = [(new_node_map[source], new_node_map[target], weight) for source, target, weight in
-                              self.weighted_edges]
+        new_weighted_edges = [(new_node_map[source], new_node_map[target], log_weight) for source, target, log_weight in
+                              self.log_weighted_edges]
         result.add_edges_from(new_unweighted_edges)
-        result.add_weighted_edges_from(new_weighted_edges)
+        result.add_weighted_edges_from(new_weighted_edges, weight="log_weight")
         return result
 
     def to_json(self) -> Dict[str, Any]:
@@ -1022,10 +1026,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             hash_to_node_map[hash(node)] = node_json
 
         unweighted_edges = [(hash(source), hash(target)) for source, target in self.unweighted_edges]
-        weighted_edges = [(hash(source), hash(target), weight) for source, target, weight in self.weighted_edges]
+        weighted_edges = [(hash(source), hash(target), weight) for source, target, weight in self.log_weighted_edges]
         result["hash_to_node_map"] = hash_to_node_map
         result["unweighted_edges"] = unweighted_edges
-        result["weighted_edges"] = weighted_edges
+        result["log_weighted_edges"] = weighted_edges
         return result
 
     @classmethod
@@ -1045,8 +1049,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         for source_hash, target_hash in data["unweighted_edges"]:
             result.add_edge(hash_remap[source_hash], hash_remap[target_hash])
 
-        for source_hash, target_hash, weight in data["weighted_edges"]:
-            result.add_edge(hash_remap[source_hash], hash_remap[target_hash], weight=weight)
+        for source_hash, target_hash, weight in data["log_weighted_edges"]:
+            result.add_edge(hash_remap[source_hash], hash_remap[target_hash], log_weight=weight)
 
         return result
 
@@ -1059,17 +1063,17 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         self.root.update_variables(new_variables)
 
     @property
-    def weighted_edges(self):
+    def log_weighted_edges(self):
         """
-        :return: All weighted edges of the circuit.
+        :return: All log-weighted edges of the circuit.
         """
         weighted_edges = []
 
         for edge in self.edges:
             edge_ = self.edges[edge]
 
-            if "weight" in edge_.keys():
-                weight = edge_["weight"]
+            if "log_weight" in edge_.keys():
+                weight = edge_["log_weight"]
                 weighted_edges.append((*edge, weight))
 
         return weighted_edges
@@ -1114,7 +1118,12 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         self.add_nodes_from(other.nodes)
         self.add_edges_from(other.unweighted_edges)
-        self.add_weighted_edges_from(other.weighted_edges)
+        self.add_weighted_edges_from(other.log_weighted_edges, weight="log_weight")
+
+    def add_weighted_edges_from(
+        self, ebunch_to_add, weight = "log_weight", **attr
+    ):
+        return super().add_weighted_edges_from(ebunch_to_add, weight=weight, **attr)
 
     def subgraph_of(self, node: Unit) -> Self:
         """
@@ -1185,11 +1194,11 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         position_for_variable_name = {node: (x + variable_name_offset, y) for node, (x, y) in positions.items()}
 
         # draw the edges
-        alpha_for_edges = [self.get_edge_data(*edge)["weight"] if self.get_edge_data(*edge) else 1. for edge in
+        alpha_for_edges = [np.exp(self.get_edge_data(*edge)["log_weight"]) if self.get_edge_data(*edge) else 1. for edge in
                            self.edges]
 
         nx.draw_networkx_edges(self, positions, alpha=alpha_for_edges, node_size=node_size)
-        edge_labels = {(s, t): round(w, 2) for (s, t, w) in self.weighted_edges}
+        edge_labels = {(s, t): round(w, 2) for (s, t, w) in self.log_weighted_edges}
         nx.draw_networkx_edge_labels(self, positions, edge_labels, label_pos=0.25)
 
         # filter different types of nodes
@@ -1245,7 +1254,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def nodes_weights(self) -> dict:
         """
-        :return: dict with keys as nodes and values as list of all the weights for the node.
+        :return: dict with keys as nodes and values as list of all the log_weights for the node.
         """
         node_weights = {hash(self.root): [1]}
         seen_nodes = set()
@@ -1280,11 +1289,11 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 sum_leaf = leaf.as_deterministic_sum()
                 old_predecessors = list(self.predecessors(leaf))
                 for predecessor in old_predecessors:
-                    weight = self.get_edge_data(predecessor, leaf).get("weight", -1)
+                    weight = self.get_edge_data(predecessor, leaf).get("log_weight", -1)
                     if weight == -1:
                         predecessor.add_subcircuit(sum_leaf)
                     else:
-                        predecessor.add_subcircuit(sum_leaf, weight=weight)
+                        predecessor.add_subcircuit(sum_leaf, log_weight=weight)
                     self.remove_edge(predecessor, leaf)
                 self.remove_node(leaf)
 
@@ -1304,7 +1313,7 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         cls.shallowing(result, node=shallow_pc.root, presucc=None)
         result.add_nodes_from(shallow_pc.nodes)
         result.add_edges_from(shallow_pc.edges)
-        result.add_weighted_edges_from(shallow_pc.weighted_edges)
+        result.add_weighted_edges_from(shallow_pc.log_weighted_edges)
         return result
 
     def shallowing(self, node: Unit, presucc: Unit | None):
@@ -1322,7 +1331,7 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
             probabilistic_circuit.add_node(sum_unit)
             probabilistic_circuit.add_node(product_unit)
             probabilistic_circuit.add_edge(product_unit, node)
-            probabilistic_circuit.add_edge(sum_unit, product_unit, weight=1)
+            probabilistic_circuit.add_edge(sum_unit, product_unit, log_weight=0.)
             if presucc is not None:
                 data = probabilistic_circuit.get_edge_data(presucc, node, {"weight": 1})
                 probabilistic_circuit.add_edge(presucc, sum_unit, **data)
@@ -1333,11 +1342,11 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                 self.shallowing(succ, presucc=node)
             new_succ_list = list(probabilistic_circuit.successors(node))
             for sum_succ in new_succ_list:
-                first_weight = probabilistic_circuit.get_edge_data(node, sum_succ, {"weight": 1}).get("weight", 1)
+                first_weight = probabilistic_circuit.get_edge_data(node, sum_succ, {"log_weight": 0}).get("log_weight", 0)
                 for succ_succ in list(probabilistic_circuit.successors(sum_succ)):
-                    second_weight = probabilistic_circuit.get_edge_data(sum_succ, succ_succ, {"weight": 1}).get(
+                    second_weight = probabilistic_circuit.get_edge_data(sum_succ, succ_succ, {"log_weight": 0}).get(
                         "weight", 1)
-                    probabilistic_circuit.add_edge(node, succ_succ, weight=first_weight * second_weight)
+                    probabilistic_circuit.add_edge(node, succ_succ, log_weight=first_weight + second_weight)
                 probabilistic_circuit.remove_edge(node, sum_succ)
                 if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
                     self.remove_node_and_successor_structure(sum_succ)
@@ -1373,9 +1382,9 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
                     total_weight *= weight
                     under_succ_li = probabilistic_circuit.successors(under_node)
                     for under_succ in under_succ_li:
-                        data = probabilistic_circuit.get_edge_data(under_node, under_succ, {"weight": 1})
+                        data = probabilistic_circuit.get_edge_data(under_node, under_succ, {"log_weight": 0.})
                         probabilistic_circuit.add_edge(product_unit, under_succ, **data)
-                probabilistic_circuit.add_edge(sum_unit, product_unit, weight=total_weight)
+                probabilistic_circuit.add_edge(sum_unit, product_unit, log_weight=total_weight)
             for sum_succ in new_succ_list:
                 if len(list(probabilistic_circuit.predecessors(sum_succ))) == 0:
                     self.remove_node_and_successor_structure(sum_succ)

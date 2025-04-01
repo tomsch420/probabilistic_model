@@ -50,7 +50,7 @@ class RandomRegionGraphLearningTestCase(unittest.TestCase):
         nx_model = model.to_nx()
         for node in nx_model.nodes():
             if isinstance(node, SumUnit):
-                self.assertAlmostEqual(sum(node.weights), 1.)
+                self.assertAlmostEqual(sum(node.log_weights), 1.)
             elif isinstance(node, UnivariateDiscreteLeaf):
                 self.assertAlmostEqual(sum(node.distribution.probabilities), 1.)
             elif isinstance(node, UnivariateContinuousLeaf):

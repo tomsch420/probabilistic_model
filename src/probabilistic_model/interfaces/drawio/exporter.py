@@ -34,7 +34,7 @@ class DrawIoExporter:
         for source, target in self.model.unweighted_edges:
             diagram.add_link(str(hash(source)), str(hash(target)), style='endArrow=classic;html=1;rounded=0;')
 
-        for source, target, weight in self.model.weighted_edges:
+        for source, target, weight in self.model.log_weighted_edges:
             diagram.add_link(str(hash(source)), str(hash(target)), label=f"{round(weight, 2)}",
                              style=f'endArrow=classic;html=1;rounded=0;opacity={weight * 100};')
 

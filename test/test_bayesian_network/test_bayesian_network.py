@@ -134,7 +134,7 @@ class ComplexBayesianNetworkTestCase(unittest.TestCase):
         # circuit.plot_structure()
         # plt.show()
         self.assertEqual(circuit.variables, SortedSet([self.x, self.y, self.z, self.a]))
-        self.assertLess(len(circuit.weighted_edges), math.prod([len(v.domain.simple_sets) for v in circuit.variables]))
+        self.assertLess(len(circuit.log_weighted_edges), math.prod([len(v.domain.simple_sets) for v in circuit.variables]))
 
 
 class BayesianNetworkWithCircuitTestCase(unittest.TestCase):

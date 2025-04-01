@@ -32,12 +32,12 @@ class InductionStep:
 
     cumulative_weights: np.array
     """
-    The cumulative weights of the samples in the dataset.
+    The cumulative log_weights of the samples in the dataset.
     """
 
     cumulative_log_weights: np.array
     """
-    The cumulative logarithmic weights of the samples in the dataset.
+    The cumulative logarithmic log_weights of the samples in the dataset.
     """
 
     begin_index: int
@@ -92,14 +92,14 @@ class InductionStep:
     @property
     def total_weights(self):
         """
-        The total sum of weights of the samples in the induction step.
+        The total sum of log_weights of the samples in the induction step.
         """
         return self.cumulative_weights[self.end_index] - self.cumulative_weights[self.begin_index]
 
     @property
     def total_log_weights(self):
         """
-        The total sum of logarithmic weights of the samples in the induction step.
+        The total sum of logarithmic log_weights of the samples in the induction step.
         """
         return self.cumulative_log_weights[self.end_index] - self.cumulative_log_weights[self.begin_index]
 
@@ -158,25 +158,25 @@ class InductionStep:
 
     def sum_weights_from_indices(self, begin_index: int, end_index: int) -> float:
         """
-        Sum the weights from `begin_index` to `end_index`.
+        Sum the log_weights from `begin_index` to `end_index`.
         """
         return self.cumulative_weights[end_index] - self.cumulative_weights[begin_index]
 
     def sum_weights(self):
         """
-        Sum the weights of this induction step.
+        Sum the log_weights of this induction step.
         """
         return self.sum_weights_from_indices(self.begin_index, self.end_index)
 
     def sum_log_weights_from_indices(self, begin_index: int, end_index: int) -> float:
         """
-        Sum the logarithmic weights from `begin_index` to `end_index`.
+        Sum the logarithmic log_weights from `begin_index` to `end_index`.
         """
         return self.cumulative_log_weights[end_index] - self.cumulative_log_weights[begin_index]
 
     def sum_log_weights(self):
         """
-        Sum the logarithmic weights of this induction step.
+        Sum the logarithmic log_weights of this induction step.
         """
         return self.sum_log_weights_from_indices(self.begin_index, self.end_index)
 
@@ -248,13 +248,13 @@ class InductionStep:
             self.sum_weights_from_indices(self.begin_index, split_index)) if is_left else np.log(
             self.sum_weights_from_indices(split_index, self.end_index))
 
-        # calculate the log of the sum of the weights of both partitions
+        # calculate the log of the sum of the log_weights of both partitions
         log_weight_sum = np.log(self.total_weights)
 
         # calculate the number of samples in this partition
         number_of_samples = split_index - self.begin_index if is_left else self.end_index - split_index
 
-        # calculate the sum of the logarithmic weights of the samples in this partition
+        # calculate the sum of the logarithmic log_weights of the samples in this partition
         sum_of_log_weights_of_samples = self.sum_log_weights_from_indices(self.begin_index,
                                                                           split_index) if is_left else self.sum_log_weights_from_indices(
             split_index, self.end_index)
@@ -350,7 +350,7 @@ class NygaDistribution(ProbabilisticCircuit):
         Fit the distribution to the data.
 
         :param data: The data to fit the distribution to.
-        :param weights: The optional weights of the data points.
+        :param weights: The optional log_weights of the data points.
 
         :return: The fitted distribution.
         """
@@ -367,7 +367,7 @@ class NygaDistribution(ProbabilisticCircuit):
 
         root = SumUnit(self)
 
-        # if the weights are not given
+        # if the log_weights are not given
         if weights is None:
             weights = counts
 

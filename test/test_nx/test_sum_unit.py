@@ -21,8 +21,8 @@ class NormalizationTestCase(unittest.TestCase):
         sum_unit.add_subcircuit(u1, 0.5)
         sum_unit.add_subcircuit(u2, 0.3)
         sum_unit.normalize()
-        self.assertAlmostEqual(sum_unit.weights[0], 0.5 / 0.8)
-        self.assertAlmostEqual(sum_unit.weights[1], 0.3 / 0.8)
+        self.assertAlmostEqual(sum_unit.log_weights[0], 0.5 / 0.8)
+        self.assertAlmostEqual(sum_unit.log_weights[1], 0.3 / 0.8)
         traces = sum_unit.probabilistic_circuit.plot()
         self.assertGreater(len(traces), 0) # go.Figure(traces, sum_unit.probabilistic_circuit.plotly_layout()).show()
 

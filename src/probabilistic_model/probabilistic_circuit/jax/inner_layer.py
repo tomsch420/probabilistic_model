@@ -278,17 +278,17 @@ class SumLayer(InnerLayer, ABC):
 
     def validate(self):
         for log_weights in self.log_weights:
-            assert log_weights.shape[0] == self.number_of_nodes, "The number of nodes must match the number of weights."
+            assert log_weights.shape[0] == self.number_of_nodes, "The number of nodes must match the number of log_weights."
 
         for log_weights, child_layer in self.log_weighted_child_layers:
             assert log_weights.shape[
-                       1] == child_layer.number_of_nodes, "The number of nodes must match the number of weights."
+                       1] == child_layer.number_of_nodes, "The number of nodes must match the number of log_weights."
             assert (child_layer.variables == self.variables).all(), "The variables must match."
 
     @property
     def log_weighted_child_layers(self) -> Iterator[Tuple[BCOO, Layer]]:
         """
-        :returns: Yields log weights and the child layers zipped together.
+        :returns: Yields log log_weights and the child layers zipped together.
         """
         yield from zip(self.log_weights, self.child_layers)
 
@@ -318,7 +318,7 @@ class SparseSumLayer(SumLayer):
     @property
     def concatenated_log_weights(self) -> BCOO:
         """
-        :return: The concatenated weights of the child layers for each node.
+        :return: The concatenated log_weights of the child layers for each node.
         """
         return bcoo_concatenate(self.log_weights, dimension=1).sort_indices()
 
@@ -333,7 +333,7 @@ class SparseSumLayer(SumLayer):
     @property
     def normalized_weights(self):
         """
-        :return: The normalized weights of the child layers for each node.
+        :return: The normalized log_weights of the child layers for each node.
         """
         result = self.concatenated_log_weights
         z = self.log_normalization_constants
@@ -348,11 +348,11 @@ class SparseSumLayer(SumLayer):
             child_layer_log_likelihood = child_layer.log_likelihood_of_nodes_single(x)
 
             # weight the log likelihood of the child nodes by the weight for each node of this layer
-            cloned_log_weights = copy_bcoo(log_weights)  # clone the weights
+            cloned_log_weights = copy_bcoo(log_weights)  # clone the log_weights
 
-            # multiply the weights with the child layer likelihood
+            # multiply the log_weights with the child layer likelihood
             cloned_log_weights.data += child_layer_log_likelihood[cloned_log_weights.indices[:, 1]]
-            cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent weights
+            cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent log_weights
             result = result.at[cloned_log_weights.indices[:, 0]].add(cloned_log_weights.data,
                                                                      indices_are_sorted=False, unique_indices=False)
 
@@ -399,10 +399,10 @@ class SparseSumLayer(SumLayer):
             indices = []
             values = []
 
-            # gather indices and log weights
-            for index, node in enumerate(tqdm.tqdm(nodes, desc="Calculating weights for sum node")
+            # gather indices and log log_weights
+            for index, node in enumerate(tqdm.tqdm(nodes, desc="Calculating log_weights for sum node")
                                          if progress_bar else nodes):
-                for weight, subcircuit in node.weighted_subcircuits:
+                for weight, subcircuit in node.log_weighted_subcircuits:
                     if hash(subcircuit) in child_layer.hash_remap:
                         indices.append((index, child_layer.hash_remap[hash(subcircuit)]))
                         values.append((math.log(weight)))
@@ -429,7 +429,7 @@ class SparseSumLayer(SumLayer):
 
         for log_weights, child_layer in zip(self.log_weights, child_layer_nx):
 
-            # extract the weights for the child layer
+            # extract the log_weights for the child layer
             for ((row, col), log_weight) in zip(log_weights.indices, log_weights.data):
                 units[row].add_subcircuit(child_layer[col], jnp.exp(log_weight).item(), False)
                 if progress_bar:
@@ -464,7 +464,7 @@ class DenseSumLayer(SumLayer):
     @property
     def concatenated_log_weights(self) -> jnp.array:
         """
-        :return: The concatenated weights of the child layers for each node.
+        :return: The concatenated log_weights of the child layers for each node.
         """
         return jnp.concatenate(self.log_weights, axis=1)
 
@@ -475,7 +475,7 @@ class DenseSumLayer(SumLayer):
     @property
     def normalized_weights(self):
         """
-        :return: The normalized weights of the child layers for each node.
+        :return: The normalized log_weights of the child layers for each node.
         """
         return jnp.exp(self.concatenated_log_weights - self.log_normalization_constants.reshape(-1, 1))
 
@@ -523,7 +523,7 @@ class DenseSumLayer(SumLayer):
         child_layer_nx = [cl.to_nx(variables, result, progress_bar) for cl in self.child_layers]
 
         for log_weights, child_layer in zip(self.log_weights, child_layer_nx):
-            # extract the weights for the child layer
+            # extract the log_weights for the child layer
             for row in range(log_weights.shape[0]):
                 for col in range(log_weights.shape[1]):
                     units[row].add_subcircuit(child_layer[col], jnp.exp(log_weights[row, col]).item(), False)

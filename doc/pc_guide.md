@@ -69,7 +69,7 @@ p_x.add_subcircuit(p_x_2, 0.7)
 p_x.probabilistic_circuit.plot_structure()
 ```
 
-Now we got a more interesting model. We can see the nodes we created and the connections between them. Even the weights are indicated by the opacity of an edge.
+Now we got a more interesting model. We can see the nodes we created and the connections between them. Even the log_weights are indicated by the opacity of an edge.
 Let's create a more complex model by becoming multivariate through product units.
 
 ```{code-cell} ipython3

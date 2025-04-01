@@ -110,8 +110,8 @@ $$
 
 
 The likelihood of such a split is given by assuming a uniform distribution on the left and right side of the split. 
-This constructs a deterministic mixture of uniform distributions where the weights are given by the relative sum of 
-weights on the left and right side of the split.
+This constructs a deterministic mixture of uniform distributions where the log_weights are given by the relative sum of 
+log_weights on the left and right side of the split.
 
 \begin{align*}
 w_{total} &= \sum_{i=1}^N w_i \\
@@ -180,7 +180,7 @@ This algorithm is implemented in the [NygaDistribution](https://probabilistic-mo
 
 # Theory Example
 
-Consider the dataset $\mathcal{D} = \{ 1, 2, 3, 4, 7, 9 \}$ with uniform weights, i.e., $w_i = 1, \forall i$.
+Consider the dataset $\mathcal{D} = \{ 1, 2, 3, 4, 7, 9 \}$ with uniform log_weights, i.e., $w_i = 1, \forall i$.
 
 The log likelihood of a uniform distribution without a split over $\mathcal{D}$ is given by
 

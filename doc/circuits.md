@@ -50,7 +50,7 @@ f_n(x)  & \text{n is an input node,}\\
 where $f_n(x)$ is an univariate input distribution (e.g., Gaussian, Categorical), and $\theta_{n,c}$ denotes the 
 parameter corresponding to edge $(n, c)$. 
 Intuitively, sum nodes model mixtures of their input distributions, which require the mixture
-weights to be in the probability simplex: $\sum_{c \in ch(n)} \theta_{n,c} = 1$
+log_weights to be in the probability simplex: $\sum_{c \in ch(n)} \theta_{n,c} = 1$
 and $\forall c \in ch(n), \theta_{n,c} \geq 0$. 
 And product nodes build factorized distributions over their inputs. 
 The size of a PC, denoted $|p|$, is the number of edges in its DAG. {cite}`liu2024scaling`

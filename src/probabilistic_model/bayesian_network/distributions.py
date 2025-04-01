@@ -64,7 +64,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
             self.forward_probability = 0
             return
 
-        # initialize the weights
+        # initialize the log_weights
         probabilities = MissingDict(float)
 
         # initialize the forward probability
@@ -91,7 +91,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
                 probabilities[state] += parent_state_probability * probability
             forward_probability += parent_state_probability * np.exp(current_log_probability)
 
-        # if weights sum to zero, the forward message is None
+        # if log_weights sum to zero, the forward message is None
         if sum(probabilities.values()) == 0:
             self.forward_message = None
             self.forward_probability = 0
