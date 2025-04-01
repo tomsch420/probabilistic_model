@@ -7,6 +7,8 @@ from matplotlib import pyplot as plt
 from random_events.product_algebra import SimpleEvent
 from random_events.set import SetElement, Set
 import plotly.graph_objects as go
+from scipy.special import logsumexp
+
 from probabilistic_model.learning.region_graph.region_graph import *
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
 
@@ -50,7 +52,7 @@ class RandomRegionGraphLearningTestCase(unittest.TestCase):
         nx_model = model.to_nx()
         for node in nx_model.nodes():
             if isinstance(node, SumUnit):
-                self.assertAlmostEqual(sum(node.log_weights), 1.)
+                self.assertAlmostEqual(logsumexp(node.log_weights), 0.)
             elif isinstance(node, UnivariateDiscreteLeaf):
                 self.assertAlmostEqual(sum(node.distribution.probabilities), 1.)
             elif isinstance(node, UnivariateContinuousLeaf):

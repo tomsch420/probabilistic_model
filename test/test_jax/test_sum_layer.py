@@ -6,6 +6,7 @@ from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
 import jax.numpy as jnp
+from scipy.special import logsumexp
 from sortedcontainers import SortedSet
 
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
@@ -161,4 +162,4 @@ class NygaDistributionTestCase(unittest.TestCase):
 
     def test_to_nx(self):
         nx_model = self.jax_model.to_nx()
-        self.assertAlmostEqual(sum(nx_model.root.weights), 1.)
+        self.assertAlmostEqual(logsumexp(nx_model.root.log_weights), 0.)

@@ -405,7 +405,7 @@ class SparseSumLayer(SumLayer):
                 for weight, subcircuit in node.log_weighted_subcircuits:
                     if hash(subcircuit) in child_layer.hash_remap:
                         indices.append((index, child_layer.hash_remap[hash(subcircuit)]))
-                        values.append((math.log(weight)))
+                        values.append((weight))
 
             # assemble sparse log weight matrix
             log_weights.append(BCOO((jnp.array(values), jnp.array(indices)),
@@ -431,7 +431,7 @@ class SparseSumLayer(SumLayer):
 
             # extract the log_weights for the child layer
             for ((row, col), log_weight) in zip(log_weights.indices, log_weights.data):
-                units[row].add_subcircuit(child_layer[col], jnp.exp(log_weight).item(), False)
+                units[row].add_subcircuit(child_layer[col], log_weight.item(), False)
                 if progress_bar:
                     progress_bar.update()
 
