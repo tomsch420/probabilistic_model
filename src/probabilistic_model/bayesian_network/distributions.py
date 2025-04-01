@@ -7,6 +7,7 @@ from .bayesian_network import BayesianNetworkMixin
 from ..distributions.multinomial import MultinomialDistribution
 from ..distributions import SymbolicDistribution
 from ..probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
+from ..probabilistic_circuit.nx.helper import leaf
 from ..probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit, Unit, SumUnit,
                                                                                 ProductUnit)
 from ..utils import MissingDict
@@ -31,7 +32,7 @@ class RootDistribution(BayesianNetworkMixin, SymbolicDistribution):
         for event in self.variable.domain.simple_sets:
             event = SimpleEvent({self.variable: event})
             conditional, probability = self.forward_message.log_conditional_of_composite_set(event[self.variable])
-            result.add_subcircuit(UnivariateDiscreteLeaf(conditional), np.exp(probability))
+            result.add_subcircuit(UnivariateDiscreteLeaf(conditional), probability)
 
         return result
 
@@ -157,7 +158,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
                 product_unit.add_subcircuit(UnivariateDiscreteLeaf(parent_distribution))
                 product_unit.add_subcircuit(distribution_nodes[child_event_index])
 
-                result.add_subcircuit(product_unit, np.exp(parent_log_probability) * child_probability)
+                result.add_subcircuit(product_unit, parent_log_probability + np.log(child_probability))
 
         return result
 
@@ -249,7 +250,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
             product_unit.add_subcircuit(UnivariateDiscreteLeaf(parent_distribution))
             product_unit.add_subcircuit(distribution.root)
 
-            result.add_subcircuit(product_unit, np.exp(parent_log_probability))
+            result.add_subcircuit(product_unit, parent_log_probability)
 
         return result
 
@@ -267,9 +268,9 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
             probabilities = MissingDict(float)
             probabilities[state] = 1
             product_unit = ProductUnit()
-            product_unit.add_subcircuit(UnivariateDiscreteLeaf(SymbolicDistribution(parent_latent_variable, probabilities)))
-            product_unit.add_subcircuit(UnivariateDiscreteLeaf(SymbolicDistribution(node_latent_variable, probabilities)))
-            result.add_subcircuit(product_unit, weight)
+            product_unit.add_subcircuit(leaf(SymbolicDistribution(parent_latent_variable, probabilities)))
+            product_unit.add_subcircuit(leaf(SymbolicDistribution(node_latent_variable, probabilities)))
+            result.add_subcircuit(product_unit, np.log(weight))
 
         return result.probabilistic_circuit
 

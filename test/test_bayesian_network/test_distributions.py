@@ -62,9 +62,6 @@ class DistributionTestCase(unittest.TestCase):
         table = tabulate.tabulate(self.p_yx.to_tabulate())
         self.assertIsInstance(table, str)
 
-    # def test_likelihood(self):
-    #     self.assertEqual(self.p_yx.likelihood([0, 1]), 0.5)
-
     def test_forward_pass(self):
         event = SimpleEvent({self.x: (XEnum.ZERO, XEnum.ONE), self.y: YEnum.ZERO})
         self.p_x.forward_pass(event)
@@ -142,8 +139,8 @@ class CircuitDistributionTestCase(unittest.TestCase):
     def test_forward_pass(self):
         event = SimpleEvent({variable: variable.domain for variable in self.bayesian_network.variables})
         self.bayesian_network.forward_pass(event)
-        self.assertEqual(self.p_x.forward_probability, 1)
-        self.assertEqual(self.p_yzx.forward_probability, 1)
+        self.assertAlmostEqual(self.p_x.forward_probability, 1)
+        self.assertAlmostEqual(self.p_yzx.forward_probability, 1)
 
     def test_joint_distribution_with_parent(self):
         event = SimpleEvent({variable: variable.domain for variable in self.bayesian_network.variables})
