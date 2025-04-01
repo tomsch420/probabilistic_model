@@ -26,6 +26,7 @@ import plotly.graph_objs as go
 from random_events.interval import closed_open, closed
 from random_events.product_algebra import Continuous, Event, SimpleEvent
 from probabilistic_model.distributions import *
+from probabilistic_model.probabilistic_circuit.nx.helper import leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import *
 ```
@@ -50,7 +51,7 @@ For this tutorial, we will stick to normal distributions.
 x = Continuous("x")
 y = Continuous("y")
 
-p_x_1 = UnivariateContinuousLeaf(GaussianDistribution(x, 0, 1))
+p_x_1 = leaf(GaussianDistribution(x, 0, 1))
 ```
 
 We can always look at the graph that we have by calling the plot_structure method.
@@ -62,10 +63,10 @@ p_x_1.probabilistic_circuit.plot_structure()
 One node only is pretty boring, so let us create a gaussian mixture model.
 
 ```{code-cell} ipython3
-p_x_2 = UnivariateContinuousLeaf(GaussianDistribution(x, 2, 1))
+p_x_2 = leaf(GaussianDistribution(x, 2, 1))
 p_x = SumUnit()
-p_x.add_subcircuit(p_x_1, 0.3)
-p_x.add_subcircuit(p_x_2, 0.7)
+p_x.add_subcircuit(p_x_1, np.log(0.3))
+p_x.add_subcircuit(p_x_2, np.log(0.7))
 p_x.probabilistic_circuit.plot_structure()
 ```
 
@@ -73,7 +74,7 @@ Now we got a more interesting model. We can see the nodes we created and the con
 Let's create a more complex model by becoming multivariate through product units.
 
 ```{code-cell} ipython3
-p_y = UnivariateContinuousLeaf(GaussianDistribution(y, 1, 2))
+p_y = leaf(GaussianDistribution(y, 1, 2))
 p_xy = ProductUnit()
 p_xy.add_subcircuit(p_x)
 p_xy.add_subcircuit(p_y)

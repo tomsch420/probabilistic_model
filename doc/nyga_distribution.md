@@ -282,13 +282,14 @@ Comparing this to the gaussian distribution we sampled from, we can see that the
 ```{code-cell} ipython3
 from probabilistic_model.distributions import GaussianDistribution
 from probabilistic_model.probabilistic_circuit.nx.distributions import *
+from probabilistic_model.probabilistic_circuit.nx.helper import leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit
 
-gaussian_1 = UnivariateContinuousLeaf(GaussianDistribution(Continuous("x"), 0, 1))
-gaussian_2 = UnivariateContinuousLeaf(GaussianDistribution(Continuous("x"), 5, 0.5))
+gaussian_1 = leaf(GaussianDistribution(Continuous("x"), 0, 1))
+gaussian_2 = leaf(GaussianDistribution(Continuous("x"), 5, 0.5))
 mixture = SumUnit()
-mixture.add_subcircuit(gaussian_1, 0.5)
-mixture.add_subcircuit(gaussian_2, 0.5)
+mixture.add_subcircuit(gaussian_1, np.log(0.5))
+mixture.add_subcircuit(gaussian_2, np.log(0.5))
 mixture = mixture.probabilistic_circuit
 fig.add_traces(mixture.plot())
 ```

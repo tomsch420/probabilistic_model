@@ -29,7 +29,7 @@ Let's look at an example.
 ```{code-cell} ipython3
 import plotly
 plotly.offline.init_notebook_mode()
-
+from probabilistic_model.probabilistic_circuit.nx.helper import leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.probabilistic_circuit.nx.distributions import *
 from probabilistic_model.distributions import *
@@ -47,29 +47,29 @@ sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
 sum4, sum5 = SumUnit(), SumUnit()
 prod1, prod2 = ProductUnit(), ProductUnit()
 
-sum1.add_subcircuit(prod1, 0.5)
-sum1.add_subcircuit(prod2, 0.5)
+sum1.add_subcircuit(prod1, np.log(0.5))
+sum1.add_subcircuit(prod2, np.log(0.5))
 prod1.add_subcircuit(sum2)
 prod1.add_subcircuit(sum4)
 prod2.add_subcircuit(sum3)
 prod2.add_subcircuit(sum5)
 
-d_x1 = UnivariateContinuousLeaf(UniformDistribution(x, SimpleInterval(0, 1)))
-d_x2 = UnivariateContinuousLeaf(UniformDistribution(x, SimpleInterval(2, 3)))
-d_y1 = UnivariateContinuousLeaf(UniformDistribution(y, SimpleInterval(0, 1)))
-d_y2 = UnivariateContinuousLeaf(UniformDistribution(y, SimpleInterval(3, 4)))
+d_x1 = leaf(UniformDistribution(x, SimpleInterval(0, 1)))
+d_x2 = leaf(UniformDistribution(x, SimpleInterval(2, 3)))
+d_y1 = leaf(UniformDistribution(y, SimpleInterval(0, 1)))
+d_y2 = leaf(UniformDistribution(y, SimpleInterval(3, 4)))
 
-sum2.add_subcircuit(d_x1, 0.8)
-sum2.add_subcircuit(d_x2, 0.2)
-sum3.add_subcircuit(d_x1, 0.7)
-sum3.add_subcircuit(d_x2, 0.3)
+sum2.add_subcircuit(d_x1, np.log(0.8))
+sum2.add_subcircuit(d_x2, np.log(0.2))
+sum3.add_subcircuit(d_x1, np.log(0.7))
+sum3.add_subcircuit(d_x2, np.log(0.3))
 
-sum4.add_subcircuit(d_y1, 0.5)
-sum4.add_subcircuit(d_y2, 0.5)
-sum5.add_subcircuit(d_y1, 0.1)
-sum5.add_subcircuit(d_y2, 0.9)
+sum4.add_subcircuit(d_y1, np.log(0.5))
+sum4.add_subcircuit(d_y2, np.log(0.5))
+sum5.add_subcircuit(d_y1, np.log(0.1))
+sum5.add_subcircuit(d_y2, np.log(0.9))
 
-model = sum5.probabilistic_circuit
+model = sum1.probabilistic_circuit
 model.plot_structure()
 plt.show()
 ```

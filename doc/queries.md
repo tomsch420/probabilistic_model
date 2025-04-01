@@ -309,8 +309,8 @@ While common literature describes the mode under a condition, we can omit such a
 A common perception of the mode is that it is the single point of highest density, such as in the example below.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-distribution = UnivariateContinuousLeaf(GaussianDistribution(Continuous("x"), 0, 1)).probabilistic_circuit
+from probabilistic_model.probabilistic_circuit.nx.helper import leaf
+distribution = leaf(GaussianDistribution(Continuous("x"), 0, 1)).probabilistic_circuit
 fig = go.Figure(distribution.plot(), distribution.plotly_layout())
 fig.show()
 ```
@@ -326,7 +326,7 @@ go.Figure(distribution.plot(), distribution.plotly_layout()).show()
 We can see that conditioning a Gaussian on such an event already creates a mode that has two points. Furthermore, modes can be sets of infinite many points, such as shown below.
 
 ```{code-cell} ipython3
-uniform = UnivariateContinuousLeaf(UniformDistribution(Continuous("x"), open(-1, 1).simple_sets[0])).probabilistic_circuit
+uniform = leaf(UniformDistribution(Continuous("x"), open(-1, 1).simple_sets[0])).probabilistic_circuit
 go.Figure(uniform.plot(), uniform.plotly_layout()).show() 
 ```
 
@@ -412,8 +412,8 @@ x1 = Continuous("x1")
 x2 = Continuous("x2")
 
 model = ProductUnit()
-p_x1 = UnivariateContinuousLeaf(GaussianDistribution(x1, 0, 1))
-p_x2 = UnivariateContinuousLeaf(GaussianDistribution(x2, 0, 1))
+p_x1 = leaf(GaussianDistribution(x1, 0, 1))
+p_x2 = leaf(GaussianDistribution(x2, 0, 1))
 model.add_subcircuit(p_x1)
 model.add_subcircuit(p_x2)
 model = model.probabilistic_circuit
@@ -486,8 +486,8 @@ from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import P
 from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 
 
-p_x = UnivariateContinuousLeaf(GaussianDistribution(x, 5.5, 0.5))
-p_y = UnivariateContinuousLeaf(GaussianDistribution(y, 6.65, 0.5))
+p_x = leaf(GaussianDistribution(x, 5.5, 0.5))
+p_y = leaf(GaussianDistribution(y, 6.65, 0.5))
 p_xy = ProductUnit()
 p_xy.add_subcircuit(p_x)
 p_xy.add_subcircuit(p_y)

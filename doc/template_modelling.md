@@ -42,6 +42,7 @@ from random_events.variable import Continuous
 from probabilistic_model.distributions import *
 from probabilistic_model.probabilistic_circuit.nx.distributions import *
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.nx.helper import leaf
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
 from probabilistic_model.probabilistic_model import ProbabilisticModel
 
@@ -49,8 +50,8 @@ from probabilistic_model.probabilistic_model import ProbabilisticModel
 x = Continuous("x")
 
 model = SumUnit()
-model.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(x, closed(-1.5, -0.5).simple_sets[0])), 0.5)
-model.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(x, closed(0.5, 1.5).simple_sets[0])), 0.5)
+model.add_subcircuit(leaf(UniformDistribution(x, closed(-1.5, -0.5).simple_sets[0])), np.log(0.5))
+model.add_subcircuit(leaf(UniformDistribution(x, closed(0.5, 1.5).simple_sets[0])), np.log(0.5))
 model = model.probabilistic_circuit
 go.Figure(model.plot(), layout=model.plotly_layout()).show()
 ```
