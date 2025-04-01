@@ -8,6 +8,7 @@ from abc import abstractmethod
 from enum import IntEnum
 
 import networkx as nx
+import networkx.drawing
 import numpy as np
 from scipy.special import logsumexp
 import tqdm
@@ -1135,27 +1136,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         nodes_to_keep = list(nx.descendants(self, node)) + [node]
         return nx.subgraph(self, nodes_to_keep)
 
-    def unit_positions_for_structure_plot(self) -> Dict[Unit, Tuple[int, int]]:
-        """
-        Calculate the positions of the nodes in the structure plot.
-
-        :return: The positions of the nodes as dictionary from unit to (x, y) coordinate.
-        """
-        # do a layer-wise BFS
-        layers = self.layers
-
-        # calculate the positions of the nodes
-        maximum_layer_width = max([len(layer) for layer in layers])
-        positions = {}
-        for depth, layer in enumerate(layers):
-            number_of_nodes = len(layer)
-            positions_in_layer = np.linspace(0., maximum_layer_width, number_of_nodes, endpoint=False)
-            positions_in_layer += (maximum_layer_width - len(layer)) / (2 * len(layer))
-            for position, node in zip(positions_in_layer, layer):
-                positions[node] = (float(depth), position)
-
-        return positions
-
     def fill_node_colors(self, node_colors: Dict[Unit, str]):
         """
         Fill the node colors for the structure plot.
@@ -1190,8 +1170,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         node_colors = self.fill_node_colors(node_colors)
 
         # get the positions of the nodes
-        positions = self.unit_positions_for_structure_plot()
+        positions = networkx.drawing.bfs_layout(self, self.root)
         position_for_variable_name = {node: (x + variable_name_offset, y) for node, (x, y) in positions.items()}
+
+
 
         # draw the edges
         alpha_for_edges = [np.exp(self.get_edge_data(*edge)["log_weight"]) if self.get_edge_data(*edge) else 1. for edge in
