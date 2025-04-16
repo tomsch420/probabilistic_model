@@ -5,3 +5,4 @@ numpy
 ghp-import
 sphinx-proof
 sphinx-autoapi
+sphinxcontrib-mermaid

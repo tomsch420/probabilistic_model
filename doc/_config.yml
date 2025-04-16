@@ -43,6 +43,7 @@ sphinx:
     - 'sphinx.ext.autodoc'
     - 'sphinx.ext.autosummary'
     - 'autoapi.extension'
+    - 'sphinxcontrib.mermaid'
   config:
     suppress_warnings: ["mystnb.unknown_mime_type"]
     autosummary_generate: True

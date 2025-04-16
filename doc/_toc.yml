@@ -8,6 +8,7 @@ parts:
     chapters:
     - file: pc_guide
     - file: layered_circuit
+    - file: architecture
   - caption: Theoretical Concepts
     chapters:
     - file: probability_theory
