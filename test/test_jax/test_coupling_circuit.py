@@ -3,7 +3,7 @@ import unittest
 import jax
 import numpy as np
 from equinox import tree_flatten_one_level
-from jax import tree_flatten, tree_map
+from jax.tree_util import tree_flatten, tree_map
 
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe

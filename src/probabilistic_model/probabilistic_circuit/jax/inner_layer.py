@@ -10,7 +10,8 @@ import equinox as eqx
 import jax
 import numpy as np
 import tqdm
-from jax import numpy as jnp, tree_flatten
+from jax import numpy as jnp
+from jax.tree_util import tree_flatten
 from jax.experimental.sparse import BCOO, bcoo_concatenate
 from jaxtyping import Int
 from random_events.product_algebra import SimpleEvent

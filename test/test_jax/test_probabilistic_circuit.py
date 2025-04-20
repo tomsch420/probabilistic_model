@@ -7,7 +7,7 @@ import numpy as np
 import optax
 import pandas as pd
 import tqdm
-from jax import tree_flatten
+from jax.tree_util import tree_flatten
 from jax.experimental.sparse import BCOO
 from random_events.interval import closed
 from random_events.product_algebra import Event, SimpleEvent
