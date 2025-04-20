@@ -16,7 +16,7 @@ The project uses unittest for testing. To run the tests locally:
 ```bash
 pip install -r requirements-dev.txt
 pip install -e .
-python -m unittest test
+python -m unittest discover test
 ```
 
 ### Continuous Integration
