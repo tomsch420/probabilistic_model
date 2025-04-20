@@ -11,12 +11,12 @@ Read the docs here https://probabilistic-model.readthedocs.io/en/latest/.
 
 ### Testing
 
-The project uses pytest for testing. To run the tests locally:
+The project uses unittest for testing. To run the tests locally:
 
 ```bash
 pip install -r requirements-dev.txt
 pip install -e .
-pytest
+python -m unittest test
 ```
 
 ### Continuous Integration
