@@ -29,12 +29,17 @@ class Atom:
     element: Element
     color: float
 
+@dataclass
+class Bond(Relation[Atom, Atom]):
+    ...
 
 @dataclass
 class Molecule:
     mutagenic: bool
     size: float
     atoms: List[Atom]
+    bonds: List[Bond]
+
 
     @aggregate("atoms")
     def mean_atom_color(self) -> int:
@@ -43,6 +48,17 @@ class Molecule:
 
 class RSPNTestCase(unittest.TestCase):
 
+    def test_class_spn(self):
+        atom_spn = ClassSPN(Atom)
+        self.assertEqual(len(atom_spn.attributes), 2)
+
+        molecule_spn = ClassSPN(Molecule)
+        self.assertEqual(len(molecule_spn.attributes), 2)
+        self.assertEqual(len(molecule_spn.unique_parts), 0)
+        self.assertEqual(len(molecule_spn.exchangeable_parts), 1)
+        self.assertEqual(len(molecule_spn.relations), 1)
+
+
     def test_rspn(self):
 
         # data
@@ -50,7 +66,7 @@ class RSPNTestCase(unittest.TestCase):
         a2 = Atom(Element.C, 0.2)
         a3 = Atom(Element.O, 0.3)
 
-        m1 = Molecule(True, 1.0, [a1, a2, a3])
+        m1 = Molecule(True, 1.0, [a1, a2, a3], [Bond(a1, a2)])
 
         # variables
         element_variable = Symbolic("element", Set.from_iterable(Element))
@@ -65,8 +81,6 @@ class RSPNTestCase(unittest.TestCase):
         atom_template = DistributionTemplate(model=Atom, template=atom_template)
         atom_grounded = atom_template.ground(m1.atoms)
         self.assertEqual(len(atom_grounded.variables), len(m1.atoms) * 2)
-
-        print(m1.mean_atom_color())
 
         molecule_domain = SimpleEvent({mutagenic_variable: True, size_variable: closed(0, 1), atom_aggregate_variable: closed(-np.inf, 0)}).as_composite_set().complement()
         molecule_lim = SimpleEvent({mutagenic_variable: mutagenic_variable.domain, size_variable: closed(0, 3),
@@ -84,10 +98,7 @@ class RSPNTestCase(unittest.TestCase):
                 kwargs = {}
                 if isinstance(parent, SumUnit):
                     kwargs["log_weight"] = p_molecule.get_edge_data(parent, leaf, "log_weight")
-                print(kwargs)
                 parent.add_subcircuit(atom_grounded.root, **kwargs)
             p_molecule.remove_node(leaf)
 
-        print(p_molecule.is_decomposable())
-        p_molecule.plot_structure()
-        plt.show()
+        self.assertTrue(p_molecule.is_decomposable())
