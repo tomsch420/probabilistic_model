@@ -526,15 +526,21 @@ class DiracDeltaDistribution(ContinuousDistribution):
     This value will be used to replace infinity in likelihood.
     """
 
-    def __init__(self, variable: Continuous, location: float, density_cap: float = np.inf):
+    tolerance: float = 1e-6
+
+    def __init__(self, variable: Continuous, location: float, density_cap: float = np.inf, tolerance: float = 1e-6):
         super().__init__()
         self.variable = variable
         self.location = location
         self.density_cap = density_cap
+        self.tolerance = tolerance
 
     def log_likelihood(self, events: np.array) -> np.array:
         result = np.full(len(events), -np.inf)
-        result[events[:, 0] == self.location] = np.log(self.density_cap)
+        # Check if the event is within the tolerance of the location
+        within_tolerance = np.abs(events[:, 0] - self.location) < self.tolerance
+        # If it is, set the log likelihood to the log of the density cap
+        result[within_tolerance] = np.log(self.density_cap)
         return result
 
     def cdf(self, x: np.array) -> np.array:
