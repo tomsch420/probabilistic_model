@@ -224,7 +224,7 @@ class LeafUnit(Unit):
         return {"style": self.drawio_label, "width": 30, "height": 30, "label": self.distribution.abbreviated_symbol}
 
     @property
-    def variables(self) -> SortedSet:
+    def variables(self) -> Iterable[Variable]:
         return SortedSet(self.distribution.variables)
 
     @property
@@ -1281,11 +1281,13 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def translate(self, translation: Dict[Variable, float]):
         for leaf in self.leaves:
-            leaf.distribution.translate(translation)
+            if any(v.is_numeric for v in leaf.variables):
+                leaf.distribution.translate(translation)
 
     def scale(self, scale: Dict[Variable, float]):
         for leaf in self.leaves:
-            leaf.distribution.scale(scale)
+            if any(v.is_numeric for v in leaf.variables):
+                leaf.distribution.scale(scale)
 
 class ShallowProbabilisticCircuit(ProbabilisticCircuit):
     """
