@@ -169,7 +169,7 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.model.probability(event), 1)
 
     def test_probability_0(self):
-        event = SimpleEvent({self.x: open_closed(0, 1)}).as_composite_set()
+        event = SimpleEvent({self.x: open_closed(0 + self.model.tolerance, 1)}).as_composite_set()
         self.assertEqual(self.model.probability(event), 0.)
 
     def test_conditional(self):

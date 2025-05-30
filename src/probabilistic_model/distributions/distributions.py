@@ -234,6 +234,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
                                       self.interval.left, self.interval.right)
         self.interval = new_interval
 
+
 class DiscreteDistribution(UnivariateDistribution):
     """
     Abstract base class for univariate discrete distributions.
@@ -505,6 +506,7 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
             new_probabilities[key * scaling[self.variable]] = value
         self.probabilities = new_probabilities
 
+
 class DiracDeltaDistribution(ContinuousDistribution):
     """
     Class for Dirac delta distributions.
@@ -527,6 +529,10 @@ class DiracDeltaDistribution(ContinuousDistribution):
     """
 
     tolerance: float = 1e-6
+    """
+    The tolerance of deviations of the `location` of the Dirac delta distribution.
+    This is used during calculations to take precision problems into account.
+    """
 
     def __init__(self, variable: Continuous, location: float, density_cap: float = np.inf, tolerance: float = 1e-6):
         super().__init__()
@@ -545,7 +551,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     def cdf(self, x: np.array) -> np.array:
         result = np.zeros((len(x),))
-        result[x[:, 0] >= self.location] = 1.
+        result[x[:, 0] >= self.location - self.tolerance] = 1.
         return result
 
     @property
@@ -558,7 +564,9 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         interval: Interval = event[self.variable]
-        return 1. if self.location in interval else 0.
+
+        return 0. if (closed(self.location - self.tolerance, self.location + self.tolerance) & interval).is_empty() \
+            else 1.
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         return self.univariate_support, np.log(self.density_cap)
