@@ -60,7 +60,7 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
                 continue
 
             current_conditional = self.__class__(current_conditional, self.probabilistic_circuit)
-            result.add_subcircuit(current_conditional, current_probability, mount=False)
+            result.add_subcircuit(current_conditional, np.log(current_probability), mount=False)
             total_probability += current_probability
 
         # if the event is impossible
