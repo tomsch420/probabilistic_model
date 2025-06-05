@@ -26,8 +26,11 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         return self.interval.as_composite_set(), self.log_pdf_value()
 
-    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
+    def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
         probability = self.probability_of_simple_event(SimpleEvent({self.variable: interval}))
+
+        if probability == 0.0:
+            return None, -np.inf
 
         # construct new interval
         new_interval = self.interval.intersection_with(interval)

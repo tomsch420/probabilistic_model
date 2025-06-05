@@ -195,6 +195,27 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
+    def conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+        """
+        Calculate the conditional distribution P(*| point) and the probability of the event.
+
+        :param point: A partial point to calculate the conditional distribution on.
+        :return: The conditional distribution and the log-probability of the point.
+        """
+        conditional, log_probability = self.log_conditional_of_point(point)
+        return conditional, np.exp(log_probability)
+
+    @abstractmethod
+    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+        """
+        Calculate the conditional distribution P(*| point) and the probability of the event.
+        Check the documentation of `conditional_of_point` for more information.
+
+        :param point: A partial point to calculate the conditional distribution on.
+        :return: The conditional distribution and the log-probability of the point.
+        """
+        raise NotImplementedError
+
     @abstractmethod
     def sample(self, amount: int) -> np.array:
         """

@@ -155,8 +155,12 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
     def test_conditional_on_mode(self):
         mode, _ = self.distribution.mode()
         conditional, probability = self.distribution.conditional(mode)
+        self.assertIsNone(conditional)
+
+        point_value = mode.simple_sets[0][self.distribution.variable].simple_sets[0].lower
+        conditional, probability = self.distribution.log_conditional_of_point({self.distribution.variable: point_value})
         self.assertIsInstance(conditional, DiracDeltaDistribution)
-        self.assertTrue(probability > 0)
+        self.assertTrue(probability > -np.inf)
 
     def test_copy(self):
         copy = self.distribution.__copy__()

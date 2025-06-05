@@ -2,14 +2,12 @@ import itertools
 
 import numpy as np
 from random_events.product_algebra import SimpleEvent, Event
-from random_events.sigma_algebra import AbstractCompositeSet
+from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Symbolic, Variable
 from typing_extensions import Self, Any, Iterable, List, Optional, Tuple, Dict
 
-from ..probabilistic_circuit.nx.distributions.distributions import SymbolicDistribution, UnivariateDiscreteLeaf
-from ..probabilistic_circuit.nx.probabilistic_circuit import (ProductUnit, SumUnit)
+from ..probabilistic_circuit.nx.probabilistic_circuit import SymbolicDistribution, UnivariateDiscreteLeaf, ProductUnit, SumUnit
 from ..probabilistic_model import ProbabilisticModel
-from random_events.utils import SubclassJSONSerializer
 from ..utils import MissingDict
 
 
@@ -85,6 +83,11 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
                 mode |= current_mode
 
         return mode, np.log(likelihood)
+
+    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+        event = SimpleEvent(point)
+        event.fill_missing_variables(self.variables)
+        return self.log_conditional(event.as_composite_set())
 
     def __copy__(self) -> Self:
         """
@@ -187,7 +190,6 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
             # iterate through all variables
             for variable, value in zip(self.variables, event):
-
                 # create probabilities for the current variables state as one hot encoding
                 weights = MissingDict(float)
                 weights[hash(value)] = 1.

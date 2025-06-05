@@ -13,7 +13,6 @@ from jpt.learning.impurity import Impurity
 from jpt.trees import JPT as OldJPT
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
-from random_events.set import SetElement
 from random_events.variable import Variable, Continuous
 
 from probabilistic_model.distributions import GaussianDistribution
@@ -21,10 +20,9 @@ from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import IntegerDistribution, \
-    SymbolicDistribution, UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
-    ProductUnit
+    ProductUnit, IntegerDistribution, \
+    SymbolicDistribution, UnivariateContinuousLeaf
 
 
 class SymbolEnum(IntEnum):
@@ -108,7 +106,8 @@ class JPTTestCase(unittest.TestCase):
     def setUp(self):
         np.random.seed(69)
         data = pd.DataFrame()
-        data["integer"] = np.concatenate((np.random.randint(low=0, high=4, size=50), np.random.randint(7, 10, 50))).astype(int)
+        data["integer"] = np.concatenate(
+            (np.random.randint(low=0, high=4, size=50), np.random.randint(7, 10, 50))).astype(int)
         data["real"] = np.random.normal(2, 4, 100).astype(np.float32)
         data["symbol"] = np.random.randint(0, 4, 100).astype(str)
         self.data = data
@@ -298,7 +297,7 @@ class MNISTTestCase(unittest.TestCase):
 
     def test_serialization(self):
         json_dict = self.model.to_json()
-        #print(json_dict)
+        # print(json_dict)
         model = JPT.from_json(json_dict)
         self.assertEqual(model, self.model)
 
@@ -313,11 +312,11 @@ class MNISTTestCase(unittest.TestCase):
         self.assertEqual(model, model_)
         file.close()
 
+
 import plotly.graph_objects as go
 
 
 class GaussianJPTTestCase(unittest.TestCase):
-
     x: Continuous
     y: Continuous
 

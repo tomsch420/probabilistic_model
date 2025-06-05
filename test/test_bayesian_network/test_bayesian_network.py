@@ -16,8 +16,7 @@ from probabilistic_model.bayesian_network.distributions import (ConditionalProba
                                                                 ConditionalProbabilisticCircuit)
 from probabilistic_model.distributions.multinomial import MultinomialDistribution
 from probabilistic_model.distributions import UniformDistribution, SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit, UnivariateContinuousLeaf
 from probabilistic_model.utils import MissingDict
 
 

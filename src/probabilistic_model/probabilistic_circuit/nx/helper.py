@@ -1,12 +1,6 @@
-from random_events.product_algebra import Event, SimpleEvent
-from random_events.variable import Continuous, Integer, Symbolic, Variable
-from typing_extensions import Iterable, Optional
-
-from .distributions import UnivariateContinuousLeaf, UnivariateDiscreteLeaf, UnivariateLeaf
-from .probabilistic_circuit import ProductUnit, SumUnit, ProbabilisticCircuit, LeafUnit
+from .probabilistic_circuit import *
+from ...distributions import UniformDistribution, SymbolicDistribution, IntegerDistribution, GaussianDistribution
 from ...utils import MissingDict
-from ...distributions import UniformDistribution, SymbolicDistribution, IntegerDistribution, GaussianDistribution, \
-    UnivariateDistribution
 
 
 def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
@@ -26,6 +20,7 @@ def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
     uniform_model, _ = uniform_model.conditional(event)
 
     return uniform_model
+
 
 def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticCircuit:
     """
@@ -50,8 +45,9 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
 
         # create uniform distribution for symbolic variables
         elif isinstance(variable, Symbolic):
-            distribution = SymbolicDistribution(variable, MissingDict(float, {hash(value): 1 / len(assignment.simple_sets) for
-                                                                              value in assignment}))
+            distribution = SymbolicDistribution(variable,
+                                                MissingDict(float, {hash(value): 1 / len(assignment.simple_sets) for
+                                                                    value in assignment}))
             distribution = UnivariateDiscreteLeaf(distribution)
 
         # create uniform distribution for integer variables
@@ -94,7 +90,7 @@ def fully_factorized(variables: Iterable[Variable], means: dict, variances: dict
         # create uniform distribution for symbolic variables
         elif isinstance(variable, Symbolic):
             domain_elements = list(variable.domain.simple_sets)
-            distribution = SymbolicDistribution(variable, MissingDict(float, {hash(v): 1/len(domain_elements)
+            distribution = SymbolicDistribution(variable, MissingDict(float, {hash(v): 1 / len(domain_elements)
                                                                               for v in domain_elements}))
             distribution = UnivariateDiscreteLeaf(distribution)
         else:
@@ -102,15 +98,3 @@ def fully_factorized(variables: Iterable[Variable], means: dict, variances: dict
         root.add_subcircuit(distribution)
 
     return root.probabilistic_circuit
-
-
-def leaf(distribution: UnivariateDistribution, probabilistic_circuit: Optional[ProbabilisticCircuit] = None) -> UnivariateLeaf:
-    """
-    Factory that creates the correct leaf from a distribution.
-
-    :return: The leaf.
-    """
-    if isinstance(distribution.variable, Continuous):
-        return UnivariateContinuousLeaf(distribution, probabilistic_circuit)
-    else:
-        return UnivariateDiscreteLeaf(distribution, probabilistic_circuit)

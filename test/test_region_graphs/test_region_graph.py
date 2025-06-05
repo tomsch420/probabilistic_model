@@ -3,14 +3,12 @@ import unittest
 from enum import IntEnum
 
 import optax
-from matplotlib import pyplot as plt
 from random_events.product_algebra import SimpleEvent
-from random_events.set import SetElement, Set
-import plotly.graph_objects as go
+from random_events.set import Set
 from scipy.special import logsumexp
 
 from probabilistic_model.learning.region_graph.region_graph import *
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import UnivariateDiscreteLeaf
 
 np.random.seed(420)
 random.seed(420)
@@ -85,6 +83,7 @@ class ClassificationTestCase(unittest.TestCase):
         probabilities = {str(element): p_target.probability_of_simple_event(SimpleEvent({self.target: element})) for
                          element in self.target.domain}
         self.assertAlmostEqual(sum(probabilities.values()), 1.0)
+
 
 if __name__ == '__main__':
     unittest.main()

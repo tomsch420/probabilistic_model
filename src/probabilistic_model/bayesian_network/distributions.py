@@ -6,10 +6,9 @@ from typing_extensions import Tuple, Dict, Iterable, List, Union, Self
 from .bayesian_network import BayesianNetworkMixin
 from ..distributions.multinomial import MultinomialDistribution
 from ..distributions import SymbolicDistribution
-from ..probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
 from ..probabilistic_circuit.nx.helper import leaf
 from ..probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit, Unit, SumUnit,
-                                                                                ProductUnit)
+                                                                                ProductUnit, UnivariateDiscreteLeaf)
 from ..utils import MissingDict
 
 

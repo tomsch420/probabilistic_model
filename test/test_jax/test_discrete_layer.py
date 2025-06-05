@@ -1,19 +1,16 @@
 import unittest
 from enum import IntEnum
 
-from random_events.set import SetElement, Set
-from random_events.variable import Continuous, Symbolic
+import jax.numpy as jnp
+from random_events.set import Set
+from random_events.variable import Symbolic
 from sortedcontainers import SortedSet
 
 from probabilistic_model.distributions import SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.jax.discrete_layer import DiscreteLayer
-from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer, GaussianDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import \
-    ProbabilisticCircuit as NXProbabilisticCircuit, SumUnit
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf, UnivariateDiscreteLeaf
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-import jax.numpy as jnp
-
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import \
+    ProbabilisticCircuit as NXProbabilisticCircuit, SumUnit, UnivariateDiscreteLeaf
 from probabilistic_model.utils import MissingDict
 
 
@@ -22,8 +19,8 @@ class Animal(IntEnum):
     DOG = 1
     FISH = 2
 
-class DiscreteLayerTestCase(unittest.TestCase):
 
+class DiscreteLayerTestCase(unittest.TestCase):
     model: DiscreteLayer
     x = Symbolic("x", Set.from_iterable(Animal))
 
@@ -40,18 +37,16 @@ class DiscreteLayerTestCase(unittest.TestCase):
     def test_log_likelihood(self):
         x = jnp.array([0.0])
         result = self.model.log_likelihood_of_nodes_single(x)
-        correct = jnp.log(jnp.array([.0, 3/7]))
+        correct = jnp.log(jnp.array([.0, 3 / 7]))
         self.assertTrue(jnp.allclose(result, correct, atol=1e-3))
 
         x2 = jnp.array([0., 1., 2]).reshape(-1, 1)
         result = self.model.log_likelihood_of_nodes(x2)
         self.assertEqual(result.shape, (3, 2))
-        correct = jnp.log(jnp.array([[0., 3./7.], [1./3., 4./7.], [2./3., 0.]]))
+        correct = jnp.log(jnp.array([[0., 3. / 7.], [1. / 3., 4. / 7.], [2. / 3., 0.]]))
         self.assertTrue(jnp.allclose(result, correct, atol=1e-3))
 
-
     def test_from_nx(self):
-
         p1 = MissingDict(float, {hash(Animal.CAT): 0., hash(Animal.DOG): 1, hash(Animal.FISH): 2})
         d1 = UnivariateDiscreteLeaf(SymbolicDistribution(self.x, p1))
 

@@ -14,8 +14,7 @@ from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwor
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
                                                                 ConditionalProbabilisticCircuit)
 from probabilistic_model.distributions import SymbolicDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import  SumUnit, ProductUnit
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import  SumUnit, ProductUnit, UnivariateContinuousLeaf
 from probabilistic_model.utils import MissingDict
 
 

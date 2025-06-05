@@ -14,9 +14,8 @@ from typing_extensions import Self
 from .variables import Continuous, Integer, Symbolic, ScaledContinuous
 from ..nyga_distribution import NygaDistribution
 from ...distributions import (DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution, UnivariateDistribution)
-from ...probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
 from ...probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
-                                                               ProbabilisticCircuit)
+                                                               ProbabilisticCircuit, UnivariateDiscreteLeaf)
 from ...utils import MissingDict
 
 
@@ -326,7 +325,6 @@ class JPT(ProbabilisticCircuit):
         return Impurity(min_samples_leaf, numeric_vars, symbolic_vars, invert_impurity, n_sym_vars_total,
                         n_num_vars_total, numeric_features, symbolic_features, symbols, max_variances,
                         dependency_indices)
-
 
     def plot(self, number_of_samples: int = 1000, surface=True) -> List:
         try:

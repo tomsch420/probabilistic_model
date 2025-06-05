@@ -10,19 +10,24 @@ from enum import IntEnum
 import networkx as nx
 import networkx.drawing
 import numpy as np
+from random_events.interval import SimpleInterval, Interval
 from scipy.special import logsumexp
 import tqdm
 from matplotlib import pyplot as plt
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import Set
 from random_events.utils import SubclassJSONSerializer
-from random_events.variable import Variable, Symbolic
+from random_events.variable import Variable, Symbolic, Continuous, Integer
 from sortedcontainers import SortedSet
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, Callable
 
+from ...distributions import UnivariateDistribution, IntegerDistribution, SymbolicDistribution, DiscreteDistribution, \
+    ContinuousDistribution
+from ...distributions.helper import make_dirac
 from ...error import IntractableError
 from ...interfaces.drawio.drawio import DrawIOInterface, circled_product, circled_sum
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
+from ...utils import MissingDict
 
 
 class Unit(SubclassJSONSerializer, DrawIOInterface):
@@ -300,6 +305,12 @@ class LeafUnit(Unit):
         distribution = SubclassJSONSerializer.from_json(data["distribution"])
         return cls(distribution)
 
+    def log_conditional_of_point_in_place(self, point: Dict[Variable, Any]):
+        if any(variable for variable in self.variables if variable in point):
+            self.distribution, self.result_of_current_query = self.distribution.log_conditional_of_point(point)
+        else:
+            self.result_of_current_query = 0.
+
 
 class InnerUnit(Unit):
     """
@@ -454,7 +465,7 @@ class SumUnit(InnerUnit):
     def __copy__(self):
         return self.empty_copy()
 
-    def mount_with_interaction_terms(self, other: 'SumUnit', interaction_model: ProbabilisticModel):
+    def mount_with_interaction_terms(self, other: Self, interaction_model: ProbabilisticModel):
         """
         Create a distribution that factorizes as follows:
 
@@ -940,6 +951,51 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         else:
             return None
 
+    def log_conditional_of_point_in_place(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+
+        # do forward pass
+        for layer in reversed(self.layers):
+            for unit in layer:
+                if unit.is_leaf:
+                    unit: LeafUnit
+                    unit.log_conditional_of_point_in_place(point)
+                else:
+                    unit: InnerUnit
+                    unit.log_forward()
+
+        # clean the circuit up
+        root = self.root
+        [self.remove_node(node) for layer in reversed(self.layers) for node in layer if
+         node.result_of_current_query == -np.inf]
+
+        if root not in self.nodes:
+            return None, -np.inf
+
+        self.remove_unreachable_nodes(root)
+
+        # simplify dirac parts
+        remaining_variables = [v for v in self.variables if v not in point]
+
+        self.marginal_in_place(remaining_variables)
+        new_root = ProductUnit(self)
+
+        if len(remaining_variables) > 0:
+            new_root.add_subcircuit(root, False)
+
+        for variable, value in point.items():
+            new_root.add_subcircuit(leaf(make_dirac(variable, value), self))
+
+        new_root.result_of_current_query = root.result_of_current_query
+
+        self.simplify()
+        self.normalize()
+
+        return self, root.result_of_current_query
+
+    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+        result = self.__copy__()
+        return result.log_conditional_of_point_in_place(point)
+
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         result = self.__copy__()
         return result.marginal_in_place(variables)
@@ -1265,7 +1321,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         old_leafs = self.leaves
         for leaf in old_leafs:
 
-            from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
             if isinstance(leaf, UnivariateDiscreteLeaf):
                 leaf: UnivariateDiscreteLeaf
                 sum_leaf = leaf.as_deterministic_sum()
@@ -1449,3 +1504,123 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
         for succ in succ_list:
             if len(list(probabilistic_circuit.predecessors(succ))) == 0:
                 self.remove_node_and_successor_structure(succ)
+
+
+class UnivariateLeaf(LeafUnit):
+
+    @property
+    def variable(self) -> Variable:
+        return self.distribution.variables[0]
+
+
+class UnivariateContinuousLeaf(UnivariateLeaf):
+    distribution: Optional[ContinuousDistribution]
+
+    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
+        return self.univariate_log_conditional_of_simple_event_in_place(event[self.variable])
+
+    def univariate_log_conditional_of_simple_event_in_place(self, event: Interval):
+        """
+        Condition this distribution on a simple event in-place but use sum units to create conditions on composite
+        intervals.
+        :param event: The simple event to condition on.
+        """
+
+        # if it is a simple truncation
+        if len(event.simple_sets) == 1:
+            self.distribution, self.result_of_current_query = self.distribution.log_conditional_from_simple_interval(
+                event.simple_sets[0])
+            return self
+
+        total_probability = 0.
+
+        # calculate the conditional distribution as sum unit
+        result = SumUnit(self.probabilistic_circuit)
+
+        for simple_interval in event.simple_sets:
+            current_conditional, current_log_probability = self.distribution.log_conditional_from_simple_interval(
+                simple_interval)
+            current_probability = np.exp(current_log_probability)
+
+            if current_probability == 0:
+                continue
+
+            current_conditional = self.__class__(current_conditional, self.probabilistic_circuit)
+            result.add_subcircuit(current_conditional, np.log(current_probability), mount=False)
+            total_probability += current_probability
+
+        # if the event is impossible
+        if total_probability == 0:
+            self.result_of_current_query = -np.inf
+            self.distribution = None
+            self.probabilistic_circuit.remove_node(result)
+            return None
+
+        # reroute the parent to the new sum unit
+        self.connect_incoming_edges_to(result)
+
+        # remove this node
+        self.probabilistic_circuit.remove_node(self)
+
+        # update result
+        result.normalize()
+        result.result_of_current_query = np.log(total_probability)
+        return result
+
+
+class UnivariateDiscreteLeaf(UnivariateLeaf):
+
+    distribution: Optional[DiscreteDistribution]
+
+    def as_deterministic_sum(self) -> SumUnit:
+        """
+        Convert this distribution to a deterministic sum unit that encodes the same distribution in-place.
+        The result has as many children as the probability dictionary of this distribution.
+        Each child encodes the value of the variable.
+
+        :return: The deterministic sum unit that encodes the same distribution.
+        """
+        result = SumUnit(self.probabilistic_circuit)
+
+        for element, probability in self.distribution.probabilities.items():
+            result.add_subcircuit(UnivariateDiscreteLeaf(self.distribution.__class__(self.variable,
+                                                                                     MissingDict(float, {element: 1.})),
+                                                         self.probabilistic_circuit), np.log(probability), mount=False)
+        self.connect_incoming_edges_to(result)
+        self.probabilistic_circuit.remove_node(self)
+        return result
+
+    @classmethod
+    def from_mixture(cls, mixture: ProbabilisticCircuit):
+        """
+        Create a discrete distribution from a univariate mixture.
+
+        :param mixture: The mixture to create the distribution from.
+        :return: The discrete distribution.
+        """
+        assert len(mixture.variables) == 1, "Can only convert univariate sum units to discrete distributions."
+        variable = mixture.variables[0]
+        probabilities = MissingDict(float)
+
+        for element in mixture.support.simple_sets[0][variable].simple_sets:
+            probability = mixture.probability_of_simple_event(
+                SimpleEvent({variable: element}))
+            if isinstance(element, SimpleInterval):
+                element = element.lower
+            probabilities[hash(element)] = probability
+
+        distribution_class = IntegerDistribution if isinstance(variable, Integer) else SymbolicDistribution
+        distribution = distribution_class(variable, probabilities)
+        return cls(distribution)
+
+
+def leaf(distribution: UnivariateDistribution, probabilistic_circuit: Optional[ProbabilisticCircuit] = None) -> UnivariateLeaf:
+    """
+    Factory that creates the correct leaf from a distribution.
+
+    :return: The leaf.
+    """
+    if isinstance(distribution.variable, Continuous):
+        return UnivariateContinuousLeaf(distribution, probabilistic_circuit)
+    else:
+        return UnivariateDiscreteLeaf(distribution, probabilistic_circuit)

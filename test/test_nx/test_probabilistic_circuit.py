@@ -7,9 +7,6 @@ from random_events.variable import Continuous
 
 from probabilistic_model.distributions import SymbolicDistribution, GaussianDistribution, DiracDeltaDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateDiscreteLeaf
-from probabilistic_model.probabilistic_circuit.nx.helper import leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 
@@ -156,8 +153,12 @@ class DiracMixtureConditioningTestCase(unittest.TestCase):
         event = SimpleEvent({self.x: singleton(0.5)}).as_composite_set()
 
         conditional, probability = self.model.conditional(event)
+        self.assertEqual(len(conditional.nodes), 1)
+        self.assertIsInstance(conditional.root.distribution, DiracDeltaDistribution)
+
+        conditional, probability = self.model.conditional_of_point({self.x: 0.5})
         self.assertAlmostEqual(probability, 1.5)
-        self.assertEqual(len(conditional.nodes), 3)
+        self.assertEqual(len(conditional.nodes), 1)
         self.assertTrue(all([isinstance(node.distribution, DiracDeltaDistribution) for node in conditional.leaves]))
 
 if __name__ == '__main__':

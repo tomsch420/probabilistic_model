@@ -3,16 +3,14 @@ from __future__ import annotations
 from abc import abstractmethod
 from functools import cached_property
 
-from matplotlib import pyplot as plt
+import networkx as nx
+import numpy as np
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Variable, Symbolic
 from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
 
-from probabilistic_model.probabilistic_circuit.nx.distributions import (SymbolicDistribution, UnivariateDiscreteLeaf)
-import networkx as nx
-
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit, SumUnit)
-import numpy as np
+from ..probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit, SumUnit, SymbolicDistribution,
+                                                              UnivariateDiscreteLeaf)
 
 
 class BayesianNetworkMixin:
@@ -197,7 +195,6 @@ class BayesianNetwork(nx.DiGraph):
         nx.draw(self, positions, node_color="#FFFFFF", node_shape="o", edgecolors="#000000", node_size=500,
                 labels=labels)
 
-
     def as_probabilistic_circuit(self) -> ProbabilisticCircuit:
         """
         Convert the BayesianNetwork to a probabilistic circuit that expresses the same probability distribution.
@@ -228,7 +225,6 @@ class BayesianNetwork(nx.DiGraph):
 
             # if the parent circuit does not yet exist
             if parent not in pointers_to_sum_units.keys():
-
                 # create the parent circuit
                 forward_of_parent = UnivariateDiscreteLeaf(parent.forward_message)
                 pointers_to_sum_units[parent] = forward_of_parent.as_deterministic_sum()
