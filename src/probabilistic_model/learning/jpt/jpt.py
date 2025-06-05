@@ -180,7 +180,7 @@ class JPT(ProbabilisticCircuit):
             if isinstance(variable, ScaledContinuous):
                 column = variable.encode(column)
             if isinstance(variable, Symbolic):
-                all_elements = {element.name: index for index, element in enumerate(variable.domain.all_elements)}
+                all_elements = {element: index for index, element in enumerate(variable.domain.all_elements)}
                 column = column.apply(lambda x: all_elements[x])
             result[:, variable_index] = column
 
@@ -275,7 +275,7 @@ class JPT(ProbabilisticCircuit):
 
             elif isinstance(variable, Symbolic):
                 distribution = SymbolicDistribution(variable, probabilities=MissingDict(float))
-                distribution.fit(data[:, index])
+                distribution.fit_from_indices(data[:, index].astype(int))
                 distribution = UnivariateDiscreteLeaf(distribution)
 
             elif isinstance(variable, Integer):

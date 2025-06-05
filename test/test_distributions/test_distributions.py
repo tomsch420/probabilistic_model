@@ -131,8 +131,8 @@ class SymbolicDistributionTestCase(unittest.TestCase):
                                       SetElement(TestEnum.B, self.x.domain.simple_sets[0].all_elements)))
 
     def test_fit(self):
-        data = [0, 1, 1, 1]
-        self.model.fit(data)
+        data = [TestEnum.A, TestEnum.B, TestEnum.B, TestEnum.B]
+        self.model.fit_from_indices(data)
 
         e_1 = SimpleEvent({self.x: TestEnum.A}).as_composite_set()
         self.assertEqual(self.model.probability(e_1), 1 / 4)

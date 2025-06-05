@@ -249,9 +249,11 @@ class DiscreteDistribution(UnivariateDistribution):
 
     def log_likelihood(self, events: np.array) -> np.array:
         events = events[:, 0]
+
+        events = np.array([hash(e) for e in events])
         result = np.full(len(events), -np.inf)
         for x, p in self.probabilities.items():
-            result[events == x] = np.log(p)
+            result[events == hash(x)] = np.log(p)
         return result
 
     def fit(self, data: np.array) -> Self:
@@ -407,10 +409,21 @@ class SymbolicDistribution(DiscreteDistribution):
         unique, counts = np.unique(data, return_counts=True)
         probabilities = MissingDict(float)
         for value, count in zip(unique, counts):
-            set_element = [element for element in self.variable.domain.simple_sets if element.element == value][0]
+            set_element = [element for element in self.variable.domain.simple_sets if element == value][0]
             probabilities[hash(set_element)] = count / len(data)
         self.probabilities = probabilities
         return self
+
+    def fit_from_indices(self, data: np.array) -> Self:
+        unique, counts = np.unique(data, return_counts=True)
+        probabilities = MissingDict(float)
+        for value, count in zip(unique, counts):
+            set_element = self.variable.domain.simple_sets[value]
+            probabilities[hash(set_element)] = count / len(data)
+        self.probabilities = probabilities
+        return self
+
+
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):

@@ -54,9 +54,9 @@ def infer_variables_from_dataframe(data: pd.DataFrame, scale_continuous_types: b
                 variable = Integer(column, mean, std)
             elif datatype == object:
                 unique_values = data[column].unique()
-                unique_values.sort()
-                enum = IntEnum(column, {value: index for index, value in enumerate(unique_values)})
-                variable = Symbolic(column, Set.from_iterable(enum))
+                # unique_values.sort()
+                # enum = IntEnum(column, {value: index for index, value in enumerate(unique_values)})
+                variable = Symbolic(column, Set.from_iterable(unique_values))
             else:
                 raise ValueError(f"Datatype {datatype} of column {column} is not supported.")
 
