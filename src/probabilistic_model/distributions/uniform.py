@@ -28,7 +28,14 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
 
     def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
         probability = self.probability_of_simple_event(SimpleEvent({self.variable: interval}))
-        return self.__class__(self.variable, interval), np.log(probability)
+
+        # construct new interval
+        new_interval = self.interval.intersection_with(interval)
+
+        if new_interval.is_empty():
+            return None, -np.inf
+
+        return self.__class__(self.variable, new_interval), np.log(probability)
 
     def sample(self, amount: int) -> np.array:
         return np.random.uniform(self.lower, self.upper, (amount, 1))

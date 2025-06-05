@@ -106,7 +106,6 @@ class ContinuousDistribution(UnivariateDistribution):
         return (upper_bound_cdf - lower_bound_cdf).sum()
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        event = event & self.support
         if event.is_empty():
             return None, -np.inf
 
@@ -561,6 +560,12 @@ class DiracDeltaDistribution(ContinuousDistribution):
     @property
     def univariate_support(self) -> Interval:
         return singleton(self.location)
+
+    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
+        if interval.contains(self.location):
+            return self, 0.
+        else:
+            return None, -np.inf
 
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         interval: Interval = event[self.variable]

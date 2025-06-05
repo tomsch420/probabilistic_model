@@ -33,12 +33,6 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
         intervals.
         :param event: The simple event to condition on.
         """
-        event = self.distribution.univariate_support & event
-
-        if event.is_empty():
-            self.result_of_current_query = -np.inf
-            self.distribution = None
-            return None
 
         # if it is a simple truncation
         if len(event.simple_sets) == 1:
