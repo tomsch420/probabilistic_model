@@ -7,6 +7,7 @@ from random_events.variable import Continuous
 
 from probabilistic_model.distributions import SymbolicDistribution, GaussianDistribution, DiracDeltaDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
+from probabilistic_model.probabilistic_circuit.nx.helper import fully_factorized
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 

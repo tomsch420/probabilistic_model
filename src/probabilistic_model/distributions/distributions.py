@@ -423,7 +423,20 @@ class SymbolicDistribution(DiscreteDistribution):
         self.probabilities = probabilities
         return self
 
+    def to_json(self) -> Dict[str, Any]:
+        hashes = list(self.variable.domain.hash_map.keys())
+        probabilities = {hashes.index(h): p for h, p in self.probabilities.items()}
+        result = super().to_json()
+        result["probabilities"] = list(probabilities.items())
+        return result
 
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variable = Variable.from_json(data["variable"])
+        probabilities = MissingDict(float)
+        for key, value in data["probabilities"]:
+            probabilities[hash(variable.domain.simple_sets[key])] = value
+        return cls(variable, probabilities)
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
