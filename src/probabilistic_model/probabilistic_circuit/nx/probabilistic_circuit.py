@@ -881,51 +881,132 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
         """
-        Construct the conditional circuit from an event.
-        The event is not required to be a disjoint union of simple events.
-
-        However, if it is not a disjoint union, the probability of the event is not correct,
-        but the conditional distribution is.
-
-        :param event: The event to condition on.
-        :return: The root of the conditional circuit.
+        Optimized log_conditional using a single manual topological sort
+        and batch processing of simple events.
         """
+        from collections import deque
 
-        # skip trivial case
+        # 1) Trivial case: empty event
         if event.is_empty():
-            self.remove_nodes_from(list(self.nodes))
+            # remove all nodes
+            for node in list(self.nodes):
+                self.remove_node(node)
             return None, -np.inf
 
+        simple_sets = event.simple_sets
 
-        # if the event is easy, don't create a proxy node
-        elif len(event.simple_sets) == 1:
-            result = self.log_conditional_of_simple_event_in_place(event.simple_sets[0])
-            return result
+        # 2) Single‐simple‐event: delegate to in‐place version
+        if len(simple_sets) == 1:
+            return self.log_conditional_of_simple_event_in_place(simple_sets[0])
 
-        # create a conditional circuit for every simple event
-        conditional_circuits = [self.__copy__().log_conditional_of_simple_event_in_place(simple_event) for simple_event
-                                in event.simple_sets]
+        # 3) Compute one topological ordering of THIS circuit once
+        nodes = list(self.nodes)
+        in_degree = {node: 0 for node in nodes}
+        successors = {node: [] for node in nodes}
 
-        # clear this circuit
-        self.remove_nodes_from(list(self.nodes))
+        # build in‐degree & successor map
+        for u, v in self.edges:
+            successors[u].append(v)
+            in_degree[v] += 1
 
-        # filtered out impossible conditionals
-        conditional_circuits = [(conditional, log_probability) for conditional, log_probability in conditional_circuits
-                                if log_probability > -np.inf]
+        # Kahn’s algorithm
+        queue = deque(n for n in nodes if in_degree[n] == 0)
+        topo_order = []
+        while queue:
+            n = queue.popleft()
+            topo_order.append(n)
+            for m in successors[n]:
+                in_degree[m] -= 1
+                if in_degree[m] == 0:
+                    queue.append(m)
 
-        # if all conditionals are impossible
-        if len(conditional_circuits) == 0:
+        reverse_order = list(reversed(topo_order))
+
+        # 4) Process each simple event on a fresh copy
+        conditional_results: List[Tuple[Self, float]] = []
+        for ev in simple_sets:
+            circ = self.__copy__()
+            # map original→copy
+            node_map = {orig: new for orig, new in zip(nodes, circ.nodes)}
+
+            # run the leaf‐then‐inner inference pass
+            for orig_unit in reverse_order:
+                unit = node_map[orig_unit]
+                if unit.is_leaf:
+                    unit.log_conditional_of_simple_event_in_place(ev)
+                else:
+                    unit.log_forward()
+
+            root = circ.root
+            logp = root.result_of_current_query
+            if logp > -np.inf:
+                conditional_results.append((circ, logp))
+
+        # 5) If no event was possible
+        if not conditional_results:
             return None, -np.inf
 
-        # create a new sum unit
-        result = SumUnit(self)
+        # 6) Merge into a new mixture on self
+        #    Clear original nodes:
+        for node in list(self.nodes):
+            self.remove_node(node)
 
-        # add the conditionals to the sum unit
-        [result.add_subcircuit(conditional.root, log_probability) for conditional, log_probability in
-         conditional_circuits]
-        result.log_forward()
-        result.normalize()
-        return self, result.result_of_current_query
+        mixer = SumUnit(self)
+        for circ, logp in conditional_results:
+            mixer.add_subcircuit(circ.root, logp)
+
+        mixer.log_forward()
+        mixer.normalize()
+
+        return self, mixer.result_of_current_query
+
+    # def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
+    #     """
+    #     Construct the conditional circuit from an event.
+    #     The event is not required to be a disjoint union of simple events.
+    #
+    #     However, if it is not a disjoint union, the probability of the event is not correct,
+    #     but the conditional distribution is.
+    #
+    #     :param event: The event to condition on.
+    #     :return: The root of the conditional circuit.
+    #     """
+    #
+    #     # skip trivial case
+    #     if event.is_empty():
+    #         self.remove_nodes_from(list(self.nodes))
+    #         return None, -np.inf
+    #
+    #
+    #     # if the event is easy, don't create a proxy node
+    #     elif len(event.simple_sets) == 1:
+    #         result = self.log_conditional_of_simple_event_in_place(event.simple_sets[0])
+    #         return result
+    #
+    #     # create a conditional circuit for every simple event
+    #     conditional_circuits = [self.__copy__().log_conditional_of_simple_event_in_place(simple_event) for simple_event
+    #                             in event.simple_sets]
+    #
+    #     # clear this circuit
+    #     self.remove_nodes_from(list(self.nodes))
+    #
+    #     # filtered out impossible conditionals
+    #     conditional_circuits = [(conditional, log_probability) for conditional, log_probability in conditional_circuits
+    #                             if log_probability > -np.inf]
+    #
+    #     # if all conditionals are impossible
+    #     if len(conditional_circuits) == 0:
+    #         return None, -np.inf
+    #
+    #     # create a new sum unit
+    #     result = SumUnit(self)
+    #
+    #     # add the conditionals to the sum unit
+    #     [result.add_subcircuit(conditional.root, log_probability) for conditional, log_probability in
+    #      conditional_circuits]
+    #     result.log_forward()
+    #     result.normalize()
+    #     return self, result.result_of_current_query
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
