@@ -6,8 +6,10 @@ from random_events.interval import SimpleInterval, Interval
 from random_events.product_algebra import SimpleEvent
 from random_events.sigma_algebra import AbstractCompositeSet
 from random_events.variable import Variable, Integer
+from scipy.stats import norm
 from typing_extensions import Optional
 
+from ....distributions import GaussianDistribution
 from ....utils import MissingDict
 from ..probabilistic_circuit import SumUnit, LeafUnit, ProbabilisticCircuit
 from ....distributions.distributions import (ContinuousDistribution, DiscreteDistribution, IntegerDistribution,
@@ -20,40 +22,92 @@ class UnivariateLeaf(LeafUnit):
     def variable(self) -> Variable:
         return self.distribution.variables[0]
 
+def batch_log_likelihood_singletons(distributions, intervals):
+    """
+    distributions: list of GaussianDistribution, all same type, one per leaf
+    intervals: list of SimpleInterval, all .is_singleton() is True
+    """
+    # All Gaussians must have the same .location and .scale for perfect vectorization,
+    # but if not, we handle it elementwise in numpy
+    locations = np.array([d.location for d in distributions])
+    scales = np.array([d.scale for d in distributions])
+    xs = np.array([interval.lower for interval in intervals])
+
+    # If all location/scale are the same, vectorize
+    if np.all(locations == locations[0]) and np.all(scales == scales[0]):
+        logpdfs = norm.logpdf(xs, loc=locations[0], scale=scales[0])
+    else:
+        logpdfs = norm.logpdf(xs, loc=locations, scale=scales)
+    return logpdfs
+
+
+def batch_log_probability_intervals(distributions, intervals):
+    """
+    distributions: list of GaussianDistribution, all same type, one per leaf
+    intervals: list of SimpleInterval, .is_singleton() may be False
+    """
+    locations = np.array([d.location for d in distributions])
+    scales = np.array([d.scale for d in distributions])
+    lowers = np.array([interval.lower for interval in intervals])
+    uppers = np.array([interval.upper for interval in intervals])
+
+    # CDF at upper and lower
+    if np.all(locations == locations[0]) and np.all(scales == scales[0]):
+        cdf_upper = norm.cdf(uppers, loc=locations[0], scale=scales[0])
+        cdf_lower = norm.cdf(lowers, loc=locations[0], scale=scales[0])
+    else:
+        cdf_upper = norm.cdf(uppers, loc=locations, scale=scales)
+        cdf_lower = norm.cdf(lowers, loc=locations, scale=scales)
+
+    probs = cdf_upper - cdf_lower
+    # Avoid log(0) for near-zero probs
+    probs = np.clip(probs, 1e-300, 1.0)
+    logps = np.log(probs)
+    return logps
+
 
 class UnivariateContinuousLeaf(UnivariateLeaf):
     distribution: Optional[ContinuousDistribution]
 
     @staticmethod
     def batch_log_conditional_of_simple_event_in_place(leaves, event: SimpleEvent):
-        # Gather intervals for each leaf from the event
         intervals = [event[leaf.variable] for leaf in leaves]
         distributions = [leaf.distribution for leaf in leaves]
-        # Try vectorizing if all distributions are same type and all intervals are singletons
-        is_singleton = all(interval.is_singleton() for interval in intervals)
-        if is_singleton:
-            # Batch all values
-            xs = np.array([interval.lower for interval in intervals]).reshape(-1, 1)
-            # Assume all distributions are same class; check
-            if len(set(type(d) for d in distributions)) == 1:
-                log_liks = distributions[0].log_likelihood(xs)
-                for leaf, ll in zip(leaves, log_liks):
-                    leaf.result_of_current_query = ll
-                return log_liks
-        # Fallback: loop for more complex cases
-        log_probs = []
-        for leaf, interval in zip(leaves, intervals):
-            # If the interval is composite, break into simple intervals
-            simple_intervals = getattr(interval, "simple_sets", [interval])
-            total_prob = 0.0
-            for si in simple_intervals:
-                _, ll = leaf.distribution.log_conditional_from_simple_interval(si)
-                total_prob += np.exp(ll)
-            # log-sum-exp trick for numerics
-            ll = np.log(total_prob) if total_prob > 0 else -np.inf
-            leaf.result_of_current_query = ll
-            log_probs.append(ll)
-        return np.array(log_probs)
+
+        # If all are Gaussians...
+        if all(type(d) is GaussianDistribution for d in distributions):
+            if all(interval.is_singleton() for interval in intervals):
+                logps = batch_log_likelihood_singletons(distributions, intervals)
+            elif all(hasattr(interval, "lower") and hasattr(interval, "upper") for interval in intervals):
+                logps = batch_log_probability_intervals(distributions, intervals)
+            else:
+                # fallback for composites
+                logps = []
+                for leaf, interval in zip(leaves, intervals):
+                    simple_intervals = getattr(interval, "simple_sets", [interval])
+                    total_prob = 0.0
+                    for si in simple_intervals:
+                        _, ll = leaf.distribution.log_conditional_from_simple_interval(si)
+                        total_prob += np.exp(ll)
+                    ll = np.log(total_prob) if total_prob > 0 else -np.inf
+                    logps.append(ll)
+                logps = np.array(logps)
+            for leaf, lp in zip(leaves, logps):
+                leaf.result_of_current_query = lp
+            return logps
+        else:
+            # fallback: mixed or non-Gaussian
+            logps = []
+            for leaf, interval in zip(leaves, intervals):
+                simple_intervals = getattr(interval, "simple_sets", [interval])
+                total_prob = 0.0
+                for si in simple_intervals:
+                    _, ll = leaf.distribution.log_conditional_from_simple_interval(si)
+                    total_prob += np.exp(ll)
+                ll = np.log(total_prob) if total_prob > 0 else -np.inf
+                leaf.result_of_current_query = ll
+                logps.append(ll)
+            return np.array(logps)
 
     def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
         return self.univariate_log_conditional_of_simple_event_in_place(event[self.variable])
