@@ -24,6 +24,37 @@ class UnivariateLeaf(LeafUnit):
 class UnivariateContinuousLeaf(UnivariateLeaf):
     distribution: Optional[ContinuousDistribution]
 
+    @staticmethod
+    def batch_log_conditional_of_simple_event_in_place(leaves, event: SimpleEvent):
+        # Gather intervals for each leaf from the event
+        intervals = [event[leaf.variable] for leaf in leaves]
+        distributions = [leaf.distribution for leaf in leaves]
+        # Try vectorizing if all distributions are same type and all intervals are singletons
+        is_singleton = all(interval.is_singleton() for interval in intervals)
+        if is_singleton:
+            # Batch all values
+            xs = np.array([interval.lower for interval in intervals]).reshape(-1, 1)
+            # Assume all distributions are same class; check
+            if len(set(type(d) for d in distributions)) == 1:
+                log_liks = distributions[0].log_likelihood(xs)
+                for leaf, ll in zip(leaves, log_liks):
+                    leaf.result_of_current_query = ll
+                return log_liks
+        # Fallback: loop for more complex cases
+        log_probs = []
+        for leaf, interval in zip(leaves, intervals):
+            # If the interval is composite, break into simple intervals
+            simple_intervals = getattr(interval, "simple_sets", [interval])
+            total_prob = 0.0
+            for si in simple_intervals:
+                _, ll = leaf.distribution.log_conditional_from_simple_interval(si)
+                total_prob += np.exp(ll)
+            # log-sum-exp trick for numerics
+            ll = np.log(total_prob) if total_prob > 0 else -np.inf
+            leaf.result_of_current_query = ll
+            log_probs.append(ll)
+        return np.array(log_probs)
+
     def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
         return self.univariate_log_conditional_of_simple_event_in_place(event[self.variable])
 

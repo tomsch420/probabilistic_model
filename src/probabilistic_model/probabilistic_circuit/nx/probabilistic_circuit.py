@@ -5,7 +5,7 @@ import math
 import queue
 import random
 from abc import abstractmethod
-from collections import deque
+from collections import deque, defaultdict
 from enum import IntEnum
 
 import networkx as nx
@@ -949,11 +949,32 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             circ = self.__copy__(pre)
             node_map = {orig: new for orig, new in zip(self._cached_nodes, circ.nodes)}
 
-            for orig_unit in self._cached_rev:
-                unit = node_map[orig_unit]
-                if unit.is_leaf:
-                    unit.log_conditional_of_simple_event_in_place(ev)
-                else:
+            # 1. Group units by topo layer (optional, for layer-wise batching)
+            units_by_layer = []  # each entry: list of units in that layer, in topo order
+            layer_map = {u: i for i, layer in enumerate(self.layers) for u in layer}
+            max_layer = max(layer_map.values())
+            for i in range(max_layer, -1, -1):  # reversed order
+                units_by_layer.append([u for u in self._cached_rev if layer_map.get(u, -1) == i])
+
+            for layer in units_by_layer:
+                leaves_by_type = defaultdict(list)
+                others = []
+                for orig_unit in layer:
+                    unit = node_map[orig_unit]
+                    if getattr(unit, "is_leaf", False):
+                        leaves_by_type[type(unit)].append(unit)
+                    else:
+                        others.append(unit)
+
+                # Batch process all leaves of each type
+                for leaf_type, leaves in leaves_by_type.items():
+                    if hasattr(leaf_type, "batch_log_conditional_of_simple_event_in_place"):
+                        leaf_type.batch_log_conditional_of_simple_event_in_place(leaves, ev)
+                    else:
+                        for leaf in leaves:
+                            leaf.log_conditional_of_simple_event_in_place(ev)
+                # Forward all non-leaf units
+                for unit in others:
                     unit.log_forward()
 
             root = circ.root
@@ -963,7 +984,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         # 4) merge as before…
         # (keep your existing mixing & normalize logic here)
-        return self, conditional_results[0][1]  # or your merge return
+        return self, conditional_results[0][1]
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
