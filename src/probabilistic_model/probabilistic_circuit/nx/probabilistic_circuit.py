@@ -929,52 +929,59 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return self, root.result_of_current_query
 
-    def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
-        # unchanged up to handling multiple simple_sets…
-
+    def log_conditional_in_place(self, event: Event) -> tuple:
+        """
+        Efficiently compute the conditional for an Event, batching as much as possible.
+        """
         simple_sets = event.simple_sets
         if len(simple_sets) == 1:
             return self.log_conditional_of_simple_event_in_place(simple_sets[0])
 
-        # 1) ensure structure is cached exactly once
+        # Cache structure (topo) if not present
         if not hasattr(self, "_cached_topo"):
             self.cache_structure()
-
-        # 2) prepare precomputed tuple
         pre = (self._cached_nodes, self._cached_unw, self._cached_w)
 
-        # 3) run per-event inference with cached reverse topo
-        conditional_results: List[Tuple[Self, float]] = []
+        # Reversed topo order for passes
+        rev_topo = self._cached_rev
+
+        conditional_results = []
         for ev in simple_sets:
             circ = self.__copy__(pre)
             node_map = {orig: new for orig, new in zip(self._cached_nodes, circ.nodes)}
 
-            # 1. Group units by topo layer (optional, for layer-wise batching)
-            units_by_layer = []  # each entry: list of units in that layer, in topo order
-            layer_map = {u: i for i, layer in enumerate(self.layers) for u in layer}
-            max_layer = max(layer_map.values())
-            for i in range(max_layer, -1, -1):  # reversed order
-                units_by_layer.append([u for u in self._cached_rev if layer_map.get(u, -1) == i])
+            # Build layer map ONCE for this circuit copy
+            # (Layer is index in BFS layers, as in self.layers)
+            layer_map = {}
+            for idx, layer in enumerate(circ.layers):
+                for node in layer:
+                    layer_map[node] = idx
+            max_layer = max(layer_map.values()) if layer_map else 0
+
+            # Group original nodes by layer for efficient batching (bottom-up)
+            # NOTE: Use node_map[orig] for correct new node
+            units_by_layer = []
+            for l in range(max_layer, -1, -1):
+                # Only nodes in rev_topo that are in this layer
+                units = [node_map[orig] for orig in rev_topo if layer_map.get(node_map[orig], -1) == l]
+                if units:
+                    units_by_layer.append(units)
 
             for layer in units_by_layer:
                 leaves_by_type = defaultdict(list)
-                others = []
-                for orig_unit in layer:
-                    unit = node_map[orig_unit]
+                nonleaves = []
+                for unit in layer:
                     if getattr(unit, "is_leaf", False):
                         leaves_by_type[type(unit)].append(unit)
                     else:
-                        others.append(unit)
-
-                # Batch process all leaves of each type
+                        nonleaves.append(unit)
                 for leaf_type, leaves in leaves_by_type.items():
                     if hasattr(leaf_type, "batch_log_conditional_of_simple_event_in_place"):
                         leaf_type.batch_log_conditional_of_simple_event_in_place(leaves, ev)
                     else:
                         for leaf in leaves:
                             leaf.log_conditional_of_simple_event_in_place(ev)
-                # Forward all non-leaf units
-                for unit in others:
+                for unit in nonleaves:
                     unit.log_forward()
 
             root = circ.root
@@ -982,9 +989,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             if logp > -np.inf:
                 conditional_results.append((circ, logp))
 
-        # 4) merge as before…
-        # (keep your existing mixing & normalize logic here)
-        return self, conditional_results[0][1]
+        if conditional_results:
+            return self, conditional_results[0][1]
+        else:
+            return None, -np.inf
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
@@ -1065,28 +1073,28 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     def __copy__(self, precomputed=None):
         """
-        Use precomputed = (nodes, unw, weighted) if provided,
-        else fall back to walking the graph.
+        Fast copy: only use precomputed = (nodes, unw, weighted) if provided,
+        else fallback to walking the graph.
         """
         if precomputed is None:
             nodes = list(self.nodes)
-            unw   = [(u, v) for u, v, attr in self.edges(data=True)
-                          if "log_weight" not in attr]
-            wgt   = [(u, v, attr["log_weight"]) for u, v, attr in self.edges(data=True)
-                          if "log_weight" in attr]
+            unw = [(u, v) for u, v, attr in self.edges(data=True)
+                   if "log_weight" not in attr]
+            wgt = [(u, v, attr["log_weight"]) for u, v, attr in self.edges(data=True)
+                   if "log_weight" in attr]
         else:
             nodes, unw, wgt = precomputed
 
+        # Use fast dict comprehension for copying nodes
         result = self.empty_copy()
         new_map = {n: n.__copy__() for n in nodes}
         result.add_nodes_from(new_map.values())
-
-        # add edges from the precomputed lists
-        for u, v in unw:
-            result.add_edge(new_map[u], new_map[v])
-        for u, v, lw in wgt:
-            result.add_edge(new_map[u], new_map[v], log_weight=lw)
-
+        # Add edges directly from precomputed lists
+        result.add_edges_from((new_map[u], new_map[v]) for u, v in unw)
+        result.add_weighted_edges_from(
+            ((new_map[u], new_map[v], lw) for u, v, lw in wgt),
+            weight="log_weight"
+        )
         return result
 
     def to_json(self) -> Dict[str, Any]:
