@@ -886,30 +886,28 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         from collections import deque
 
-        # 1) Trivial case: empty event
+        # 1) trivial empty‐event case
         if event.is_empty():
-            # remove all nodes
-            for node in list(self.nodes):
-                self.remove_node(node)
-            return None, -np.inf
+            ...
 
         simple_sets = event.simple_sets
-
-        # 2) Single‐simple‐event: delegate to in‐place version
+        # 2) single‐simple‐event
         if len(simple_sets) == 1:
             return self.log_conditional_of_simple_event_in_place(simple_sets[0])
 
-        # 3) Compute one topological ordering of THIS circuit once
-        nodes = list(self.nodes)
+        # 3) PRECOMPUTE once for all copies:
+        precomp_nodes = list(self.nodes)
+        precomp_unw = list(self.unweighted_edges)
+        precomp_logw = list(self.log_weighted_edges)
+        precomputed = (precomp_nodes, precomp_unw, precomp_logw)
+
+        # 4) build your topo_order / reverse_order exactly as before
+        nodes = precomp_nodes
         in_degree = {node: 0 for node in nodes}
         successors = {node: [] for node in nodes}
-
-        # build in‐degree & successor map
         for u, v in self.edges:
             successors[u].append(v)
             in_degree[v] += 1
-
-        # Kahn’s algorithm
         queue = deque(n for n in nodes if in_degree[n] == 0)
         topo_order = []
         while queue:
@@ -919,17 +917,15 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 in_degree[m] -= 1
                 if in_degree[m] == 0:
                     queue.append(m)
-
         reverse_order = list(reversed(topo_order))
 
-        # 4) Process each simple event on a fresh copy
+        # 5) now your event loop uses the fast __copy__(precomputed)
         conditional_results: List[Tuple[Self, float]] = []
         for ev in simple_sets:
-            circ = self.__copy__()
-            # map original→copy
-            node_map = {orig: new for orig, new in zip(nodes, circ.nodes)}
+            circ = self.__copy__(precomputed)
+            node_map = {orig: new for orig, new in zip(precomp_nodes, circ.nodes)}
 
-            # run the leaf‐then‐inner inference pass
+            # inference pass
             for orig_unit in reverse_order:
                 unit = node_map[orig_unit]
                 if unit.is_leaf:
@@ -1037,16 +1033,41 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         return self.__class__()
 
-    def __copy__(self):
+    def __copy__(self, precomputed=None):
+        """
+        Copy the circuit, reusing a precomputed (nodes, unweighted_edges, log_weighted_edges)
+        tuple if provided, to avoid recomputing them on every copy.
+        """
+        # 1) Grab or unpack the structure metadata
+        if precomputed is None:
+            nodes = list(self.nodes)
+            unweighted_edges = list(self.unweighted_edges)
+            log_weighted_edges = list(self.log_weighted_edges)
+        else:
+            nodes, unweighted_edges, log_weighted_edges = precomputed
+
+        # 2) Create the empty template
         result = self.empty_copy()
-        new_node_map = {node: node.__copy__() for node in self.nodes}
+
+        # 3) Clone nodes
+        new_node_map = {node: node.__copy__() for node in nodes}
         result.add_nodes_from(new_node_map.values())
-        new_unweighted_edges = [(new_node_map[source], new_node_map[target]) for source, target in
-                                self.unweighted_edges]
-        new_weighted_edges = [(new_node_map[source], new_node_map[target], log_weight) for source, target, log_weight in
-                              self.log_weighted_edges]
-        result.add_edges_from(new_unweighted_edges)
-        result.add_weighted_edges_from(new_weighted_edges, weight="log_weight")
+
+        # 4) Rebuild edges
+        #    a) unweighted
+        new_unw = [
+            (new_node_map[s], new_node_map[t])
+            for (s, t) in unweighted_edges
+        ]
+        result.add_edges_from(new_unw)
+
+        #    b) weighted
+        new_w = [
+            (new_node_map[s], new_node_map[t], w)
+            for (s, t, w) in log_weighted_edges
+        ]
+        result.add_weighted_edges_from(new_w, weight="log_weight")
+
         return result
 
     def to_json(self) -> Dict[str, Any]:
