@@ -960,54 +960,6 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return self, mixer.result_of_current_query
 
-    # def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
-    #     """
-    #     Construct the conditional circuit from an event.
-    #     The event is not required to be a disjoint union of simple events.
-    #
-    #     However, if it is not a disjoint union, the probability of the event is not correct,
-    #     but the conditional distribution is.
-    #
-    #     :param event: The event to condition on.
-    #     :return: The root of the conditional circuit.
-    #     """
-    #
-    #     # skip trivial case
-    #     if event.is_empty():
-    #         self.remove_nodes_from(list(self.nodes))
-    #         return None, -np.inf
-    #
-    #
-    #     # if the event is easy, don't create a proxy node
-    #     elif len(event.simple_sets) == 1:
-    #         result = self.log_conditional_of_simple_event_in_place(event.simple_sets[0])
-    #         return result
-    #
-    #     # create a conditional circuit for every simple event
-    #     conditional_circuits = [self.__copy__().log_conditional_of_simple_event_in_place(simple_event) for simple_event
-    #                             in event.simple_sets]
-    #
-    #     # clear this circuit
-    #     self.remove_nodes_from(list(self.nodes))
-    #
-    #     # filtered out impossible conditionals
-    #     conditional_circuits = [(conditional, log_probability) for conditional, log_probability in conditional_circuits
-    #                             if log_probability > -np.inf]
-    #
-    #     # if all conditionals are impossible
-    #     if len(conditional_circuits) == 0:
-    #         return None, -np.inf
-    #
-    #     # create a new sum unit
-    #     result = SumUnit(self)
-    #
-    #     # add the conditionals to the sum unit
-    #     [result.add_subcircuit(conditional.root, log_probability) for conditional, log_probability in
-    #      conditional_circuits]
-    #     result.log_forward()
-    #     result.normalize()
-    #     return self, result.result_of_current_query
-
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
         return result.log_conditional_in_place(event)
