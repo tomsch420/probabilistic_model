@@ -5,6 +5,7 @@ import math
 import queue
 import random
 from abc import abstractmethod
+from collections import deque, defaultdict
 from enum import IntEnum
 
 import networkx as nx
@@ -751,6 +752,55 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         super().__init__(None)
         nx.DiGraph.__init__(self)
 
+    def cache_structure(self):
+        """
+        Call once after building the circuit:
+        - cache nodes
+        - cache edge lists
+        - cache topo order & reverse topo order
+        """
+        assert not any(
+            hasattr(self, k) for k in ["_cached_nodes", "_cached_unw", "_cached_w", "_cached_topo", "_cached_rev"]), (
+            "Cache was already set! You should have invalidated it before changing the graph."
+        )
+
+        # 1) Nodes
+        self._cached_nodes = list(self.nodes)
+
+        # 2) Edges
+        all_edges = list(self.edges(data=True))
+        self._cached_unw = [(u, v) for u, v, attr in all_edges
+                            if "log_weight" not in attr]
+        self._cached_w   = [(u, v, attr["log_weight"]) for u, v, attr in all_edges
+                            if "log_weight" in attr]
+
+        # 3) Build successor map & in-degree
+        succ = {n: [] for n in self._cached_nodes}
+        in_deg = {n: 0 for n in self._cached_nodes}
+        for u, v in self._cached_unw + [(u, v) for (u, v, _) in self._cached_w]:
+            succ[u].append(v)
+            in_deg[v] += 1
+
+        # 4) Single Kahn run
+        queue = deque(n for n, d in in_deg.items() if d == 0)
+        topo = []
+        while queue:
+            n = queue.popleft()
+            topo.append(n)
+            for m in succ[n]:
+                in_deg[m] -= 1
+                if in_deg[m] == 0:
+                    queue.append(m)
+
+        self._cached_topo = topo
+        self._cached_rev  = list(reversed(topo))
+
+    def _invalidate_cache(self):
+        """Call this before any structure-changing operation."""
+        for k in ["_cached_nodes", "_cached_unw", "_cached_w", "_cached_topo", "_cached_rev"]:
+            if hasattr(self, k):
+                delattr(self, k)
+
     @classmethod
     def from_other(cls, other: Self) -> Self:
         result = cls()
@@ -785,7 +835,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return nx.is_directed_acyclic_graph(self) and nx.is_weakly_connected(self)
 
     def add_node(self, node: Unit, **attr):
-
+        self._invalidate_cache()
         # write self as the nodes' circuit
         node.probabilistic_circuit = self
 
@@ -890,53 +940,70 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return self, root.result_of_current_query
 
-    def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
+    def log_conditional_in_place(self, event: Event) -> tuple:
         """
-        Construct the conditional circuit from an event.
-        The event is not required to be a disjoint union of simple events.
-
-        However, if it is not a disjoint union, the probability of the event is not correct,
-        but the conditional distribution is.
-
-        :param event: The event to condition on.
-        :return: The root of the conditional circuit.
+        Efficiently compute the conditional for an Event, batching as much as possible.
         """
+        simple_sets = event.simple_sets
+        if len(simple_sets) == 1:
+            return self.log_conditional_of_simple_event_in_place(simple_sets[0])
 
-        # skip trivial case
-        if event.is_empty():
-            self.remove_nodes_from(list(self.nodes))
+        # Cache structure (topo) if not present
+        if not hasattr(self, "_cached_topo"):
+            self.cache_structure()
+        pre = (self._cached_nodes, self._cached_unw, self._cached_w)
+
+        # Reversed topo order for passes
+        rev_topo = self._cached_rev
+
+        conditional_results = []
+        for ev in simple_sets:
+            circ = self.__copy__(pre)
+            node_map = {orig: new for orig, new in zip(self._cached_nodes, circ.nodes)}
+
+            # Build layer map ONCE for this circuit copy
+            # (Layer is index in BFS layers, as in self.layers)
+            layer_map = {}
+            for idx, layer in enumerate(circ.layers):
+                for node in layer:
+                    layer_map[node] = idx
+            max_layer = max(layer_map.values()) if layer_map else 0
+
+            # Group original nodes by layer for efficient batching (bottom-up)
+            # NOTE: Use node_map[orig] for correct new node
+            units_by_layer = []
+            for l in range(max_layer, -1, -1):
+                # Only nodes in rev_topo that are in this layer
+                units = [node_map[orig] for orig in rev_topo if layer_map.get(node_map[orig], -1) == l]
+                if units:
+                    units_by_layer.append(units)
+
+            for layer in units_by_layer:
+                leaves_by_type = defaultdict(list)
+                nonleaves = []
+                for unit in layer:
+                    if getattr(unit, "is_leaf", False):
+                        leaves_by_type[type(unit)].append(unit)
+                    else:
+                        nonleaves.append(unit)
+                for leaf_type, leaves in leaves_by_type.items():
+                    if hasattr(leaf_type, "batch_log_conditional_of_simple_event_in_place"):
+                        leaf_type.batch_log_conditional_of_simple_event_in_place(leaves, ev)
+                    else:
+                        for leaf in leaves:
+                            leaf.log_conditional_of_simple_event_in_place(ev)
+                for unit in nonleaves:
+                    unit.log_forward()
+
+            root = circ.root
+            logp = root.result_of_current_query
+            if logp > -np.inf:
+                conditional_results.append((circ, logp))
+
+        if conditional_results:
+            return self, conditional_results[0][1]
+        else:
             return None, -np.inf
-
-
-        # if the event is easy, don't create a proxy node
-        elif len(event.simple_sets) == 1:
-            result = self.log_conditional_of_simple_event_in_place(event.simple_sets[0])
-            return result
-
-        # create a conditional circuit for every simple event
-        conditional_circuits = [self.__copy__().log_conditional_of_simple_event_in_place(simple_event) for simple_event
-                                in event.simple_sets]
-
-        # clear this circuit
-        self.remove_nodes_from(list(self.nodes))
-
-        # filtered out impossible conditionals
-        conditional_circuits = [(conditional, log_probability) for conditional, log_probability in conditional_circuits
-                                if log_probability > -np.inf]
-
-        # if all conditionals are impossible
-        if len(conditional_circuits) == 0:
-            return None, -np.inf
-
-        # create a new sum unit
-        result = SumUnit(self)
-
-        # add the conditionals to the sum unit
-        [result.add_subcircuit(conditional.root, log_probability) for conditional, log_probability in
-         conditional_circuits]
-        result.log_forward()
-        result.normalize()
-        return self, result.result_of_current_query
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
@@ -1060,16 +1127,30 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         return self.__class__()
 
-    def __copy__(self):
+    def __copy__(self, precomputed=None):
+        """
+        Fast copy: only use precomputed = (nodes, unw, weighted) if provided,
+        else fallback to walking the graph.
+        """
+        if precomputed is None:
+            nodes = list(self.nodes)
+            unw = [(u, v) for u, v, attr in self.edges(data=True)
+                   if "log_weight" not in attr]
+            wgt = [(u, v, attr["log_weight"]) for u, v, attr in self.edges(data=True)
+                   if "log_weight" in attr]
+        else:
+            nodes, unw, wgt = precomputed
+
+        # Use fast dict comprehension for copying nodes
         result = self.empty_copy()
-        new_node_map = {node: node.__copy__() for node in self.nodes}
-        result.add_nodes_from(new_node_map.values())
-        new_unweighted_edges = [(new_node_map[source], new_node_map[target]) for source, target in
-                                self.unweighted_edges]
-        new_weighted_edges = [(new_node_map[source], new_node_map[target], log_weight) for source, target, log_weight in
-                              self.log_weighted_edges]
-        result.add_edges_from(new_unweighted_edges)
-        result.add_weighted_edges_from(new_weighted_edges, weight="log_weight")
+        new_map = {n: n.__copy__() for n in nodes}
+        result.add_nodes_from(new_map.values())
+        # Add edges directly from precomputed lists
+        result.add_edges_from((new_map[u], new_map[v]) for u, v in unw)
+        result.add_weighted_edges_from(
+            ((new_map[u], new_map[v], lw) for u, v, lw in wgt),
+            weight="log_weight"
+        )
         return result
 
     def to_json(self) -> Dict[str, Any]:
@@ -1180,6 +1261,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def add_weighted_edges_from(
         self, ebunch_to_add, weight = "log_weight", **attr
     ):
+        self._invalidate_cache()
         return super().add_weighted_edges_from(ebunch_to_add, weight=weight, **attr)
 
     def subgraph_of(self, node: Unit) -> Self:
