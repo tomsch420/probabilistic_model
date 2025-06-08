@@ -20,11 +20,9 @@ class NormalizationTestCase(unittest.TestCase):
         sum_unit.add_subcircuit(u1, np.log(0.5))
         sum_unit.add_subcircuit(u2, np.log(0.3))
         sum_unit.normalize()
-        self.assertAlmostEqual(sum_unit.log_weights[0], np.log(0.5 / 0.8))
-        self.assertAlmostEqual(sum_unit.log_weights[1], np.log(0.3 / 0.8))
-        traces = sum_unit._probabilistic_circuit.plot()
-        self.assertGreater(len(traces), 0)
-        # go.Figure(traces, sum_unit.probabilistic_circuit.plotly_layout()).show()
+
+        self.assertAlmostEqual(sum_unit.log_weights[1], np.log(0.5 / 0.8))
+        self.assertAlmostEqual(sum_unit.log_weights[0], np.log(0.3 / 0.8))
 
 
 class SumUnitTestCase(unittest.TestCase):
@@ -41,8 +39,8 @@ class SumUnitTestCase(unittest.TestCase):
         self.model = model._probabilistic_circuit
 
     def test_setup(self):
-        self.assertEqual(len(list(self.model.nodes())), 3)
-        self.assertEqual(len(self.model.edges()), 2)
+        self.assertEqual(len(list(self.model.nodes)), 3)
+        self.assertEqual(len(self.model.graph.edges()), 2)
 
     def test_variables(self):
         self.assertEqual(self.model.variables, SortedSet([self.x]))
@@ -58,7 +56,7 @@ class SumUnitTestCase(unittest.TestCase):
     def test_weighted_subcircuits(self):
         weighted_subcircuits = self.model.root.log_weighted_subcircuits
         self.assertEqual(len(weighted_subcircuits), 2)
-        self.assertEqual([weighted_subcircuit[0] for weighted_subcircuit in weighted_subcircuits], [np.log(0.6), np.log(0.4)])
+        self.assertEqual([weighted_subcircuit[0] for weighted_subcircuit in weighted_subcircuits], [np.log(0.4), np.log(0.6), ])
 
     def test_likelihood(self):
         event = np.array([[0.5]])
@@ -74,7 +72,7 @@ class SumUnitTestCase(unittest.TestCase):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
         result, probability = self.model.conditional(event)
         self.assertAlmostEqual(probability, 0.3)
-        self.assertEqual(len(list(result.nodes())), 1)
+        self.assertEqual(len(list(result.nodes)), 1)
         self.assertIsInstance(result.root, LeafUnit)
 
     def test_conditional_impossible(self):

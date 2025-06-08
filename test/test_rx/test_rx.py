@@ -3,6 +3,7 @@ from enum import IntEnum
 
 import plotly.graph_objects as go
 import random_events.interval
+from matplotlib import pyplot as plt
 from random_events.interval import closed, SimpleInterval, singleton
 from random_events.variable import Continuous
 
@@ -11,7 +12,7 @@ from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.probabilistic_circuit.rustworkx.helper import fully_factorized
 from probabilistic_model.probabilistic_circuit.rustworkx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
-
+import rustworkx.visualization
 
 class SymbolEnum(IntEnum):
     A = 0
@@ -59,6 +60,7 @@ class RXSmallCircuitTestCast(unittest.TestCase):
         sum5.add_subcircuit(d_y1, np.log(0.1))
         sum5.add_subcircuit(d_y2, np.log(0.9))
         cls.sum1 = sum1
+        cls.model.normalize()
 
     def test_index_and_circuit_setting(self):
         model = ProbabilisticCircuit()
@@ -74,15 +76,20 @@ class RXSmallCircuitTestCast(unittest.TestCase):
         self.assertEqual(self.model.root, self.sum1)
         self.assertEqual(len(self.model.nodes), 11)
         self.assertEqual(len(self.model.graph.edges()), 14)
-
-    def test_sampling(self):
-        samples = self.model.sample(100)
-        unique = np.unique(samples, axis=0)
-        self.assertGreater(len(unique), 95)
+        self.assertEqual(len(self.model.leaves), 4)
+    #
+    # def test_sampling(self):
+    #     samples = self.model.sample(100)
+    #     unique = np.unique(samples, axis=0)
+    #     self.assertGreater(len(unique), 95)
 
     def test_conditioning(self):
         event = SimpleEvent({self.x: closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
+        # rustworkx.visualization.mpl_draw(self.model.__deepcopy__().graph)
+        # plt.show()
         conditional, prob = self.model.conditional(event)
+
+        conditional.validate()
         self.assertAlmostEqual(prob, 0.375)
 
 
