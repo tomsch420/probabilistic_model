@@ -748,6 +748,31 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     The outgoing edges of a sum unit contain the log-log_weights of the subcircuits.
     """
 
+    _cached_nodes: List[Unit]
+    """
+    Cached list of all nodes
+    """
+
+    _cached_unweighted_edges: List[Tuple[Unit, Unit]]
+    """
+    Cached list of unweighted edges
+    """
+
+    _cached_weighted_edges: List[Tuple[Unit, Unit, float]]
+    """
+    Cached list of weighted edges
+    """
+
+    _cached_topological_ordered_nodes: List[Unit]
+    """
+    Cached list of topological sorted units
+    """
+
+    _cached_reversed_topological_ordered_nodes: List[Tuple[Unit, Unit]]
+    """
+    Cached list of reverse topological sorted units
+    """
+
     def __init__(self):
         super().__init__(None)
         nx.DiGraph.__init__(self)
@@ -769,15 +794,15 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         # 2) Edges
         all_edges = list(self.edges(data=True))
-        self._cached_unw = [(u, v) for u, v, attr in all_edges
-                            if "log_weight" not in attr]
-        self._cached_w   = [(u, v, attr["log_weight"]) for u, v, attr in all_edges
-                            if "log_weight" in attr]
+        self._cached_unweighted_edges = [(u, v) for u, v, attr in all_edges
+                                         if "log_weight" not in attr]
+        self._cached_weighted_edges   = [(u, v, attr["log_weight"]) for u, v, attr in all_edges
+                                         if "log_weight" in attr]
 
         # 3) Build successor map & in-degree
         succ = {n: [] for n in self._cached_nodes}
         in_deg = {n: 0 for n in self._cached_nodes}
-        for u, v in self._cached_unw + [(u, v) for (u, v, _) in self._cached_w]:
+        for u, v in self._cached_unweighted_edges + [(u, v) for (u, v, _) in self._cached_weighted_edges]:
             succ[u].append(v)
             in_deg[v] += 1
 
@@ -792,8 +817,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                 if in_deg[m] == 0:
                     queue.append(m)
 
-        self._cached_topo = topo
-        self._cached_rev  = list(reversed(topo))
+        self._cached_topological_ordered_nodes = topo
+        self._cached_reversed_topological_ordered_nodes  = list(reversed(topo))
 
     def _invalidate_cache(self):
         """Call this before any structure-changing operation."""
@@ -940,7 +965,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return self, root.result_of_current_query
 
-    def log_conditional_in_place(self, event: Event) -> tuple:
+    def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
         """
         Efficiently compute the conditional for an Event, batching as much as possible.
         """
@@ -951,10 +976,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         # Cache structure (topo) if not present
         if not hasattr(self, "_cached_topo"):
             self.cache_structure()
-        pre = (self._cached_nodes, self._cached_unw, self._cached_w)
+        pre = (self._cached_nodes, self._cached_unweighted_edges, self._cached_weighted_edges)
 
         # Reversed topo order for passes
-        rev_topo = self._cached_rev
+        rev_topo = self._cached_reversed_topological_ordered_nodes
 
         conditional_results = []
         for ev in simple_sets:
