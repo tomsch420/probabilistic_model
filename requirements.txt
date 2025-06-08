@@ -1,5 +1,6 @@
 random-events>=4.1.2
 networkx
+rustworkx
 plotly
 scipy
 typing_extensions

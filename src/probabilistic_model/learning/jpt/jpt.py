@@ -435,7 +435,7 @@ class JPT(ProbabilisticCircuit):
             distribution = NygaDistribution.from_uniform_mixture(result)
 
         elif isinstance(variable, (Integer, Symbolic)):
-            distribution = UnivariateDiscreteLeaf.from_mixture(result).probabilistic_circuit
+            distribution = UnivariateDiscreteLeaf.from_mixture(result)._probabilistic_circuit
         else:
             raise NotImplementedError(f"Variable {variable} not supported.")
         return distribution
