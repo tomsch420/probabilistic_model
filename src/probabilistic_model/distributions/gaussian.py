@@ -91,10 +91,11 @@ class GaussianDistribution(ContinuousDistribution):
 
         return VariableMap({self.variable: moment})
 
-    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> (
-            Tuple)[TruncatedGaussianDistribution, float]:
+    def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Optional[TruncatedGaussianDistribution], float]:
         cdf_values = self.cdf(simple_interval_as_array(interval).reshape(-1, 1))
         probability = cdf_values[1] - cdf_values[0]
+        if probability <= 0.0:
+            return None, -np.inf
         return TruncatedGaussianDistribution(self.variable, interval, self.location, self.scale), np.log(probability)
 
     def __eq__(self, other: Self):

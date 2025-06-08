@@ -1,9 +1,10 @@
+import unittest
 import json
 import math
+import random
 import tempfile
-import unittest
 from datetime import datetime
-from enum import IntEnum
+from enum import IntEnum, Enum
 
 import numpy as np
 import pandas as pd
@@ -11,9 +12,9 @@ import sklearn.datasets
 from jpt import infer_from_dataframe as old_infer_from_dataframe
 from jpt.learning.impurity import Impurity
 from jpt.trees import JPT as OldJPT
+from matplotlib import pyplot as plt
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
-from random_events.set import SetElement
 from random_events.variable import Variable, Continuous
 
 from probabilistic_model.distributions import GaussianDistribution
@@ -21,19 +22,21 @@ from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import IntegerDistribution, \
-    SymbolicDistribution, UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
-    ProductUnit
+    ProductUnit, IntegerDistribution, \
+    SymbolicDistribution, UnivariateContinuousLeaf
 
 
-class SymbolEnum(IntEnum):
+class SymbolEnum(Enum):
     """
     A simple enum for testing purposes.
     """
     A = 0
     B = 1
     C = 2
+
+    def __hash__(self):
+        return hash(self.value)
 
 
 class VariableTestCase(unittest.TestCase):
@@ -71,13 +74,13 @@ class InferFromDataFrameTestCase(unittest.TestCase):
         data = pd.DataFrame()
         data["real"] = np.random.normal(2, 4, 100)
         data["integer"] = np.concatenate((np.random.randint(low=0, high=4, size=50), np.random.randint(7, 10, 50)))
-        data["symbol"] = np.random.randint(0, 4, 100).astype(str)
+        data["symbol"] = random.choices(list(SymbolEnum), k=100)
         cls.data = data
 
     def test_types(self):
         self.assertEqual(self.data.dtypes.iloc[0], float)
         self.assertEqual(self.data.dtypes.iloc[1], int)
-        self.assertEqual(self.data.dtypes.iloc[2], object)
+        self.assertEqual(self.data.dtypes.iloc[2], Enum)
 
     def test_infer_from_dataframe_with_scaling(self):
         real, integer, symbol = infer_variables_from_dataframe(self.data, scale_continuous_types=True)
@@ -108,9 +111,10 @@ class JPTTestCase(unittest.TestCase):
     def setUp(self):
         np.random.seed(69)
         data = pd.DataFrame()
-        data["integer"] = np.concatenate((np.random.randint(low=0, high=4, size=50), np.random.randint(7, 10, 50))).astype(int)
+        data["integer"] = np.concatenate(
+            (np.random.randint(low=0, high=4, size=50), np.random.randint(7, 10, 50))).astype(int)
         data["real"] = np.random.normal(2, 4, 100).astype(np.float32)
-        data["symbol"] = np.random.randint(0, 4, 100).astype(str)
+        data["symbol"] = random.choices(list(SymbolEnum), k=100)
         self.data = data
         self.real, self.integer, self.symbol = infer_variables_from_dataframe(self.data, scale_continuous_types=False)
         self.model = JPT([self.real, self.integer, self.symbol])
@@ -129,7 +133,7 @@ class JPTTestCase(unittest.TestCase):
         self.assertIsInstance(leaf_node.subcircuits[2].distribution, SymbolicDistribution)
 
         # check that all likelihoods are greater than 0
-        likelihood = leaf_node.probabilistic_circuit.likelihood(preprocessed_data)
+        likelihood = leaf_node.probabilistic_circuit.likelihood(self.data.to_numpy())
         self.assertTrue(all(likelihood > 0))
 
     def test_fit_without_sum_units(self):
@@ -193,7 +197,8 @@ class JPTTestCase(unittest.TestCase):
         variables = infer_variables_from_dataframe(data)
         model = JPT(variables)
         model.fit(data)
-        self.assertEqual(len(model.root.subcircuits), 4)
+        model.plot_structure()
+        self.assertEqual(len(model.root.subcircuits), 3)
 
     def test_variable_dependencies_to_json(self):
         serialized = self.model._variable_dependencies_to_json()
@@ -298,7 +303,7 @@ class MNISTTestCase(unittest.TestCase):
 
     def test_serialization(self):
         json_dict = self.model.to_json()
-        #print(json_dict)
+        # print(json_dict)
         model = JPT.from_json(json_dict)
         self.assertEqual(model, self.model)
 
@@ -313,11 +318,11 @@ class MNISTTestCase(unittest.TestCase):
         self.assertEqual(model, model_)
         file.close()
 
+
 import plotly.graph_objects as go
 
 
 class GaussianJPTTestCase(unittest.TestCase):
-
     x: Continuous
     y: Continuous
 

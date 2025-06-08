@@ -5,18 +5,15 @@ import dataclasses
 from typing import Optional, List, Deque, Tuple, Dict, Any
 
 import numpy as np
-import plotly.graph_objects as go
 import random_events
 from random_events.interval import closed, closed_open, SimpleInterval, Bound
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous, Variable
-from sortedcontainers import SortedSet
 from typing_extensions import Self
 
 from probabilistic_model.distributions import DiracDeltaDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit
-from ..constants import *
-from ..probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
+    UnivariateContinuousLeaf
 
 
 @dataclasses.dataclass
@@ -152,8 +149,8 @@ class InductionStep:
                                       Bound.CLOSED, Bound.CLOSED)
         else:
             interval = SimpleInterval(self.left_connecting_point_from_index(begin_index),
-                                        self.right_connecting_point_from_index(end_index),
-                                        Bound.CLOSED, Bound.OPEN)
+                                      self.right_connecting_point_from_index(end_index),
+                                      Bound.CLOSED, Bound.OPEN)
         return UniformDistribution(self.variable, interval)
 
     def sum_weights_from_indices(self, begin_index: int, end_index: int) -> float:
@@ -261,7 +258,7 @@ class InductionStep:
 
         # add the terms together
         log_likelihood = (number_of_samples * (
-                    log_weight_sum_of_split - log_weight_sum - log_density) + sum_of_log_weights_of_samples)
+                log_weight_sum_of_split - log_weight_sum - log_density) + sum_of_log_weights_of_samples)
 
         return log_likelihood
 
@@ -467,10 +464,12 @@ class NygaDistribution(ProbabilisticCircuit):
         all_mixture_points.sort()
         portion_list = []
         for i in range(1, len(all_mixture_points) - 1):
-            portion_list += random_events.product_algebra.SimpleInterval(all_mixture_points[i - 1], all_mixture_points[i])
+            portion_list += random_events.product_algebra.SimpleInterval(all_mixture_points[i - 1],
+                                                                         all_mixture_points[i])
         return all_mixture_points
 
-    def event_of_higher_density(self, other: Self, own_node_weights, other_node_weights) -> random_events.product_algebra.Event:
+    def event_of_higher_density(self, other: Self, own_node_weights,
+                                other_node_weights) -> random_events.product_algebra.Event:
 
         sum_own_weights = 0.
         sum_other_weights = 0.

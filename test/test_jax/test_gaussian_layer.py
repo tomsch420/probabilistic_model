@@ -1,16 +1,15 @@
 import unittest
 
+import jax.numpy as jnp
 from random_events.variable import Continuous
 
 from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer, GaussianDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import \
-    ProbabilisticCircuit as NXProbabilisticCircuit, SumUnit
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-import jax.numpy as jnp
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import \
+    SumUnit, UnivariateContinuousLeaf
+
 
 class GaussianLayerTestCase(unittest.TestCase):
-
     model: GaussianLayer
 
     @classmethod
@@ -42,6 +41,7 @@ class GaussianLayerTestCase(unittest.TestCase):
         self.assertEqual(gaussian_layer.variable, 0)
         self.assertTrue(jnp.allclose(gaussian_layer.location, jnp.array([0.0, 1.0])))
         self.assertTrue(jnp.allclose(gaussian_layer.scale, jnp.array([1.0, 1.01])))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,29 +1,29 @@
 import unittest
 
-import jax
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 import pandas as pd
 import tqdm
-from jax.tree_util import tree_flatten
 from jax.experimental.sparse import BCOO
+from jax.tree_util import tree_flatten
 from random_events.interval import closed
 from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Continuous
 
+from probabilistic_model.distributions import DiracDeltaDistribution
 from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
 from probabilistic_model.probabilistic_circuit.jax import SparseSumLayer, UniformLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.distributions import DiracDeltaDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.helper import uniform_measure_of_event, leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
                                                                                 ProbabilisticCircuit as NXProbabilisticCircuit)
 
 np.random.seed(69)
+
 
 class SmallCircuitIntegrationTestCase(unittest.TestCase):
     x = Continuous("x")
@@ -90,7 +90,6 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         self.assertEqual(number_of_parameters, 10)
 
 
-
 class JPTIntegrationTestCase(unittest.TestCase):
     number_of_variables = 2
     number_of_samples = 1000
@@ -127,18 +126,16 @@ class JPTIntegrationTestCase(unittest.TestCase):
 
 
 class LearningTestCase(unittest.TestCase):
-
     data = np.vstack((np.random.uniform(0, 1, (100, 1)),
                       np.random.uniform(2, 3, (200, 1))))
     uniform_layer = UniformLayer(0, jnp.array([[-0.01, 1.01],
-                                                       [1.99, 3.01]]))
+                                               [1.99, 3.01]]))
     sum_layer = SparseSumLayer([uniform_layer], [BCOO((jnp.array([0., 0.]),
                                                        jnp.array([[0, 0], [0, 1]])),
                                                       shape=(1, 2))])
     sum_layer.validate()
 
     def test_learning(self):
-
         @eqx.filter_jit
         def loss(model, x):
             ll = model.log_likelihood_of_nodes(x)
@@ -164,7 +161,6 @@ class LearningTestCase(unittest.TestCase):
 
 
 class NanGradientTestCase(unittest.TestCase):
-
     x: Continuous = Continuous("x")
     y: Continuous = Continuous("y")
 
@@ -174,10 +170,10 @@ class NanGradientTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        event1 = SimpleEvent({cls.x: closed(0, 1) |  closed(2, 3),
-                             cls.y: closed(0, 1) |  closed(2, 3)}).as_composite_set()
-        event2 = SimpleEvent({cls.x: closed(1, 2) |  closed(3, 4),
-                             cls.y: closed(1, 2) |  closed(3, 4)}).as_composite_set()
+        event1 = SimpleEvent({cls.x: closed(0, 1) | closed(2, 3),
+                              cls.y: closed(0, 1) | closed(2, 3)}).as_composite_set()
+        event2 = SimpleEvent({cls.x: closed(1, 2) | closed(3, 4),
+                              cls.y: closed(1, 2) | closed(3, 4)}).as_composite_set()
         cls.event = event1 | event2
         cls.nx_model = uniform_measure_of_event(cls.event)
         cls.jax_model = ProbabilisticCircuit.from_nx(cls.nx_model)
@@ -199,7 +195,6 @@ class NanGradientTestCase(unittest.TestCase):
 
         grads_of_sum_layer = eqx.filter(tree_flatten(grads), eqx.is_inexact_array)[0][0]
         self.assertFalse(jnp.all(jnp.isfinite(grads_of_sum_layer)))
-
 
 
 if __name__ == '__main__':

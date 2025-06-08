@@ -6,8 +6,6 @@ from random_events.variable import Continuous
 from typing_extensions import Union
 
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-from probabilistic_model.probabilistic_circuit.nx.helper import leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 import plotly.graph_objects as go
 

@@ -106,7 +106,6 @@ class ContinuousDistribution(UnivariateDistribution):
         return (upper_bound_cdf - lower_bound_cdf).sum()
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        event = event & self.support
         if event.is_empty():
             return None, -np.inf
 
@@ -118,35 +117,20 @@ class ContinuousDistribution(UnivariateDistribution):
         else:
             return self.log_conditional_from_interval(interval)
 
-    def log_conditional_from_singleton(self, interval: SimpleInterval) -> Tuple[DiracDeltaDistribution, float]:
-        """
-        Calculate the conditional distribution given a singleton event with p(event) > 0.
+    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
+        value = point[self.variable]
+        log_pdf_value = self.log_likelihood(np.array([[value]]))[0]
 
-        In this case, the conditional distribution is a Dirac delta distribution and the log-likelihood is chosen
-        for the log-probability.
+        if log_pdf_value == -np.inf:
+            return None, -np.inf
 
-        :param interval: The singleton event
-        :return: The conditional distribution and the log-probability of the event.
-        """
-        log_pdf_value = self.log_likelihood(np.array([[interval.lower]]))[0]
-        return DiracDeltaDistribution(self.variable, interval.lower, np.exp(log_pdf_value)), log_pdf_value
+        return DiracDeltaDistribution(self.variable, value, np.exp(log_pdf_value)), log_pdf_value
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
         """
-        Calculate the conditional distribution given a simple interval with p(interval) > 0.
-        The interval could also be a singleton.
+        Calculate the conditional distribution given a simple interval.
 
         :param interval: The simple interval
-        :return: The conditional distribution and the log-probability of the interval.
-        """
-        if interval.is_singleton():
-            return self.log_conditional_from_singleton(interval)
-        return self.log_conditional_from_non_singleton_simple_interval(interval)
-
-    def log_conditional_from_non_singleton_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
-        """
-        Calculate the conditional distribution given a non-singleton, simple interval with p(interval) > 0.
-        :param interval: The simple interval.
         :return: The conditional distribution and the log-probability of the interval.
         """
         raise NotImplementedError
@@ -234,6 +218,7 @@ class ContinuousDistributionWithFiniteSupport(ContinuousDistribution):
                                       self.interval.left, self.interval.right)
         self.interval = new_interval
 
+
 class DiscreteDistribution(UnivariateDistribution):
     """
     Abstract base class for univariate discrete distributions.
@@ -264,9 +249,11 @@ class DiscreteDistribution(UnivariateDistribution):
 
     def log_likelihood(self, events: np.array) -> np.array:
         events = events[:, 0]
+
+        events = np.array([hash(e) for e in events])
         result = np.full(len(events), -np.inf)
         for x, p in self.probabilities.items():
-            result[events == x] = np.log(p)
+            result[events == hash(x)] = np.log(p)
         return result
 
     def fit(self, data: np.array) -> Self:
@@ -329,6 +316,9 @@ class DiscreteDistribution(UnivariateDistribution):
         # construct event
         condition = self.composite_set_from_event(event)
         return self.log_conditional_of_composite_set(condition)
+
+    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+        return self.log_conditional(SimpleEvent({self.variable: point}).as_composite_set())
 
     def log_conditional_of_composite_set(self, event: AbstractCompositeSet) -> Tuple[Optional[Self], float]:
         # calculate new probabilities
@@ -419,10 +409,34 @@ class SymbolicDistribution(DiscreteDistribution):
         unique, counts = np.unique(data, return_counts=True)
         probabilities = MissingDict(float)
         for value, count in zip(unique, counts):
-            set_element = [element for element in self.variable.domain.simple_sets if element.element == value][0]
+            set_element = [element for element in self.variable.domain.simple_sets if element == value][0]
             probabilities[hash(set_element)] = count / len(data)
         self.probabilities = probabilities
         return self
+
+    def fit_from_indices(self, data: np.array) -> Self:
+        unique, counts = np.unique(data, return_counts=True)
+        probabilities = MissingDict(float)
+        for value, count in zip(unique, counts):
+            set_element = self.variable.domain.simple_sets[value]
+            probabilities[hash(set_element)] = count / len(data)
+        self.probabilities = probabilities
+        return self
+
+    def to_json(self) -> Dict[str, Any]:
+        hashes = list(self.variable.domain.hash_map.keys())
+        probabilities = {hashes.index(h): p for h, p in self.probabilities.items()}
+        result = super().to_json()
+        result["probabilities"] = list(probabilities.items())
+        return result
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        variable = Variable.from_json(data["variable"])
+        probabilities = MissingDict(float)
+        for key, value in data["probabilities"]:
+            probabilities[hash(variable.domain.simple_sets[key])] = value
+        return cls(variable, probabilities)
 
 
 class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
@@ -505,6 +519,7 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
             new_probabilities[key * scaling[self.variable]] = value
         self.probabilities = new_probabilities
 
+
 class DiracDeltaDistribution(ContinuousDistribution):
     """
     Class for Dirac delta distributions.
@@ -527,6 +542,10 @@ class DiracDeltaDistribution(ContinuousDistribution):
     """
 
     tolerance: float = 1e-6
+    """
+    The tolerance of deviations of the `location` of the Dirac delta distribution.
+    This is used during calculations to take precision problems into account.
+    """
 
     def __init__(self, variable: Continuous, location: float, density_cap: float = np.inf, tolerance: float = 1e-6):
         super().__init__()
@@ -545,7 +564,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     def cdf(self, x: np.array) -> np.array:
         result = np.zeros((len(x),))
-        result[x[:, 0] >= self.location] = 1.
+        result[x[:, 0] >= self.location - self.tolerance] = 1.
         return result
 
     @property
@@ -556,9 +575,17 @@ class DiracDeltaDistribution(ContinuousDistribution):
     def univariate_support(self) -> Interval:
         return singleton(self.location)
 
+    def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
+        if interval.contains(self.location):
+            return self, 0.
+        else:
+            return None, -np.inf
+
     def probability_of_simple_event(self, event: SimpleEvent) -> float:
         interval: Interval = event[self.variable]
-        return 1. if self.location in interval else 0.
+
+        return 0. if (closed(self.location - self.tolerance, self.location + self.tolerance) & interval).is_empty() \
+            else 1.
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         return self.univariate_support, np.log(self.density_cap)

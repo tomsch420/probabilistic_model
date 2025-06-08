@@ -1,7 +1,6 @@
 from typing import List, Dict, Any, Optional
 
 import jax
-import numpy as np
 import random_events
 import tqdm
 from jax import numpy as jnp
@@ -13,8 +12,7 @@ from typing_extensions import Type, Tuple, Self
 from .inner_layer import NXConverterLayer
 from .input_layer import ContinuousLayerWithFiniteSupport
 from .utils import simple_interval_to_open_array
-from ..nx.distributions import UnivariateContinuousLeaf
-from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit
+from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateContinuousLeaf
 from ...distributions import UniformDistribution
 
 

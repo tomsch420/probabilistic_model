@@ -5,8 +5,7 @@ from matplotlib import pyplot as plt
 from random_events.interval import *
 from random_events.variable import Integer, Continuous
 
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf, UnivariateDiscreteLeaf
-from probabilistic_model.probabilistic_circuit.nx.helper import leaf
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import leaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import LeafUnit
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.distributions.distributions import SymbolicDistribution, IntegerDistribution, \
@@ -39,6 +38,10 @@ class ContinuousDistributionTestCase(unittest.TestCase):
     def test_conditional_from_singleton_event(self):
         event = SimpleEvent({self.variable: singleton(0.3)}).as_composite_set()
         conditional, probability = self.leaf.probabilistic_circuit.conditional(event)
+        self.assertIsNone(conditional)
+
+        conditional, probability = self.leaf.probabilistic_circuit.conditional_of_point({self.variable: 0.3})
+
         self.assertEqual(len(conditional.nodes), 1)
         self.assertEqual(probability, 1.)
         self.assertAlmostEqual(conditional.root.distribution.location, 0.3)
@@ -48,8 +51,8 @@ class ContinuousDistributionTestCase(unittest.TestCase):
         event = SimpleEvent({self.variable: interval})
         conditional, probability = self.leaf.probabilistic_circuit.conditional(event.as_composite_set())
 
-        self.assertEqual(len(list(conditional.nodes)), 4)
-        self.assertEqual(len(list(conditional.edges)), 3)
+        self.assertEqual(len(list(conditional.nodes)), 3)
+        self.assertEqual(len(list(conditional.edges)), 2)
         self.assertIsInstance(conditional.root, SumUnit)
 
     def test_conditional_with_none(self):

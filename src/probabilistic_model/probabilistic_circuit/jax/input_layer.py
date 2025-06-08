@@ -5,20 +5,14 @@ from typing import List, Dict, Any
 
 import equinox as eqx
 import jax
-import numpy as np
 import tqdm
 from jax import numpy as jnp
-from jax.experimental.sparse import BCOO
-from random_events.interval import Interval, SimpleInterval
-from random_events.product_algebra import SimpleEvent
 from random_events.variable import Variable
 from sortedcontainers import SortedSet
-from typing_extensions import Tuple, Type, Self, Union, Optional
+from typing_extensions import Tuple, Type, Self, Optional
 
-from .inner_layer import InputLayer, NXConverterLayer, SparseSumLayer
-from .utils import simple_interval_to_open_array, remove_rows_and_cols_where_all
-from ..nx.distributions import UnivariateContinuousLeaf
-from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit
+from .inner_layer import InputLayer, NXConverterLayer
+from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateContinuousLeaf
 from ...distributions import DiracDeltaDistribution
 
 
@@ -26,6 +20,7 @@ class ContinuousLayer(InputLayer, ABC):
     """
     Abstract base class for continuous univariate input units.
     """
+
 
 class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
     """
@@ -133,7 +128,6 @@ class DiracDeltaLayer(ContinuousLayer):
         result = cls(nodes[0].probabilistic_circuit.variables.index(nodes[0].variable), locations, density_caps)
         return NXConverterLayer(result, nodes, hash_remap)
 
-
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
         result["location"] = self.location.tolist()
@@ -147,7 +141,6 @@ class DiracDeltaLayer(ContinuousLayer):
     def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
               progress_bar: Optional[tqdm.tqdm] = None) -> List[
         Unit]:
-
         variable = variables[self.variable]
 
         if progress_bar:

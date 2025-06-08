@@ -11,8 +11,7 @@ from ...distributions import GaussianDistribution
 from ...probabilistic_circuit.jax import SparseSumLayer, ProductLayer, DenseSumLayer
 from ...probabilistic_circuit.jax.discrete_layer import DiscreteLayer
 from ...probabilistic_circuit.jax.gaussian_layer import GaussianLayer
-from ...probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit, ProductUnit
-from ...probabilistic_circuit.nx.distributions.distributions import UnivariateContinuousLeaf
+from ...probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit, ProductUnit, UnivariateContinuousLeaf
 from ...probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit as JPC, ClassificationCircuit
 import jax.numpy as jnp
 import jax.random

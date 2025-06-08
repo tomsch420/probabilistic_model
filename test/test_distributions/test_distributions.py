@@ -131,8 +131,8 @@ class SymbolicDistributionTestCase(unittest.TestCase):
                                       SetElement(TestEnum.B, self.x.domain.simple_sets[0].all_elements)))
 
     def test_fit(self):
-        data = [0, 1, 1, 1]
-        self.model.fit(data)
+        data = [TestEnum.A, TestEnum.B, TestEnum.B, TestEnum.B]
+        self.model.fit_from_indices(data)
 
         e_1 = SimpleEvent({self.x: TestEnum.A}).as_composite_set()
         self.assertEqual(self.model.probability(e_1), 1 / 4)
@@ -169,14 +169,14 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
         self.assertEqual(self.model.probability(event), 1)
 
     def test_probability_0(self):
-        event = SimpleEvent({self.x: open_closed(0, 1)}).as_composite_set()
+        event = SimpleEvent({self.x: open_closed(0 + self.model.tolerance, 1)}).as_composite_set()
         self.assertEqual(self.model.probability(event), 0.)
 
     def test_conditional(self):
         event = SimpleEvent({self.model.variable: closed(-1, 2)}).as_composite_set()
         conditional, probability = self.model.conditional(event)
         self.assertEqual(conditional, self.model)
-        self.assertEqual(probability, 2)
+        self.assertEqual(probability, 1)
 
     def test_conditional_impossible(self):
         event = SimpleEvent({self.model.variable: closed(1, 2)}).as_composite_set()

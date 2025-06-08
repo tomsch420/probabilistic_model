@@ -9,9 +9,7 @@ from random_events.variable import Variable
 from typing_extensions import List
 
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProductUnit, \
-    ProbabilisticCircuit
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProductUnit, leaf
 
 class DrawIOExporterTestCase(unittest.TestCase):
     variables: List[Variable]
@@ -29,10 +27,10 @@ class DrawIOExporterTestCase(unittest.TestCase):
     prod2.add_subcircuit(sum3)
     prod2.add_subcircuit(sum5)
 
-    d_x1 = UnivariateContinuousLeaf(UniformDistribution(x, SimpleInterval(0, 1)))
-    d_x2 = UnivariateContinuousLeaf(UniformDistribution(x, SimpleInterval(2, 3)))
-    d_y1 = UnivariateContinuousLeaf(UniformDistribution(y, SimpleInterval(0, 1)))
-    d_y2 = UnivariateContinuousLeaf(UniformDistribution(y, SimpleInterval(3, 4)))
+    d_x1 = leaf(UniformDistribution(x, SimpleInterval(0, 1)))
+    d_x2 = leaf(UniformDistribution(x, SimpleInterval(2, 3)))
+    d_y1 = leaf(UniformDistribution(y, SimpleInterval(0, 1)))
+    d_y2 = leaf(UniformDistribution(y, SimpleInterval(3, 4)))
 
     sum2.add_subcircuit(d_x1, 0.8)
     sum2.add_subcircuit(d_x2, 0.2)

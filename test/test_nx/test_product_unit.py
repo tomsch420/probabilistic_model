@@ -3,7 +3,6 @@ import unittest
 from random_events.interval import closed, open, closed_open
 from random_events.variable import Integer, Continuous
 
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.distributions.uniform import UniformDistribution
 

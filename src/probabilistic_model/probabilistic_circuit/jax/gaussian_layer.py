@@ -10,8 +10,7 @@ from typing_extensions import Type, Tuple, Self
 
 from .inner_layer import NXConverterLayer
 from .input_layer import ContinuousLayer
-from ..nx.distributions import UnivariateContinuousLeaf
-from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit
+from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateContinuousLeaf
 from ...distributions import GaussianDistribution
 
 

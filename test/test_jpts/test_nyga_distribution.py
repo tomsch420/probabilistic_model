@@ -4,15 +4,14 @@ import numpy as np
 import plotly.graph_objects as go
 from numpy import testing
 from random_events.interval import closed, closed_open
+from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Continuous
 from scipy.special import logsumexp
 
-from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
 from probabilistic_model.distributions import UniformDistribution, DiracDeltaDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-from probabilistic_model.probabilistic_circuit.nx.helper import leaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, SumUnit
-from random_events.utils import SubclassJSONSerializer
+from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, \
+    UnivariateContinuousLeaf, leaf
 
 
 class InductionStepTestCase(unittest.TestCase):
@@ -151,7 +150,6 @@ class InductionStepTestCase(unittest.TestCase):
         self.assertAlmostEqual(domain.simple_sets[0][self.variable].simple_sets[0].lower, lowest, delta=10e-5)
         self.assertAlmostEqual(domain.simple_sets[0][self.variable].simple_sets[-1].upper, highest, delta=10e-5)
 
-
     def test_plot(self):
         np.random.seed(69)
         data = np.random.normal(0, 1, 100)
@@ -223,7 +221,7 @@ class FittedNygaDistributionTestCase(unittest.TestCase):
 
     def test_likelihood(self):
         likelihood = self.model.log_likelihood(self.data.reshape(-1, 1))
-        self.assertEqual(likelihood.shape, (1000, ))
+        self.assertEqual(likelihood.shape, (1000,))
         self.assertGreater(likelihood.min(), -np.inf)
 
 
