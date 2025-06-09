@@ -72,26 +72,37 @@ class RXSmallCircuitTestCast(unittest.TestCase):
         s1.add_subcircuit(d_x1, mount=True)
         self.assertEqual(d_x1.index, 1)
 
+    def test_remove_nodes_from(self):
+        model = ProbabilisticCircuit()
+        s1 = SumUnit(model)
+        d_x1 = leaf(DiracDeltaDistribution(self.x, 0, 1))
+        s1.add_subcircuit(d_x1, mount=True)
+        model.remove_unreachable_nodes(s1)
+        self.assertEqual(len(model.nodes), 2)
+
     def test_created_structure(self):
         self.assertEqual(self.model.root, self.sum1)
         self.assertEqual(len(self.model.nodes), 11)
         self.assertEqual(len(self.model.graph.edges()), 14)
         self.assertEqual(len(self.model.leaves), 4)
-    #
+
     # def test_sampling(self):
     #     samples = self.model.sample(100)
     #     unique = np.unique(samples, axis=0)
-    #     self.assertGreater(len(unique), 95)
+    #     self.assertEqual(len(unique), 4)
 
     def test_conditioning(self):
         event = SimpleEvent({self.x: closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
-        # rustworkx.visualization.mpl_draw(self.model.__deepcopy__().graph)
-        # plt.show()
-        conditional, prob = self.model.conditional(event)
-
+        event.fill_missing_variables(self.model.variables)
+        conditional, prob = self.model.log_conditional(event)
         conditional.validate()
-        self.assertAlmostEqual(prob, 0.375)
+        self.assertAlmostEqual(prob, np.log(0.375))
 
+    def test_conditioning2(self):
+        event = SimpleEvent({self.x: closed(0, 0.25) | closed(0.5, 0.75),
+                             self.y: closed(2.5, 3.5)}).as_composite_set()
+        conditional, prob = self.model.log_conditional(~event)
+        conditional.validate()
 
 
 if __name__ == '__main__':

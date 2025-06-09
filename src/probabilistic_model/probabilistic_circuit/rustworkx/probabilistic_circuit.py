@@ -22,11 +22,11 @@ from typing_extensions import List, Optional, Any, Self, Dict, Tuple
 from ...distributions import UnivariateDistribution, DiscreteDistribution, ContinuousDistribution, IntegerDistribution, \
     SymbolicDistribution
 from ...error import IntractableError
-from ...probabilistic_model import ProbabilisticModel
+from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ...utils import MissingDict
 
 
-class Unit(SubclassJSONSerializer):
+class Unit:
     """
     Class for all units of a probabilistic circuit.
 
@@ -107,6 +107,21 @@ class Unit(SubclassJSONSerializer):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def moment(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def sample(self, *args, **kwargs):
+        """
+        Draw samples from the circuit.
+
+        For sampling, a node gets requested a number of samples from all his parents.
+        The parents write into the `result_of_current_query` attribute a tuple describing the beginning index of the
+        sampling and how many samples are requested.
+        """
+        raise NotImplementedError
+
+
     @property
     def probabilistic_circuit(self) -> ProbabilisticCircuit:
         return self._probabilistic_circuit
@@ -120,8 +135,8 @@ class Unit(SubclassJSONSerializer):
         descendants = rx.descendants(other.probabilistic_circuit.graph, other.index)
         descendants = list(descendants.union([other.index]))
         subgraph = other.probabilistic_circuit.graph.subgraph(descendants, preserve_attrs=True)
-
-        self.probabilistic_circuit.add_edges_from(subgraph.edges())
+        edges = [(subgraph.get_node_data(p), subgraph.get_node_data(c), lw) for (p, c), lw in zip(subgraph.edge_list(), subgraph.edges())]
+        self.probabilistic_circuit.add_edges_from(edges)
 
     def connect_incoming_edges_to(self, other: Unit):
         """
@@ -221,21 +236,14 @@ class LeafUnit(Unit):
     def log_mode(self):
         self.result_of_current_query = self.distribution.log_mode()
 
-    def to_json(self):
-        result = super().to_json()
-        result["distribution"] = self.distribution.to_json()
-        return result
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
-        distribution = SubclassJSONSerializer.from_json(data["distribution"])
-        return cls(distribution)
-
     def log_conditional_of_point_in_place(self, point: Dict[Variable, Any]):
         if any(variable for variable in self.variables if variable in point):
             self.distribution, self.result_of_current_query = self.distribution.log_conditional_of_point(point)
         else:
             self.result_of_current_query = 0.
+
+    def __repr__(self):
+        return f"leaf({repr(self.distribution)})"
 
 
 class InnerUnit(Unit):
@@ -489,32 +497,14 @@ class SumUnit(InnerUnit):
         if len(self.subcircuits) == 1:
 
             # redirect every incoming edge to the child
-            incoming_edges = list(self.probabilistic_circuit.in_edges(self, data=True))
+            incoming_edges = list(self.probabilistic_circuit.graph.in_edges(self.index))
             for parent, _, data in incoming_edges:
-                self.probabilistic_circuit.add_edge(parent, self.subcircuits[0], **data)
+                self.probabilistic_circuit.graph.add_edge(parent, self.subcircuits[0].index, data)
 
             # remove this node
             self.probabilistic_circuit.remove_node(self)
 
             return
-
-        # Check if all subcircuits are LeafUnits with the same distribution
-        all_leaf_units = all(isinstance(subcircuit, LeafUnit) for subcircuit in self.subcircuits)
-        if all_leaf_units and len(self.subcircuits) > 0:
-            # Get the distribution of the first subcircuit
-            first_distribution = self.subcircuits[0].distribution
-            # Check if all subcircuits have the same distribution
-            same_distribution = all(subcircuit.distribution == first_distribution for subcircuit in self.subcircuits[1:])
-            if same_distribution:
-                # Create a new LeafUnit with the same distribution
-                leaf_unit = LeafUnit(first_distribution, self.probabilistic_circuit)
-                # Redirect all incoming edges to the new LeafUnit
-                incoming_edges = list(self.probabilistic_circuit.in_edges(self, data=True))
-                for parent, _, data in incoming_edges:
-                    self.probabilistic_circuit.add_edge(parent, leaf_unit, **data)
-                # Remove this node
-                self.probabilistic_circuit.remove_node(self)
-                return
 
         # for every subcircuit
         for log_weight, subcircuit in self.log_weighted_subcircuits:
@@ -532,7 +522,7 @@ class SumUnit(InnerUnit):
 
                 # mount the children of that circuit directly
                 for sub_weight, sub_subcircuit in subcircuit.log_weighted_subcircuits:
-                    new_weight = sub_weight + weight
+                    new_weight = sub_weight + log_weight
 
                     # add an edge to that subcircuit
                     self.add_subcircuit(sub_subcircuit, new_weight, mount=False)
@@ -585,6 +575,8 @@ class SumUnit(InnerUnit):
             result[likelihood > -np.inf] = index
         return result
 
+    def __repr__(self):
+        return "+"
 
 class ProductUnit(InnerUnit):
     """
@@ -669,7 +661,7 @@ class ProductUnit(InnerUnit):
                 subcircuit.result_of_current_query.append([start_index, amount])
 
 
-class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
+class ProbabilisticCircuit(ProbabilisticModel):
     """
     Probabilistic Circuits as a directed, rooted, acyclic graph.
     """
@@ -683,13 +675,36 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         super().__init__()
         self.graph = rx.PyDAG(multigraph=False)
 
+    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+        pass
+
+    def sample(self, amount: int) -> np.array:
+
+        # initialize all results
+        for node in self.nodes:
+            node.result_of_current_query = []
+
+        variable_to_index_map = self.variable_to_index_map
+
+        # initialize the sample arguments
+        self.root.result_of_current_query.append((0, amount))
+
+        # initialize the samples
+        samples = np.full((amount, len(variable_to_index_map)), np.nan)
+
+        # forward through the circuit to sample
+        [node.sample(samples, variable_to_index_map) for layer in self.layers for node in layer]
+
+        return samples
+
+
+
     def validate(self):
         assert rx.is_directed_acyclic_graph(self.graph)
         for unit in self.nodes:
             if unit.is_leaf:
                 continue
             elif isinstance(unit, SumUnit):
-                print(unit.log_weights, logsumexp(unit.log_weights))
                 assert np.isclose(logsumexp(unit.log_weights), 0.)
             elif isinstance(unit, ProductUnit):
                 edge_data = [self.graph.get_edge_data(unit.index, ss.index) for ss in unit.subcircuits]
@@ -737,18 +752,8 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         for elem in edges:
             self.add_edge(*elem)
 
-    def add_unweighted_edges_from(self, edges: Iterable[Tuple[Unit, Unit]]):
-        for parent, child in edges:
-            self.add_edge(parent, child)
-
-    def add_weighted_edges_from(self, edges: Iterable[Tuple[Unit, Unit, float]]):
-        for parent, child, log_weight in edges:
-            self.add_edge(parent, child, log_weight)
-
     def remove_edge(self, parent: Unit, child: Unit):
         self.graph.remove_edge(parent.index, child.index)
-        self.remove_node(parent)
-        self.remove_node(child)
 
     def remove_node(self, node: Unit):
         self.graph.remove_node(node.index)
@@ -762,6 +767,11 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
     @property
     def nodes(self) -> List[Unit]:
         return self.graph.nodes()
+
+    @property
+    def edges(self) -> List[Tuple[Unit, Unit, Optional[float]]]:
+        return [(self.graph.get_node_data(p), self.graph.get_node_data(c), lw) for (p, c), lw
+                in zip(self.graph.edge_list(), self.graph.edges())]
 
     @property
     def root(self) -> Unit:
@@ -788,6 +798,12 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
     @property
     def layers(self) -> List[List[Unit]]:
         return rx.layers(self.graph, [self.root.index])
+
+    def moment(self, order: OrderType, center: CenterType) -> MomentType:
+        variable_to_index_map = self.variable_to_index_map
+        [node.moment(order, center, variable_to_index_map) for layer in reversed(self.layers) for node in layer]
+        return MomentType({variable: moment for variable, moment in
+                           zip(variable_to_index_map.keys(), self.root.result_of_current_query)})
 
     def log_likelihood(self, events: np.array) -> np.array:
         variable_to_index_map = self.variable_to_index_map
@@ -836,7 +852,8 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         Remove all nodes that are not reachable from the root.
         """
         reachable_nodes = rx.descendants(self.graph, root.index)
-        unreachable_nodes = set(self.nodes) - (reachable_nodes | {root})
+        reachable_nodes = set([self.graph.get_node_data(index) for index in reachable_nodes])
+        unreachable_nodes = set(self.graph.nodes()) - (reachable_nodes | {root})
         self.remove_nodes_from(unreachable_nodes)
 
     def log_conditional_of_simple_event_in_place(self, simple_event: SimpleEvent) -> Tuple[Optional[Self], float]:
@@ -854,6 +871,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
                 else:
                     unit: InnerUnit
                     unit.log_forward()
+
 
         root = self.root
         [self.remove_node(node) for node in self.nodes if node.result_of_current_query == -np.inf]
@@ -876,153 +894,45 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         Efficiently compute the conditional for an Event, batching as much as possible.
         """
-        simple_sets = event.simple_sets
-        if len(simple_sets) == 1:
-            return self.log_conditional_of_simple_event_in_place(simple_sets[0])
-
-        # Cache structure (topo) if not present
-        if not hasattr(self, "_cached_topo"):
-            self.cache_structure()
-        pre = (self._cached_nodes, self._cached_unweighted_edges, self._cached_weighted_edges)
-
-        # Reversed topo order for passes
-        rev_topo = self._cached_reversed_topological_ordered_nodes
-
-        conditional_results = []
-        for ev in simple_sets:
-            circ = self.__copy__(pre)
-            node_map = {orig: new for orig, new in zip(self._cached_nodes, circ.nodes)}
-
-            # Build layer map ONCE for this circuit copy
-            # (Layer is index in BFS layers, as in self.layers)
-            layer_map = {}
-            for idx, layer in enumerate(circ.layers):
-                for node in layer:
-                    layer_map[node] = idx
-            max_layer = max(layer_map.values()) if layer_map else 0
-
-            # Group original nodes by layer for efficient batching (bottom-up)
-            # NOTE: Use node_map[orig] for correct new node
-            units_by_layer = []
-            for l in range(max_layer, -1, -1):
-                # Only nodes in rev_topo that are in this layer
-                units = [node_map[orig] for orig in rev_topo if layer_map.get(node_map[orig], -1) == l]
-                if units:
-                    units_by_layer.append(units)
-
-            for layer in units_by_layer:
-                leaves_by_type = defaultdict(list)
-                nonleaves = []
-                for unit in layer:
-                    if getattr(unit, "is_leaf", False):
-                        leaves_by_type[type(unit)].append(unit)
-                    else:
-                        nonleaves.append(unit)
-                for leaf_type, leaves in leaves_by_type.items():
-                    if hasattr(leaf_type, "batch_log_conditional_of_simple_event_in_place"):
-                        leaf_type.batch_log_conditional_of_simple_event_in_place(leaves, ev)
-                    else:
-                        for leaf in leaves:
-                            leaf.log_conditional_of_simple_event_in_place(ev)
-                for unit in nonleaves:
-                    unit.log_forward()
-
-            root = circ.root
-            logp = root.result_of_current_query
-            if logp > -np.inf:
-                conditional_results.append((circ, logp))
-
-        if conditional_results:
-            return self, conditional_results[0][1]
-        else:
+        # skip trivial case
+        if event.is_empty():
+            self.remove_nodes_from(list(self.nodes))
             return None, -np.inf
+
+
+        # if the event is easy, don't create a proxy node
+        elif len(event.simple_sets) == 1:
+            result = self.log_conditional_of_simple_event_in_place(event.simple_sets[0])
+            return result
+
+        # create a conditional circuit for every simple event
+        conditional_circuits = [self.__deepcopy__().log_conditional_of_simple_event_in_place(simple_event) for simple_event
+                                in event.simple_sets]
+
+        # clear this circuit
+        self.remove_nodes_from(list(self.nodes))
+
+        # filtered out impossible conditionals
+        conditional_circuits = [(conditional, log_probability) for conditional, log_probability in conditional_circuits
+                                if log_probability > -np.inf]
+
+        # if all conditionals are impossible
+        if len(conditional_circuits) == 0:
+            return None, -np.inf
+
+        # create a new sum unit
+        result = SumUnit(self)
+
+        # add the conditionals to the sum unit
+        [result.add_subcircuit(conditional.root, log_probability) for conditional, log_probability in
+         conditional_circuits]
+        result.log_forward()
+        result.normalize()
+        return self, result.result_of_current_query
 
     def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__deepcopy__()
         return result.log_conditional_in_place(event)
-
-    def marginal_in_place(self, variables: Iterable[Variable]) -> Optional[Self]:
-        result = [node.marginal(variables) for layer in reversed(self.layers) for node in layer][-1]
-        if result is not None:
-            self.remove_unreachable_nodes(result)
-            self.simplify()
-            return self
-        else:
-            return None
-
-    def log_conditional_of_point_in_place(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
-
-        # do forward pass
-        for layer in reversed(self.layers):
-            for unit in layer:
-                if unit.is_leaf:
-                    unit: LeafUnit
-                    unit.log_conditional_of_point_in_place(point)
-                else:
-                    unit: InnerUnit
-                    unit.log_forward()
-
-        # clean the circuit up
-        root = self.root
-        [self.remove_node(node) for layer in reversed(self.layers) for node in layer if
-         node.result_of_current_query == -np.inf]
-
-        if root not in self.nodes:
-            return None, -np.inf
-
-        self.remove_unreachable_nodes(root)
-
-        # simplify dirac parts
-        remaining_variables = [v for v in self.variables if v not in point]
-
-        self.marginal_in_place(remaining_variables)
-        new_root = ProductUnit(self)
-
-        if len(remaining_variables) > 0:
-            new_root.add_subcircuit(root, False)
-
-        for variable, value in point.items():
-            new_root.add_subcircuit(leaf(make_dirac(variable, value), self))
-
-        new_root.result_of_current_query = root.result_of_current_query
-
-        self.simplify()
-        self.normalize()
-
-        return self, root.result_of_current_query
-
-    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
-        result = self.__copy__()
-        return result.log_conditional_of_point_in_place(point)
-
-    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
-        result = self.__copy__()
-        return result.marginal_in_place(variables)
-
-    def sample(self, amount: int) -> np.array:
-
-        # initialize all results
-        for node in self.nodes:
-            node.result_of_current_query = []
-
-        variable_to_index_map = self.variable_to_index_map
-
-        # initialize the sample arguments
-        self.root.result_of_current_query.append((0, amount))
-
-        # initialize the samples
-        samples = np.full((amount, len(variable_to_index_map)), np.nan)
-
-        # forward through the circuit to sample
-        [node.sample(samples, variable_to_index_map) for layer in self.layers for node in layer]
-
-        return samples
-
-    def moment(self, order: OrderType, center: CenterType) -> MomentType:
-        variable_to_index_map = self.variable_to_index_map
-        [node.moment(order, center, variable_to_index_map) for layer in reversed(self.layers) for node in layer]
-        return MomentType({variable: moment for variable, moment in
-                           zip(variable_to_index_map.keys(), self.root.result_of_current_query)})
 
     def simplify(self) -> Self:
         """
@@ -1046,7 +956,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         return all([subcircuit.is_decomposable() for subcircuit in self.leaves if isinstance(subcircuit, ProductUnit)])
 
-    def __eq__(self, other: 'ProbabilisticCircuit'):
+    def __eq__(self, other: Self):
         return id(self) == id(other)
 
     def empty_copy(self) -> Self:
@@ -1069,52 +979,15 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
             result.add_edge(parent, child, log_weight)
         return result
 
-    def to_json(self) -> Dict[str, Any]:
-        # get super result
-        result = super().to_json()
-
-        hash_to_node_map = dict()
-
-        for node in self.nodes:
-            node_json = node.to_json()
-            hash_to_node_map[hash(node)] = node_json
-
-        unweighted_edges = [(hash(source), hash(target)) for source, target in self.unweighted_edges]
-        weighted_edges = [(hash(source), hash(target), weight) for source, target, weight in self.log_weighted_edges]
-        result["hash_to_node_map"] = hash_to_node_map
-        result["unweighted_edges"] = unweighted_edges
-        result["log_weighted_edges"] = weighted_edges
-        return result
-
-    @classmethod
-    def parameters_from_json(cls, data: Dict[str, Any]) -> Self:
-        return cls()
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
-        result = cls.parameters_from_json(data)
-        hash_remap: Dict[int, Unit] = dict()
-
-        for hash_, node_data in data["hash_to_node_map"].items():
-            node = Unit.from_json(node_data)
-            hash_remap[int(hash_)] = node
-            result.add_node(node)
-
-        for source_hash, target_hash in data["unweighted_edges"]:
-            result.add_edge(hash_remap[source_hash], hash_remap[target_hash])
-
-        for source_hash, target_hash, weight in data["log_weighted_edges"]:
-            result.add_edge(hash_remap[source_hash], hash_remap[target_hash], log_weight=weight)
-
-        return result
-
-    def update_variables(self, new_variables: VariableMap):
+    def normalize(self):
         """
-        Update the variables of this unit and its descendants.
-
-        :param new_variables: The new variables to set.
+        Normalize every sum node of this circuit in-place.
         """
-        self.root.update_variables(new_variables)
+        [node.normalize() for node in self.nodes if isinstance(node, SumUnit)]
+
+    def is_isomorphic(self, other: Self):
+        node_matcher = lambda x, y: type(x) == type(y)
+        return rx.digraph_is_isomorphic(self.graph, other.graph, node_matcher=node_matcher)
 
     def is_deterministic(self) -> bool:
         """
@@ -1127,16 +1000,21 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         # check for determinism of every node
         return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
 
-    def normalize(self):
-        """
-        Normalize every sum node of this circuit in-place.
-        """
-        [node.normalize() for node in self.nodes if isinstance(node, SumUnit)]
+    def marginal_in_place(self, variables: Iterable[Variable]) -> Optional[Self]:
+        result = [node.marginal(variables) for layer in reversed(self.layers) for node in layer][-1]
+        if result is not None:
+            self.remove_unreachable_nodes(result)
+            self.simplify()
+            return self
+        else:
+            return None
 
-    def is_isomorphic(self, other: Self):
-        node_matcher = lambda x, y: type(x) == type(y)
-        return rx.digraph_is_isomorphic(self.graph, other.graph, node_matcher=node_matcher)
+    def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
+        result = self.__deepcopy__()
+        return result.marginal_in_place(variables)
 
+    def __repr__(self):
+        return f"{self.__class__.__name__} with {len(self.nodes)} nodes and {len(self.edges)} edges"
 
 class UnivariateLeaf(LeafUnit):
 

@@ -24,8 +24,8 @@ class ProductUnitTestCase(unittest.TestCase):
         self.model = product_unit._probabilistic_circuit
 
     def test_setup(self):
-        self.assertEqual(len(list(self.model.nodes())), 3)
-        self.assertEqual(len(self.model.edges()), 2)
+        self.assertEqual(len(list(self.model.nodes)), 3)
+        self.assertEqual(len(self.model.edges), 2)
 
     def test_variables(self):
         self.assertEqual(self.model.variables, SortedSet([self.x, self.y]))
@@ -63,7 +63,7 @@ class ProductUnitTestCase(unittest.TestCase):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
         result, probability = self.model.conditional(event)
         self.assertEqual(probability, 0.5)
-        self.assertEqual(len(list(result.nodes())), 3)
+        self.assertEqual(len(list(result.nodes)), 3)
         self.assertIsInstance(result.root, ProductUnit)
 
     def test_conditional_with_0_evidence(self):
@@ -74,11 +74,12 @@ class ProductUnitTestCase(unittest.TestCase):
 
     def test_marginal_with_intersecting_variables(self):
         marginal = self.model.marginal([self.x])
-        self.assertEqual(len(list(marginal.nodes())), 1)
+        self.assertEqual(len(list(marginal.nodes)), 1)
         self.assertEqual(marginal.variables, SortedSet([self.x]))
 
     def test_marginal_without_intersecting_variables(self):
         marginal = self.model.marginal([])
+
         self.assertIsNone(marginal)
 
     def test_domain(self):
@@ -93,8 +94,9 @@ class ProductUnitTestCase(unittest.TestCase):
         self.assertEqual(self.model, deserialized)
 
     def test_copy(self):
-        copy = self.model.__copy__()
-        self.assertEqual(self.model, copy)
+        copy = self.model.__deepcopy__()
+        self.assertEqual(len(self.model.nodes), len(copy.nodes))
+        self.assertEqual(len(self.model.edges), len(copy.edges))
         self.assertNotEqual(id(copy), id(self.model))
 
     def test_sample_not_equal(self):

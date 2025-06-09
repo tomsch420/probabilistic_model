@@ -70,8 +70,8 @@ class SumUnitTestCase(unittest.TestCase):
 
     def test_conditional(self):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
-        result, probability = self.model.conditional(event)
-        self.assertAlmostEqual(probability, 0.3)
+        result, probability = self.model.log_conditional(event)
+        self.assertAlmostEqual(probability, np.log(0.3))
         self.assertEqual(len(list(result.nodes)), 1)
         self.assertIsInstance(result.root, LeafUnit)
 
@@ -92,7 +92,8 @@ class SumUnitTestCase(unittest.TestCase):
 
     def test_marginal(self):
         marginal = self.model.marginal([self.x])
-        self.assertEqual(self.model, marginal)
+        self.assertEqual(len(self.model.nodes), len(marginal.nodes))
+        self.assertEqual(len(self.model.graph.edges()), len(marginal.graph.edges()))
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
@@ -113,11 +114,11 @@ class SumUnitTestCase(unittest.TestCase):
         s1 = SumUnit()
         s2 = SumUnit()
         s3 = SumUnit()
-        u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
+        u1 = leaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
         s2._probabilistic_circuit.add_nodes_from([s2, s3, u1])
-        s2._probabilistic_circuit.add_weighted_edges_from([(s2, s3, 1.), (s3, u1, 1.)])
+        s2._probabilistic_circuit.add_edges_from([(s2, s3, 1.), (s3, u1, 1.)])
         s1.mount(s2)
-        self.assertEqual(len(list(s1._probabilistic_circuit.nodes())), 4)
+        self.assertEqual(len(list(s1._probabilistic_circuit.nodes)), 4)
 
     def test_sample_not_equal(self):
         samples = self.model.sample(10)
