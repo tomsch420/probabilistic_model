@@ -1,8 +1,10 @@
+import copy
 import unittest
 
 import plotly.graph_objects as go
 import random_events.interval
 from random_events.interval import closed, singleton
+from sklearn.gaussian_process.kernels import Product
 
 from probabilistic_model.distributions import GaussianDistribution, DiracDeltaDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
@@ -205,6 +207,22 @@ class ConditioningTestCase(unittest.TestCase):
         p_marginal = marginal.probability(probability_event)
         p_conditioned_marginal = conditioned_marginal.probability(probability_event)
         self.assertGreater(p_conditioned_marginal, p_marginal)
+
+    def test_conditioning_with_symbolic(self):
+        s = Symbolic("s", Set.from_iterable(SymbolEnum))
+        model = copy.copy(self.model)
+        old_root = model.root
+        new_root = ProductUnit(model)
+        probabilities = MissingDict(float)
+        probabilities[hash(SymbolEnum.A)] = 7 / 20
+        probabilities[hash(SymbolEnum.B)] = 13 / 20
+        p_s = leaf(SymbolicDistribution(s, probabilities), model)
+        new_root.add_subcircuit(old_root)
+        new_root.add_subcircuit(p_s)
+
+        model.conditional({s: SymbolEnum.A})
+
+
 
 
 if __name__ == '__main__':

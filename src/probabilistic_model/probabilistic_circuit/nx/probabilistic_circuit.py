@@ -1055,7 +1055,13 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         # simplify dirac parts
         remaining_variables = [v for v in self.variables if v not in point]
 
+
         self.marginal_in_place(remaining_variables)
+
+        if len(remaining_variables) > 0:
+            root = self.root
+
+        # add dirac parts
         new_root = ProductUnit(self)
 
         if len(remaining_variables) > 0:
