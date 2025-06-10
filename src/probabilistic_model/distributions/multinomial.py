@@ -84,10 +84,10 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
         return mode, np.log(likelihood)
 
-    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+    def log_conditional(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
         event = SimpleEvent(point)
         event.fill_missing_variables(self.variables)
-        return self.log_conditional(event.as_composite_set())
+        return self.log_truncated(event.as_composite_set())
 
     def __copy__(self) -> Self:
         """
@@ -127,7 +127,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
     def log_likelihood(self, events: np.array) -> np.array:
         return np.log(self.probabilities[tuple(events.T)])
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+    def log_truncated(self, event: Event) -> Tuple[Optional[Self], float]:
         probabilities = np.zeros_like(self.probabilities)
 
         for simple_event in event.simple_sets:

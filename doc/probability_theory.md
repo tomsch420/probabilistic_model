@@ -152,17 +152,17 @@ calculated using sigma$additivity.
 Before we dive into the next block of definitions, there is a little preface. As these next theorems are so strongly
 intertwined with each other, there is not much sense of making a plot for each of them. 
 There is an interactive plot after Bayes theorem that gives light to how these definitions work.
-Onward, to {prf:ref}`def-conditional-probability`.
+Onward, to {prf:ref}`def-truncated-probability`.
 ### Conditional Probability
 
 ````{prf:definition} Conditional Probability
-:label: def-conditional-probability
+:label: def-truncated-probability
 
 If $P(A) > 0$, the quotient
 
 $$P(B|A) = \frac{P(A, B)}{P(A)}$$
 
-is called the conditional probability of $B$ given $A$. 
+is called the truncated probability of $B$ given $A$. 
 It immediately gives the product rule
 
 $$P(A,B) = P(B|A)P(A) = P(A|B)P(B).$$
@@ -174,13 +174,13 @@ Thus, for a fixed $A$, $(E, \Im, P(\cdot|A))$ is a probability space as well.
 ````
 
 Instead of explaining this concept in my own words, I will refer to Todd Kemps phrasing about it:
-> We often think of conditional probability intuitively in terms of a two-stage experiment.
+> We often think of truncated probability intuitively in terms of a two-stage experiment.
 > In the first stage of the experiment, we see whether one particular event $A$ has occurred or not.
 > If it has, it may influence whether a second event $B$, which we're going to measure in a second stage,
 > will occur or not. Therefore, we may want to update our information on probabilities of the later
 > events given information about whether the earlier event has occurred or not.
 > In this language we'll refer to the original probability measure $P(B)$ as the prior probability of
-> an event $B$, and after we observe that event $A$ has occurred, we refer to the new updated conditional
+> an event $B$, and after we observe that event $A$ has occurred, we refer to the new updated truncated
 > probability as the posterior probability of that same event $B$.
 > In more practical applications $A$ is referenced as the evidence since it is an event that evidently
 > happened and $B$ is the query, since it is the event of interest.
@@ -377,15 +377,15 @@ for color_value, shape_value in itertools.product(color.domain.simple_sets, shap
 As we can see, the entire variables are independent.
 
 
-The definition of independence can be expanded to conditional independence. Formally,
+The definition of independence can be expanded to truncated independence. Formally,
 
 ### Conditional Independence
 
 ```{prf:definition} Conditional Independence
-:label: def-conditional-independence
+:label: def-truncated-independence
 
 Two variables (events) $A$ and $B$ are conditionally independent given variable (event) $C$, 
-if and only if their conditional distribution factorizes,
+if and only if their truncated distribution factorizes,
 
 $$P(A,B|C) = P(A|C) P(B|C).$$
 

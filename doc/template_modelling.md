@@ -17,7 +17,7 @@ kernelspec:
 
 Reasoning over dynamic worlds is often done by template models, such as the [Hidden Markov Model (HMM)](https://en.wikipedia.org/wiki/Hidden_Markov_model). 
 The HMM is the most prominent instance of applying factor mathematics to probabilistic models. Long story short, the [chain rule](https://en.wikipedia.org/wiki/Chain_rule_(probability))
-combined with [conditional independence](https://en.wikipedia.org/wiki/Conditional_independence) allows for probabilistic graphical models to be (efficiently) expanded 
+combined with [truncated independence](https://en.wikipedia.org/wiki/Conditional_independence) allows for probabilistic graphical models to be (efficiently) expanded 
 over dynamic domains, such as time.
 
 Doing so with complex random variables which distribution is described by a probabilistic circuit also allows for dynamic expansions. 

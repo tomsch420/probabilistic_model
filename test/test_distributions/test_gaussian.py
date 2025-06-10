@@ -25,7 +25,7 @@ class GaussianDistributionTestCase(unittest.TestCase):
 
     def test_conditional_simple_intersection(self):
         event = SimpleEvent({self.distribution.variable: closed(1, 2)}).as_composite_set()
-        conditional, probability = self.distribution.conditional(event)
+        conditional, probability = self.distribution.truncated(event)
         self.assertIsInstance(conditional, TruncatedGaussianDistribution)
         cdf = self.distribution.cdf(np.array([1, 2]).reshape(-1, 1))
         self.assertAlmostEqual(probability, cdf[1] - cdf[0])
@@ -145,7 +145,7 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
 
     def test_conditional_simple_intersection(self):
         event = SimpleEvent({self.x: closed(1, 2)}).as_composite_set()
-        conditional, probability = self.distribution.conditional(event)
+        conditional, probability = self.distribution.truncated(event)
         self.assertIsInstance(conditional, TruncatedGaussianDistribution)
         cdf = self.distribution.cdf(np.array([1, 2]).reshape(-1, 1))
         self.assertEqual(probability, cdf[1] - cdf[0])
@@ -154,11 +154,11 @@ class TruncatedGaussianDistributionTestCase(unittest.TestCase):
 
     def test_conditional_on_mode(self):
         mode, _ = self.distribution.mode()
-        conditional, probability = self.distribution.conditional(mode)
+        conditional, probability = self.distribution.truncated(mode)
         self.assertIsNone(conditional)
 
         point_value = mode.simple_sets[0][self.distribution.variable].simple_sets[0].lower
-        conditional, probability = self.distribution.log_conditional_of_point({self.distribution.variable: point_value})
+        conditional, probability = self.distribution.log_conditional({self.distribution.variable: point_value})
         self.assertIsInstance(conditional, DiracDeltaDistribution)
         self.assertTrue(probability > -np.inf)
 
@@ -193,10 +193,10 @@ class TruncatedGaussianDistributionJapaneseManTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.example_2, _ = cls.distribution.conditional(
+        cls.example_2, _ = cls.distribution.truncated(
             SimpleEvent({cls.distribution.variable: closed(0.5, np.inf)}).as_composite_set())
 
-        cls.example_3, _ = cls.distribution.conditional(
+        cls.example_3, _ = cls.distribution.truncated(
             SimpleEvent({cls.distribution.variable: closed(-1, 1)}).as_composite_set())
 
     def test_raw_expectation_example_2(self):

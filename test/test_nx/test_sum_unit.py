@@ -72,14 +72,14 @@ class SumUnitTestCase(unittest.TestCase):
 
     def test_conditional(self):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
-        result, probability = self.model.conditional(event)
+        result, probability = self.model.truncated(event)
         self.assertAlmostEqual(probability, 0.3)
         self.assertEqual(len(list(result.nodes())), 1)
         self.assertIsInstance(result.root, LeafUnit)
 
     def test_conditional_impossible(self):
         event = SimpleEvent({self.x: closed(5, 6)}).as_composite_set()
-        result, probability = self.model.conditional(event)
+        result, probability = self.model.truncated(event)
         self.assertEqual(probability, 0.)
         self.assertIsNone(result)
 
@@ -108,7 +108,7 @@ class SumUnitTestCase(unittest.TestCase):
 
     def test_conditional_inference(self):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
-        result, probability = self.model.conditional(event)
+        result, probability = self.model.truncated(event)
         self.assertEqual(result.probability(event), 1)
 
     def test_deep_mount(self):

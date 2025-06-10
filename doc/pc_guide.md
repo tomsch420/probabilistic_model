@@ -87,7 +87,7 @@ We can now observe how conditioning modifies the structure of a probabilistic ci
 ```{code-cell} ipython3
 e = SimpleEvent({x: closed_open(0, 1),
                  y: closed_open(0, 0.5 ) | closed(1, 1.5)}).as_composite_set()
-p_xy_conditioned, _ = p_xy.probabilistic_circuit.conditional(e)
+p_xy_conditioned, _ = p_xy.probabilistic_circuit.truncated(e)
 p_xy_conditioned.plot_structure()
 ```
 
@@ -165,9 +165,9 @@ product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(x, 0, 
 product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(y, 0, 1)))
 default_circuit = product_unit.probabilistic_circuit
 
-cpd_xy.conditional_probability_distributions[hash(ObjectPosition.LEFT)] = default_circuit.conditional(SimpleEvent({x: closed(-np.inf, -0.5)}).as_composite_set())[0]
-cpd_xy.conditional_probability_distributions[hash(ObjectPosition.RIGHT)] = default_circuit.conditional(SimpleEvent({x: open(0.5, np.inf)}).as_composite_set())[0]
-cpd_xy.conditional_probability_distributions[hash(ObjectPosition.CENTER)] = default_circuit.conditional(SimpleEvent({x: open_closed(-0.5, 0.5)}).as_composite_set())[0]
+cpd_xy.conditional_probability_distributions[hash(ObjectPosition.LEFT)] = default_circuit.truncated(SimpleEvent({x: closed(-np.inf, -0.5)}).as_composite_set())[0]
+cpd_xy.conditional_probability_distributions[hash(ObjectPosition.RIGHT)] = default_circuit.truncated(SimpleEvent({x: open(0.5, np.inf)}).as_composite_set())[0]
+cpd_xy.conditional_probability_distributions[hash(ObjectPosition.CENTER)] = default_circuit.truncated(SimpleEvent({x: open_closed(-0.5, 0.5)}).as_composite_set())[0]
 
 bn.add_node(cpd_xy)
 bn.add_edge(cpd_object_position, cpd_xy)

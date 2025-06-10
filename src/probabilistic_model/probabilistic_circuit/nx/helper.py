@@ -17,7 +17,7 @@ def uniform_measure_of_event(event: Event) -> ProbabilisticCircuit:
     # create a uniform measure for the bounding box
     uniform_model = uniform_measure_of_simple_event(bounding_box)
     # condition the uniform measure on the event
-    uniform_model, _ = uniform_model.conditional(event)
+    uniform_model, _ = uniform_model.truncated(event)
 
     return uniform_model
 

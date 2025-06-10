@@ -199,13 +199,13 @@ algebra that is constructed by the marginal query class.
 (chapter:conditionals)=
 ## Conditionals
 
-While marginal queries already allow for the calculations of conditional probabilities using the definition of the 
-conditional probability, it is, in most scenarios, more interesting to consider the conditional probability space. 
-We can construct such a thing by invoking the `conditional` method with the corresponding event.
+While marginal queries already allow for the calculations of truncated probabilities using the definition of the 
+truncated probability, it is, in most scenarios, more interesting to consider the truncated probability space. 
+We can construct such a thing by invoking the `truncated` method with the corresponding event.
 
 ```{code-cell} ipython3
 event = SimpleEvent({sepal_length: closed(6, 7)}).as_composite_set()
-distribution, probability = distribution.conditional(event)
+distribution, probability = distribution.truncated(event)
 fig = go.Figure(distribution.plot(), distribution.plotly_layout())
 fig.show()
 ```
@@ -304,7 +304,7 @@ $$\hat{x} = \underset{x \in \mathcal{X}}{arg \,max} p(x). $$
 
 ````
 
-While common literature describes the mode under a condition, we can omit such a description since we already defined that the conditional distribution is part of the marginal query class. Hence, the mode under a condition is just the chain of the condition and mode methods.
+While common literature describes the mode under a condition, we can omit such a description since we already defined that the truncated distribution is part of the marginal query class. Hence, the mode under a condition is just the chain of the condition and mode methods.
 
 A common perception of the mode is that it is the single point of highest density, such as in the example below.
 
@@ -319,7 +319,7 @@ However, the mode is more accurately described as the set of points with the hig
 
 ```{code-cell} ipython3
 condition = closed(-float("inf"), -1) | closed(1, float("inf"))
-distribution, _ = distribution.conditional(SimpleEvent({distribution.variables[0]: condition}).as_composite_set())
+distribution, _ = distribution.truncated(SimpleEvent({distribution.variables[0]: condition}).as_composite_set())
 go.Figure(distribution.plot(), distribution.plotly_layout()).show()
 ```
 
@@ -498,10 +498,10 @@ fig.show()
 
 We now want to filter for all positions that are available in the kitchen. 
 Hence, we need to condition our probability distribution on the free space of the kitchen. 
-We can do this by invoking the `conditional` method of the distribution object.
+We can do this by invoking the `truncated` method of the distribution object.
 
 ```{code-cell} ipython3
-distribution, _ = p_xy.conditional(free_space)
+distribution, _ = p_xy.truncated(free_space)
 fig = go.Figure(distribution.plot(number_of_samples=500), distribution.plotly_layout())
 fig.show()
 ```

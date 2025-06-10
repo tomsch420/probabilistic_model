@@ -61,14 +61,14 @@ class ProductUnitTestCase(unittest.TestCase):
 
     def test_conditional(self):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
-        result, probability = self.model.conditional(event)
+        result, probability = self.model.truncated(event)
         self.assertEqual(probability, 0.5)
         self.assertEqual(len(list(result.nodes())), 3)
         self.assertIsInstance(result.root, ProductUnit)
 
     def test_conditional_with_0_evidence(self):
         event = SimpleEvent({self.x: closed(1.5, 2)}).as_composite_set()
-        result, probability = self.model.conditional(event)
+        result, probability = self.model.truncated(event)
         self.assertEqual(probability, 0)
         self.assertEqual(result, None)
 

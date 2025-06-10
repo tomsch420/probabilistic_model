@@ -29,10 +29,10 @@ However, in many cases, the relationships between variables are more complex and
 For example, parameterizing the joint probability distributions over $n$ boolean variables requires $2^n$ parameters.
 This quickly becomes infeasible as the number of variables grows.
 
-The only tool for simplification of probabilistic calculus that we saw so far is (conditional) independence.
+The only tool for simplification of probabilistic calculus that we saw so far is (truncated) independence.
 
-Graphical models are a more powerful tool for expressing conditional independence between variables 
-(see {prf:ref}`def-conditional-independence`).
+Graphical models are a more powerful tool for expressing truncated independence between variables 
+(see {prf:ref}`def-truncated-independence`).
 
 ## Bayesian Networks
 
@@ -47,11 +47,11 @@ where every vertex $v \in V$ is associated with a random variable $X_v$,
 and every edge $(u, v)$ in $E$ represents a direct dependence from the random variable $X_u$ to the random variable $X_v$. 
 
 Let $Deps(v) = \{u | (u, v) \in E \}$ denote the direct dependences of node $v \in V$. 
-In a Bayesian Network, each node $v \in V$ of the graph is associated with a conditional probability distribution $CPD(v)$, 
+In a Bayesian Network, each node $v \in V$ of the graph is associated with a truncated probability distribution $CPD(v)$, 
 which denotes the probability distribution of $X_v$ conditioned over the values of the random variables associated 
 with the direct dependences $D(v)$.
 
-The likelihood function of a Bayesian Network is defined as the product of the conditional probability distributions
+The likelihood function of a Bayesian Network is defined as the product of the truncated probability distributions
 
 $$
 P(X_1, \ldots, X_n) = \prod_{v \in V} P(X_v | X_{Deps(v)})
@@ -130,9 +130,9 @@ product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(x, 0, 
 product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(y, 0, 1)))
 default_circuit = product_unit.probabilistic_circuit
 
-cpd_xy.conditional_probability_distributions[hash(ObjectPosition.LEFT)] = default_circuit.conditional(SimpleEvent({x: closed(-np.inf, -0.5)}).as_composite_set())[0]
-cpd_xy.conditional_probability_distributions[hash(ObjectPosition.RIGHT)] = default_circuit.conditional(SimpleEvent({x: open(0.5, np.inf)}).as_composite_set())[0]
-cpd_xy.conditional_probability_distributions[hash(ObjectPosition.CENTER)] = default_circuit.conditional(SimpleEvent({x: open_closed(-0.5, 0.5)}).as_composite_set())[0]
+cpd_xy.conditional_probability_distributions[hash(ObjectPosition.LEFT)] = default_circuit.truncated(SimpleEvent({x: closed(-np.inf, -0.5)}).as_composite_set())[0]
+cpd_xy.conditional_probability_distributions[hash(ObjectPosition.RIGHT)] = default_circuit.truncated(SimpleEvent({x: open(0.5, np.inf)}).as_composite_set())[0]
+cpd_xy.conditional_probability_distributions[hash(ObjectPosition.CENTER)] = default_circuit.truncated(SimpleEvent({x: open_closed(-0.5, 0.5)}).as_composite_set())[0]
 
 bn.add_node(cpd_xy)
 bn.add_edge(cpd_object_position, cpd_xy)
@@ -152,7 +152,7 @@ From the graph, we can read the following independence statements:
 - $ ObjectPosition \perp \!\!\! \perp Mood \,|\, Success $
 
 These statements are the only discriminating aspects that graphical models can provide.
-The property that compares the structure of any graphical models is the set of conditional independence statements. 
+The property that compares the structure of any graphical models is the set of truncated independence statements. 
 
 ## Inference
 
@@ -198,7 +198,7 @@ From {prf:ref}`thm-meaningless-directions` it directly follows, that the Bayesia
 $A \rightarrow B$ and $B \rightarrow A$ describe the same distribution.
 
 Markov Random Fields (MRFs) are a generalization of Bayesian networks that do not have directed edges.
-Instead, they have undirected edges that represent conditional independence relationships.
+Instead, they have undirected edges that represent truncated independence relationships.
 
 ```{prf:definition} Markov Random Field
 :label: def-markov-random-field
@@ -227,5 +227,5 @@ The partition function $Z$ is often intractable to compute.
 It is tractable to compute if the MRF constructs a forest, just as in the case of Bayesian networks.
 
 
-Generally, graphical models are a powerful tool for visualizing the conditional independence assumptions of a model.
+Generally, graphical models are a powerful tool for visualizing the truncated independence assumptions of a model.
 Graphical models should not be used for inference. 

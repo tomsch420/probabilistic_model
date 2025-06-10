@@ -170,49 +170,49 @@ class ProbabilisticModel(abc.ABC):
         """
         raise NotImplementedError
 
-    def conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
+    def truncated(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
         """
-        Calculate the conditional distribution P(*| event) and the probability of the event.
+        Calculate the truncated distribution P(*| event) and the probability of the event.
 
-        If the event is impossible, the conditional distribution is None and the probability is 0.
+        If the event is impossible, the truncated distribution is None and the probability is 0.
 
         :param event: The event to condition on.
-        :return: The conditional distribution and the probability of the event.
+        :return: The truncated distribution and the probability of the event.
         """
         event.fill_missing_variables(set(self.variables))
-        conditional, log_probability = self.log_conditional(event)
+        conditional, log_probability = self.log_truncated(event)
         return conditional, np.exp(log_probability)
 
     @abstractmethod
-    def log_conditional(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
+    def log_truncated(self, event: Event) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
         """
-        Calculate the conditional distribution P(*| event) and the probability of the event.
+        Calculate the truncated distribution P(*| event) and the probability of the event.
 
-        Check the documentation of `conditional` for more information.
+        Check the documentation of `truncated` for more information.
 
         :param event: The event to condition on.
-        :return: The conditional distribution and the log-probability of the event.
+        :return: The truncated distribution and the log-probability of the event.
         """
         raise NotImplementedError
 
-    def conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+    def conditional(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
         """
-        Calculate the conditional distribution P(*| point) and the probability of the event.
+        Calculate the truncated distribution P(*| point) and the probability of the event.
 
-        :param point: A partial point to calculate the conditional distribution on.
-        :return: The conditional distribution and the log-probability of the point.
+        :param point: A partial point to calculate the truncated distribution on.
+        :return: The truncated distribution and the log-probability of the point.
         """
-        conditional, log_probability = self.log_conditional_of_point(point)
+        conditional, log_probability = self.log_conditional(point)
         return conditional, np.exp(log_probability)
 
     @abstractmethod
-    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+    def log_conditional(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
         """
-        Calculate the conditional distribution P(*| point) and the probability of the event.
-        Check the documentation of `conditional_of_point` for more information.
+        Calculate the truncated distribution P(*| point) and the probability of the event.
+        Check the documentation of `conditional` for more information.
 
-        :param point: A partial point to calculate the conditional distribution on.
-        :return: The conditional distribution and the log-probability of the point.
+        :param point: A partial point to calculate the truncated distribution on.
+        :return: The truncated distribution and the log-probability of the point.
         """
         raise NotImplementedError
 

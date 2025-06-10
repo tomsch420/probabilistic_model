@@ -47,24 +47,24 @@ class UniformDistributionTestCase(unittest.TestCase):
 
     def test_conditional_no_intersection(self):
         event = SimpleEvent({self.x: closed(3, 4)}).as_composite_set()
-        conditional, probability = self.distribution.conditional(event)
+        conditional, probability = self.distribution.truncated(event)
         self.assertIsNone(conditional)
         self.assertEqual(probability, 0)
 
     def test_conditional_singleton_intersection(self):
         event = SimpleEvent({self.distribution.variable: singleton(1)}).as_composite_set()
-        conditional, probability = self.distribution.conditional(event)
+        conditional, probability = self.distribution.truncated(event)
         self.assertIsNone(conditional)
         self.assertEqual(probability, 0.)
 
         point = {self.distribution.variable: 1.}
-        conditional, probability = self.distribution.conditional_of_point(point)
+        conditional, probability = self.distribution.conditional(point)
         self.assertIsInstance(conditional, DiracDeltaDistribution)
         self.assertEqual(probability, 0.5)
 
     def test_conditional_simple_intersection(self):
         event = SimpleEvent({self.distribution.variable: closed(1, 2)}).as_composite_set()
-        conditional, probability = self.distribution.conditional(event)
+        conditional, probability = self.distribution.truncated(event)
         conditional_by_hand = UniformDistribution(self.x, SimpleInterval(1, 2, Bound.CLOSED, Bound.OPEN))
         self.assertEqual(conditional, conditional_by_hand)
         self.assertEqual(probability, 0.5)

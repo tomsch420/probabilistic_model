@@ -169,7 +169,7 @@ class MultinomialInferenceTestCase(unittest.TestCase):
 
     def test_crafted_conditional(self):
         event = SimpleEvent({self.y: (YEnum.A, YEnum.B)})
-        conditional, probability = self.crafted_distribution.conditional(event.as_composite_set())
+        conditional, probability = self.crafted_distribution.truncated(event.as_composite_set())
         self.assertAlmostEqual(conditional.probability(event.as_composite_set()), 1)
 
         impossible_event = SimpleEvent({self.y: YEnum.C})

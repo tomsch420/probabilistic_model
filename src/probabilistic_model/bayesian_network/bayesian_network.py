@@ -15,7 +15,7 @@ from ..probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircu
 
 class BayesianNetworkMixin:
     """
-    Mixin class for conditional probability distributions in tree shaped bayesian networks.
+    Mixin class for truncated probability distributions in tree shaped bayesian networks.
     These distributions do not inherit from probabilistic models,
     since inference in Bayesian Networks is intractable.
     """

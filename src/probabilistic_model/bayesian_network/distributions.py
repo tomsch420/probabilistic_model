@@ -78,11 +78,11 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
             if parent_state_probability == 0:
                 continue
 
-            # construct the conditional distribution P(self.variable | self.parent.variable = parent_state)
+            # construct the truncated distribution P(self.variable | self.parent.variable = parent_state)
             conditional, current_log_probability = (self.conditional_probability_distributions[hash(parent_state)].
                                                     log_conditional_of_composite_set(event[self.variable]))
 
-            # if the conditional is None, skip
+            # if the truncated is None, skip
             if conditional is None:
                 continue
 
@@ -107,9 +107,9 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
     def to_tabulate(self) -> List[List[str]]:
         """
-        Tabulate the conditional probability table.
+        Tabulate the truncated probability table.
 
-        :return: A table with the conditional probability table that can be printed using tabulate.
+        :return: A table with the truncated probability table that can be printed using tabulate.
         """
         table = [[self.parent.variable.name, self.variable.name, repr(self)]]
 
@@ -139,7 +139,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
             distribution_node, _ = distribution_template.log_conditional_of_composite_set(value.as_composite_set())
             distribution_nodes[hash(value)] = UnivariateDiscreteLeaf(distribution_node)
 
-        # for every parent event and conditional distribution
+        # for every parent event and truncated distribution
         for parent_event, distribution in self.conditional_probability_distributions.items():
 
             # wrap the parent event
@@ -174,7 +174,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
     def from_multinomial_distribution(self, distribution: MultinomialDistribution) -> Self:
         """
-        Get the conditional probability table from a multinomial distribution.
+        Get the truncated probability table from a multinomial distribution.
 
         :param distribution: The multinomial distribution to get the data from
         :return:
@@ -189,7 +189,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
         for parent_simple_set in parent_variable.domain.simple_sets:
             parent_event = SimpleEvent({parent_variable: parent_simple_set})
-            conditional, _ = distribution.conditional(parent_event.as_composite_set())
+            conditional, _ = distribution.truncated(parent_event.as_composite_set())
             marginal = conditional.marginal(self.variables)
 
             conditional_distribution = SymbolicDistribution(self.variable,
@@ -226,7 +226,7 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
 
     def forward_pass(self, event: SimpleEvent):
         joint_distribution_with_parent = self.joint_distribution_with_parent()
-        conditional, log_prob = joint_distribution_with_parent.probabilistic_circuit.log_conditional_of_simple_event_in_place(event)
+        conditional, log_prob = joint_distribution_with_parent.probabilistic_circuit.log_truncated_of_simple_event_in_place(event)
         self.forward_probability = np.exp(log_prob)
         marginal = conditional.marginal(self.variables)
         self.forward_message = marginal.root
@@ -275,10 +275,10 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
 
     def from_unit(self, unit: Unit) -> Self:
         """
-        Get the conditional probability table from a probabilistic circuit by mounting all children as conditional
+        Get the truncated probability table from a probabilistic circuit by mounting all children as truncated
         probability distributions.
         :param unit: The probabilistic circuit to get the data from
-        :return: The conditional probability distribution
+        :return: The truncated probability distribution
         """
         for index, subcircuit in enumerate(unit.subcircuits):
             self.conditional_probability_distributions[index] = subcircuit.__copy__().probabilistic_circuit

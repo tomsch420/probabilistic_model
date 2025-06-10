@@ -255,7 +255,7 @@ class BreastCancerTestCase(unittest.TestCase):
     def test_conditional_inference(self):
         evidence = SimpleEvent({variable: variable.domain for variable in self.model.variables}).as_composite_set()
         query = evidence
-        conditional_model, evidence_probability = self.model.conditional(evidence)
+        conditional_model, evidence_probability = self.model.truncated(evidence)
         self.assertAlmostEqual(1., evidence_probability, delta=1e-5)
         self.assertAlmostEqual(1., conditional_model.probability(query), delta=1e-5)
 
@@ -279,7 +279,7 @@ class BreastCancerTestCase(unittest.TestCase):
         marginal = model.marginal(self.model.variables[:2])
         x, y = self.model.variables[:2]
         event = SimpleEvent({x: closed(0, 10)}).as_composite_set()
-        conditional, probability = model.conditional(event)
+        conditional, probability = model.truncated(event)
 
     def test_mode(self):
         mode, likelihood = self.model.log_mode(check_determinism=False)

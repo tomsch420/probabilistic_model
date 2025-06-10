@@ -105,7 +105,7 @@ class ContinuousDistribution(UnivariateDistribution):
         lower_bound_cdf = self.cdf(points[:, (0,)])
         return (upper_bound_cdf - lower_bound_cdf).sum()
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+    def log_truncated(self, event: Event) -> Tuple[Optional[Self], float]:
         if event.is_empty():
             return None, -np.inf
 
@@ -117,7 +117,7 @@ class ContinuousDistribution(UnivariateDistribution):
         else:
             return self.log_conditional_from_interval(interval)
 
-    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
+    def log_conditional(self, point: Dict[Variable, Any]) -> Tuple[Optional[Union[ProbabilisticModel, Self]], float]:
         value = point[self.variable]
         log_pdf_value = self.log_likelihood(np.array([[value]]))[0]
 
@@ -128,18 +128,18 @@ class ContinuousDistribution(UnivariateDistribution):
 
     def log_conditional_from_simple_interval(self, interval: SimpleInterval) -> Tuple[Self, float]:
         """
-        Calculate the conditional distribution given a simple interval.
+        Calculate the truncated distribution given a simple interval.
 
         :param interval: The simple interval
-        :return: The conditional distribution and the log-probability of the interval.
+        :return: The truncated distribution and the log-probability of the interval.
         """
         raise NotImplementedError
 
     def log_conditional_from_interval(self, interval) -> Tuple[Self, float]:
         """
-        Calculate the conditional distribution given an interval with p(interval) > 0.
+        Calculate the truncated distribution given an interval with p(interval) > 0.
         :param interval: The simple interval
-        :return: The conditional distribution and the log-probability of the interval.
+        :return: The truncated distribution and the log-probability of the interval.
         """
         raise NotImplementedError
 
@@ -312,13 +312,13 @@ class DiscreteDistribution(UnivariateDistribution):
         for key in self.probabilities:
             self.probabilities[key] /= total
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+    def log_truncated(self, event: Event) -> Tuple[Optional[Self], float]:
         # construct event
         condition = self.composite_set_from_event(event)
         return self.log_conditional_of_composite_set(condition)
 
-    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
-        return self.log_conditional(SimpleEvent({self.variable: point}).as_composite_set())
+    def log_conditional(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+        return self.log_truncated(SimpleEvent({self.variable: point}).as_composite_set())
 
     def log_conditional_of_composite_set(self, event: AbstractCompositeSet) -> Tuple[Optional[Self], float]:
         # calculate new probabilities
@@ -450,8 +450,8 @@ class IntegerDistribution(ContinuousDistribution, DiscreteDistribution):
     def __init__(self, variable: Integer, probabilities: Optional[MissingDict[Union[int, SetElement], float]]):
         DiscreteDistribution.__init__(self, variable, probabilities)
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
-        return DiscreteDistribution.log_conditional(self, event)
+    def log_truncated(self, event: Event) -> Tuple[Optional[Self], float]:
+        return DiscreteDistribution.log_truncated(self, event)
 
     def univariate_log_mode(self) -> Tuple[AbstractCompositeSet, float]:
         max_likelihood = max(self.probabilities.values())

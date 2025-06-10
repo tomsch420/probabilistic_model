@@ -2,12 +2,10 @@ import unittest
 
 import plotly.graph_objects as go
 import random_events.interval
-from random_events.interval import closed, SimpleInterval, singleton
-from random_events.variable import Continuous
+from random_events.interval import closed, singleton
 
-from probabilistic_model.distributions import SymbolicDistribution, GaussianDistribution, DiracDeltaDistribution
+from probabilistic_model.distributions import GaussianDistribution, DiracDeltaDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.helper import fully_factorized
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 
@@ -62,9 +60,9 @@ class SmallCircuitTestCast(unittest.TestCase):
         unique = np.unique(samples, axis=0)
         self.assertGreater(len(unique), 95)
 
-    def test_conditioning(self):
+    def test_truncation(self):
         event = SimpleEvent({self.x: closed(0, 0.25) | closed(0.5, 0.75)}).as_composite_set()
-        conditional, prob = self.model.conditional(event)
+        conditional, prob = self.model.truncated(event)
         self.assertAlmostEqual(prob, 0.375)
         conditional.plot_structure()
         # plt.show()
@@ -122,8 +120,9 @@ class ConditioningWithOrphansTestCase(unittest.TestCase):
             self.y: random_events.interval.open(1500.0009765625, np.inf) |
                     random_events.interval.open(-np.inf, -1500.0009765625)}).as_composite_set()
 
-        result, probability = self.model.conditional(event)
+        result, probability = self.model.truncated(event)
         self.assertIsNone(result)
+
 
 class DiracMixtureConditioningTestCase(unittest.TestCase):
     x = Continuous("x")
@@ -138,14 +137,14 @@ class DiracMixtureConditioningTestCase(unittest.TestCase):
         root.add_subcircuit(leaf(DiracDeltaDistribution(cls.x, 0.5, 2.), cls.model), np.log(0.5))
 
     def test_conditioning(self):
-        event = SimpleEvent({self.x: closed(0. ,1.)}).as_composite_set()
-        conditional, probability = self.model.conditional(event)
+        event = SimpleEvent({self.x: closed(0., 1.)}).as_composite_set()
+        conditional, probability = self.model.truncated(event)
         self.assertAlmostEqual(probability, 1.)
 
     def test_conditioning_without_dirac(self):
-        event = SimpleEvent({self.x: closed(0. ,0.25) | closed(0.75, 1.)}).as_composite_set()
+        event = SimpleEvent({self.x: closed(0., 0.25) | closed(0.75, 1.)}).as_composite_set()
 
-        conditional, probability = self.model.conditional(event)
+        conditional, probability = self.model.truncated(event)
         self.assertAlmostEqual(probability, 0.25)
         self.assertEqual(len(conditional.nodes), 3)
         self.assertTrue(all([isinstance(node.distribution, UniformDistribution) for node in conditional.leaves]))
@@ -153,14 +152,60 @@ class DiracMixtureConditioningTestCase(unittest.TestCase):
     def test_conditioning_singleton(self):
         event = SimpleEvent({self.x: singleton(0.5)}).as_composite_set()
 
-        conditional, probability = self.model.conditional(event)
+        conditional, probability = self.model.truncated(event)
         self.assertEqual(len(conditional.nodes), 1)
         self.assertIsInstance(conditional.root.distribution, DiracDeltaDistribution)
 
-        conditional, probability = self.model.conditional_of_point({self.x: 0.5})
+        conditional, probability = self.model.conditional({self.x: 0.5})
         self.assertAlmostEqual(probability, 1.5)
         self.assertEqual(len(conditional.nodes), 1)
         self.assertTrue(all([isinstance(node.distribution, DiracDeltaDistribution) for node in conditional.leaves]))
+
+
+class ConditioningTestCase(unittest.TestCase):
+    x = Continuous("x")
+    y = Continuous("y")
+
+    model: ProbabilisticCircuit
+
+    @classmethod
+    def setUpClass(cls):
+        model = ProbabilisticCircuit()
+        s1 = SumUnit(model)
+        p1 = ProductUnit(model)
+        p2 = ProductUnit(model)
+
+        u1 = leaf(UniformDistribution(cls.x, SimpleInterval(0, 1.)), model)
+        u2 = leaf(UniformDistribution(cls.x, SimpleInterval(0., 2)), model)
+        u3 = leaf(UniformDistribution(cls.y, SimpleInterval(0, 1)), model)
+        u4 = leaf(UniformDistribution(cls.y, SimpleInterval(0., 2)), model)
+
+        s1.add_subcircuit(p1, np.log(0.5))
+        s1.add_subcircuit(p2, np.log(0.5))
+
+        p1.add_subcircuit(u1)
+        p1.add_subcircuit(u3)
+
+        p2.add_subcircuit(u2)
+        p2.add_subcircuit(u4)
+        cls.model = model
+
+    def test_conditioning(self):
+        p = {self.x: 0.5}
+
+        marginal = self.model.marginal([self.y])
+
+        model, _ = self.model.conditional(p)
+        # model, _ = self.model.truncated(SimpleEvent({self.x: closed(0.3, 0.5)}).as_composite_set())
+
+        conditioned_marginal = model.marginal([self.y])
+
+        probability_event = SimpleEvent({self.y: closed(0., 1.)}).as_composite_set()
+
+        p_marginal = marginal.probability(probability_event)
+        p_conditioned_marginal = conditioned_marginal.probability(probability_event)
+        self.assertGreater(p_conditioned_marginal, p_marginal)
+
 
 if __name__ == '__main__':
     unittest.main()

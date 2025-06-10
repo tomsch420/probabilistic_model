@@ -41,7 +41,7 @@ class IntegerDistributionTestCase(unittest.TestCase):
 
     def test_conditional(self):
         event = SimpleEvent({self.x: closed(0, 1) | closed(3, 4)}).as_composite_set()
-        conditional, probability = self.model.conditional(event)
+        conditional, probability = self.model.truncated(event)
         self.assertEqual(probability, 15 / 20)
         self.assertAlmostEqual(conditional.probabilities[1], 4 / 15)
         self.assertAlmostEqual(conditional.probabilities[4], 11 / 15)
@@ -49,7 +49,7 @@ class IntegerDistributionTestCase(unittest.TestCase):
     def test_conditional_impossible(self):
         event = SimpleEvent({self.x: open(0, 1)}).as_composite_set()
 
-        conditional, probability = self.model.conditional(event)
+        conditional, probability = self.model.truncated(event)
         self.assertIsNone(conditional)
         self.assertEqual(probability, 0)
 
@@ -174,13 +174,13 @@ class DiracDeltaDistributionTestCase(unittest.TestCase):
 
     def test_conditional(self):
         event = SimpleEvent({self.model.variable: closed(-1, 2)}).as_composite_set()
-        conditional, probability = self.model.conditional(event)
+        conditional, probability = self.model.truncated(event)
         self.assertEqual(conditional, self.model)
         self.assertEqual(probability, 1)
 
     def test_conditional_impossible(self):
         event = SimpleEvent({self.model.variable: closed(1, 2)}).as_composite_set()
-        conditional, probability = self.model.conditional(event)
+        conditional, probability = self.model.truncated(event)
         self.assertIsNone(conditional)
         self.assertEqual(0, probability)
 

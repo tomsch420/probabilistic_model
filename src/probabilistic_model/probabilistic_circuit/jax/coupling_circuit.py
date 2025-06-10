@@ -121,10 +121,10 @@ class CouplingCircuit(eqx.Module):
 
     def conditional_log_likelihood_single(self, x):
         """
-        Calculate the conditional log likelihood of a single data point.
+        Calculate the truncated log likelihood of a single data point.
 
         :param x: The datapoint
-        :return: The conditional log likelihood of the data point
+        :return: The truncated log likelihood of the data point
         """
         params = self.conditioner.generate_parameters(x[self.conditioner_columns])
         circuit = self.create_circuit_from_parameters(params)

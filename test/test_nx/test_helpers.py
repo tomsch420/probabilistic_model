@@ -31,11 +31,11 @@ class FullyFactorizedTestCase(unittest.TestCase):
     def test_conditioning_on_mode(self):
         event = SimpleEvent({self.x: closed(0, 2), self.y: closed(0, 2)}).as_composite_set().complement()
         model = self.model
-        model, _ = model.conditional(event)
+        model, _ = model.truncated(event)
         mode, _ = model.mode()
         # TODO this does not work due to numeric impression. Wait for david for updates
-        # conditional, _ = model.conditional(mode)
-        # self.assertIsNotNone(conditional)
+        # truncated, _ = model.truncated(mode)
+        # self.assertIsNotNone(truncated)
         # model = uniform_measure_of_event(event)
         # self.assertIsNotNone(model)
 

@@ -30,17 +30,17 @@ class ContinuousDistributionTestCase(unittest.TestCase):
 
     def test_conditional_from_simple_event(self):
         event = SimpleEvent({self.variable: closed(0.5, 2)}).as_composite_set()
-        conditional, probability = self.leaf.probabilistic_circuit.conditional(event)
+        conditional, probability = self.leaf.probabilistic_circuit.truncated(event)
         self.assertEqual(len(list(conditional.nodes)), 1)
         self.assertEqual(probability, 0.5)
         self.assertEqual(conditional.root.distribution.univariate_support, closed(0.5, 1))
 
     def test_conditional_from_singleton_event(self):
         event = SimpleEvent({self.variable: singleton(0.3)}).as_composite_set()
-        conditional, probability = self.leaf.probabilistic_circuit.conditional(event)
+        conditional, probability = self.leaf.probabilistic_circuit.truncated(event)
         self.assertIsNone(conditional)
 
-        conditional, probability = self.leaf.probabilistic_circuit.conditional_of_point({self.variable: 0.3})
+        conditional, probability = self.leaf.probabilistic_circuit.conditional({self.variable: 0.3})
 
         self.assertEqual(len(conditional.nodes), 1)
         self.assertEqual(probability, 1.)
@@ -49,7 +49,7 @@ class ContinuousDistributionTestCase(unittest.TestCase):
     def test_conditional_from_complex_event(self):
         interval = closed(0., 0.2) | closed(0.5, 1.) | singleton(0.3)
         event = SimpleEvent({self.variable: interval})
-        conditional, probability = self.leaf.probabilistic_circuit.conditional(event.as_composite_set())
+        conditional, probability = self.leaf.probabilistic_circuit.truncated(event.as_composite_set())
 
         self.assertEqual(len(list(conditional.nodes)), 3)
         self.assertEqual(len(list(conditional.edges)), 2)
@@ -57,7 +57,7 @@ class ContinuousDistributionTestCase(unittest.TestCase):
 
     def test_conditional_with_none(self):
         event = SimpleEvent({self.variable: singleton(2)}).as_composite_set()
-        conditional, probability = self.leaf.probabilistic_circuit.conditional(event)
+        conditional, probability = self.leaf.probabilistic_circuit.truncated(event)
         self.assertEqual(conditional, None)
 
 

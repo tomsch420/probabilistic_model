@@ -48,7 +48,7 @@ class MinimalBayesianNetworkTestCase(unittest.TestCase):
         # create the root distribution for x
         self.p_x = RootDistribution(self.x, MissingDict(float, zip([0, 1, 2], [0.5, 0.3, 0.2])))
 
-        # create the conditional probability table for y
+        # create the truncated probability table for y
         self.p_yx.conditional_probability_distributions[0] = (
             SymbolicDistribution(self.y, MissingDict(float, zip([0, 1], [0.5, 0.5]))))
         self.p_yx.conditional_probability_distributions[1] = (

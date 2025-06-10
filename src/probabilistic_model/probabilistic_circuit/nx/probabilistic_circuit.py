@@ -145,7 +145,7 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
     @property
     def impossible_condition_result(self) -> Tuple[Optional[Unit], float]:
         """
-        :return: The result of an impossible conditional query.
+        :return: The result of an impossible truncated query.
         """
         return None, -np.inf
 
@@ -261,8 +261,8 @@ class LeafUnit(Unit):
         if self.distribution is None:
             self.probabilistic_circuit.remove_node(self)
 
-    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
-        self.distribution, self.result_of_current_query = self.distribution.log_conditional(event.as_composite_set())
+    def log_truncated_of_simple_event_in_place(self, event: SimpleEvent):
+        self.distribution, self.result_of_current_query = self.distribution.log_truncated(event.as_composite_set())
 
     def __copy__(self):
         return self.__class__(self.distribution.__copy__())
@@ -306,9 +306,9 @@ class LeafUnit(Unit):
         distribution = SubclassJSONSerializer.from_json(data["distribution"])
         return cls(distribution)
 
-    def log_conditional_of_point_in_place(self, point: Dict[Variable, Any]):
+    def log_conditional_in_place(self, point: Dict[Variable, Any]):
         if any(variable for variable in self.variables if variable in point):
-            self.distribution, self.result_of_current_query = self.distribution.log_conditional_of_point(point)
+            self.distribution, self.result_of_current_query = self.distribution.log_conditional(point)
         else:
             self.result_of_current_query = 0.
 
@@ -417,6 +417,15 @@ class SumUnit(InnerUnit):
         result = [lw + s.result_of_current_query for lw, s in self.log_weighted_subcircuits]
         self.result_of_current_query = logsumexp(result, axis=0)
     moment = forward
+
+    def log_forward_conditioning(self, *args, **kwargs):
+        result = [lw + s.result_of_current_query for lw, s in self.log_weighted_subcircuits]
+
+        # update weights according to bayes rule
+        for new_weight, subcircuit in zip(result, self.subcircuits):
+            self.probabilistic_circuit.add_edge(self, subcircuit, log_weight=new_weight)
+
+        self.result_of_current_query = logsumexp(result, axis=0)
 
     def support(self):
         support = self.subcircuits[0].result_of_current_query.__deepcopy__()
@@ -528,7 +537,7 @@ class SumUnit(InnerUnit):
                 if p_query == 0:
                     continue
 
-                # calculate conditional probability
+                # calculate truncated probability
                 weight = p_query / p_condition
 
                 # create edge from proxy to subcircuit
@@ -935,18 +944,18 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         unreachable_nodes = set(self.nodes) - (reachable_nodes | {root})
         self.remove_nodes_from(unreachable_nodes)
 
-    def log_conditional_of_simple_event_in_place(self, simple_event: SimpleEvent) -> Tuple[Optional[Self], float]:
+    def log_truncated_of_simple_event_in_place(self, simple_event: SimpleEvent) -> Tuple[Optional[Self], float]:
         """
-        Construct the conditional circuit from a simple event.
+        Construct the truncated circuit from a simple event.
 
         :param simple_event: The simple event to condition on.
-        :return: The conditional circuit and the log-probability of the event
+        :return: The truncated circuit and the log-probability of the event
         """
         for layer in reversed(self.layers):
             for unit in layer:
                 if unit.is_leaf:
                     unit: LeafUnit
-                    unit.log_conditional_of_simple_event_in_place(simple_event)
+                    unit.log_truncated_of_simple_event_in_place(simple_event)
                 else:
                     unit: InnerUnit
                     unit.log_forward()
@@ -965,74 +974,49 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return self, root.result_of_current_query
 
-    def log_conditional_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
+    def log_truncated_in_place(self, event: Event) -> Tuple[Optional[Self], float]:
         """
-        Efficiently compute the conditional for an Event, batching as much as possible.
+        Efficiently compute the truncated for an Event, batching as much as possible.
         """
-        simple_sets = event.simple_sets
-        if len(simple_sets) == 1:
-            return self.log_conditional_of_simple_event_in_place(simple_sets[0])
-
-        # Cache structure (topo) if not present
-        if not hasattr(self, "_cached_topo"):
-            self.cache_structure()
-        pre = (self._cached_nodes, self._cached_unweighted_edges, self._cached_weighted_edges)
-
-        # Reversed topo order for passes
-        rev_topo = self._cached_reversed_topological_ordered_nodes
-
-        conditional_results = []
-        for ev in simple_sets:
-            circ = self.__copy__(pre)
-            node_map = {orig: new for orig, new in zip(self._cached_nodes, circ.nodes)}
-
-            # Build layer map ONCE for this circuit copy
-            # (Layer is index in BFS layers, as in self.layers)
-            layer_map = {}
-            for idx, layer in enumerate(circ.layers):
-                for node in layer:
-                    layer_map[node] = idx
-            max_layer = max(layer_map.values()) if layer_map else 0
-
-            # Group original nodes by layer for efficient batching (bottom-up)
-            # NOTE: Use node_map[orig] for correct new node
-            units_by_layer = []
-            for l in range(max_layer, -1, -1):
-                # Only nodes in rev_topo that are in this layer
-                units = [node_map[orig] for orig in rev_topo if layer_map.get(node_map[orig], -1) == l]
-                if units:
-                    units_by_layer.append(units)
-
-            for layer in units_by_layer:
-                leaves_by_type = defaultdict(list)
-                nonleaves = []
-                for unit in layer:
-                    if getattr(unit, "is_leaf", False):
-                        leaves_by_type[type(unit)].append(unit)
-                    else:
-                        nonleaves.append(unit)
-                for leaf_type, leaves in leaves_by_type.items():
-                    if hasattr(leaf_type, "batch_log_conditional_of_simple_event_in_place"):
-                        leaf_type.batch_log_conditional_of_simple_event_in_place(leaves, ev)
-                    else:
-                        for leaf in leaves:
-                            leaf.log_conditional_of_simple_event_in_place(ev)
-                for unit in nonleaves:
-                    unit.log_forward()
-
-            root = circ.root
-            logp = root.result_of_current_query
-            if logp > -np.inf:
-                conditional_results.append((circ, logp))
-
-        if conditional_results:
-            return self, conditional_results[0][1]
-        else:
+        # skip trivial case
+        if event.is_empty():
+            self.remove_nodes_from(list(self.nodes))
             return None, -np.inf
 
-    def log_conditional(self, event: Event) -> Tuple[Optional[Self], float]:
+
+        # if the event is easy, don't create a proxy node
+        elif len(event.simple_sets) == 1:
+            result = self.log_truncated_of_simple_event_in_place(event.simple_sets[0])
+            return result
+
+        # create a conditional circuit for every simple event
+        conditional_circuits = [self.__copy__().log_truncated_of_simple_event_in_place(simple_event) for simple_event
+                                in event.simple_sets]
+
+        # clear this circuit
+        self.remove_nodes_from(list(self.nodes))
+
+        # filtered out impossible conditionals
+        conditional_circuits = [(conditional, log_probability) for conditional, log_probability in conditional_circuits
+                                if log_probability > -np.inf]
+
+        # if all conditionals are impossible
+        if len(conditional_circuits) == 0:
+            return None, -np.inf
+
+        # create a new sum unit
+        result = SumUnit(self)
+
+        # add the conditionals to the sum unit
+        [result.add_subcircuit(conditional.root, log_probability) for conditional, log_probability in
+         conditional_circuits]
+        result.log_forward()
+        result.normalize()
+        return self, result.result_of_current_query
+
+    def log_truncated(self, event: Event) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
-        return result.log_conditional_in_place(event)
+        return result.log_truncated_in_place(event)
 
     def marginal_in_place(self, variables: Iterable[Variable]) -> Optional[Self]:
         result = [node.marginal(variables) for layer in reversed(self.layers) for node in layer][-1]
@@ -1043,17 +1027,20 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         else:
             return None
 
-    def log_conditional_of_point_in_place(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+    def log_conditional_in_place(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
 
         # do forward pass
         for layer in reversed(self.layers):
             for unit in layer:
                 if unit.is_leaf:
                     unit: LeafUnit
-                    unit.log_conditional_of_point_in_place(point)
-                else:
-                    unit: InnerUnit
+                    unit.log_conditional_in_place(point)
+                elif isinstance(unit, SumUnit):
+                    unit.log_forward_conditioning()
+                elif isinstance(unit, ProductUnit):
                     unit.log_forward()
+                else:
+                    raise NotImplementedError()
 
         # clean the circuit up
         root = self.root
@@ -1084,9 +1071,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         return self, root.result_of_current_query
 
-    def log_conditional_of_point(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
+    def log_conditional(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
         result = self.__copy__()
-        return result.log_conditional_of_point_in_place(point)
+        return result.log_conditional_in_place(point)
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
         result = self.__copy__()
@@ -1623,10 +1610,10 @@ class UnivariateLeaf(LeafUnit):
 class UnivariateContinuousLeaf(UnivariateLeaf):
     distribution: Optional[ContinuousDistribution]
 
-    def log_conditional_of_simple_event_in_place(self, event: SimpleEvent):
-        return self.univariate_log_conditional_of_simple_event_in_place(event[self.variable])
+    def log_truncated_of_simple_event_in_place(self, event: SimpleEvent):
+        return self.univariate_log_truncated_of_simple_event_in_place(event[self.variable])
 
-    def univariate_log_conditional_of_simple_event_in_place(self, event: Interval):
+    def univariate_log_truncated_of_simple_event_in_place(self, event: Interval):
         """
         Condition this distribution on a simple event in-place but use sum units to create conditions on composite
         intervals.
@@ -1641,7 +1628,7 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
 
         total_probability = 0.
 
-        # calculate the conditional distribution as sum unit
+        # calculate the truncated distribution as sum unit
         result = SumUnit(self.probabilistic_circuit)
 
         for simple_interval in event.simple_sets:
