@@ -318,7 +318,7 @@ class DiscreteDistribution(UnivariateDistribution):
         return self.log_conditional_of_composite_set(condition)
 
     def log_conditional(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
-        return self.log_truncated(SimpleEvent({self.variable: point}).as_composite_set())
+        return self.log_truncated(SimpleEvent({self.variable: point[self.variable]}).as_composite_set())
 
     def log_conditional_of_composite_set(self, event: AbstractCompositeSet) -> Tuple[Optional[Self], float]:
         # calculate new probabilities
