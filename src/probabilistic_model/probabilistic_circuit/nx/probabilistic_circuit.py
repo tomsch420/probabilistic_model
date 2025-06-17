@@ -1254,6 +1254,44 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         )
         return result
 
+    def __deepcopy__(self, memo=None):
+        """
+        Deep copy of the circuit.
+
+        :param memo: A dictionary that is used to keep track of objects that have already been copied.
+        :return: A deep copy of the circuit.
+        """
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+
+        # Create a new empty circuit
+        result = self.empty_copy()
+        memo[id_self] = result
+
+        # Get all nodes and edges
+        nodes = list(self.graph.nodes())
+        unw = [(u, v) for u, v, attr in self.graph.edges(data=True)
+               if "log_weight" not in attr]
+        wgt = [(u, v, attr["log_weight"]) for u, v, attr in self.graph.edges(data=True)
+               if "log_weight" in attr]
+
+        # Use deep copy for nodes
+        import copy
+        new_map = {n: copy.deepcopy(n, memo) for n in nodes}
+        result.add_nodes_from(new_map.values())
+
+        # Add edges
+        result.graph.add_edges_from((new_map[u], new_map[v]) for u, v in unw)
+        result.add_weighted_edges_from(
+            ((new_map[u], new_map[v], lw) for u, v, lw in wgt),
+            weight="log_weight"
+        )
+
+        return result
+
     def to_json(self) -> Dict[str, Any]:
         # get super result
         result = super().to_json()

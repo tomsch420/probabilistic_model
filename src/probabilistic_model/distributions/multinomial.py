@@ -95,6 +95,23 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
         """
         return MultinomialDistribution(self.variables, self.probabilities)
 
+    def __deepcopy__(self, memo=None) -> Self:
+        """
+        :param memo: A dictionary that is used to keep track of objects that have already been copied.
+        :return: a deep copy of the distribution.
+        """
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        import copy
+        variables = copy.deepcopy(self.variables, memo)
+        probabilities = copy.deepcopy(self.probabilities, memo)
+        result = MultinomialDistribution(variables, probabilities)
+        memo[id_self] = result
+        return result
+
     def __eq__(self, other: Self) -> bool:
         """Compare self with other and return the boolean result.
 

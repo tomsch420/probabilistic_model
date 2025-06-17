@@ -97,9 +97,11 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         """
         return [(depth, self)]
 
-    def __deepcopy__(self) -> 'Layer':
+    def __deepcopy__(self, memo=None) -> 'Layer':
         """
         Create a deep copy of the layer.
+
+        :param memo: A dictionary that is used to keep track of objects that have already been copied.
         """
         raise NotImplementedError
 
@@ -359,10 +361,17 @@ class SparseSumLayer(SumLayer):
 
         return jnp.log(result) - self.log_normalization_constants
 
-    def __deepcopy__(self):
-        child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
+    def __deepcopy__(self, memo=None):
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        child_layers = [child_layer.__deepcopy__(memo) for child_layer in self.child_layers]
         log_weights = [copy_bcoo(log_weight) for log_weight in self.log_weights]
-        return self.__class__(child_layers, log_weights)
+        result = self.__class__(child_layers, log_weights)
+        memo[id_self] = result
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
@@ -494,10 +503,17 @@ class DenseSumLayer(SumLayer):
 
         return jnp.log(result) - self.log_normalization_constants
 
-    def __deepcopy__(self):
-        child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
+    def __deepcopy__(self, memo=None):
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        child_layers = [child_layer.__deepcopy__(memo) for child_layer in self.child_layers]
         log_weights = [jnp.copy(log_weight) for log_weight in self.log_weights]
-        return self.__class__(child_layers, log_weights)
+        result = self.__class__(child_layers, log_weights)
+        memo[id_self] = result
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()
@@ -612,10 +628,17 @@ class ProductLayer(InnerLayer):
 
         return result
 
-    def __deepcopy__(self):
-        child_layers = [child_layer.__deepcopy__() for child_layer in self.child_layers]
+    def __deepcopy__(self, memo=None):
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        child_layers = [child_layer.__deepcopy__(memo) for child_layer in self.child_layers]
         edges = copy_bcoo(self.edges)
-        return self.__class__(child_layers, edges)
+        result = self.__class__(child_layers, edges)
+        memo[id_self] = result
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         result = super().to_json()

@@ -340,6 +340,19 @@ class DiscreteDistribution(UnivariateDistribution):
     def __copy__(self) -> Self:
         return self.__class__(self.variable, self.probabilities)
 
+    def __deepcopy__(self, memo=None) -> Self:
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        import copy
+        variable = copy.deepcopy(self.variable, memo)
+        probabilities = copy.deepcopy(self.probabilities, memo)
+        result = self.__class__(variable, probabilities)
+        memo[id_self] = result
+        return result
+
     def __repr__(self):
         return f"P({self.variable.name})"
 
@@ -622,6 +635,18 @@ class DiracDeltaDistribution(ContinuousDistribution):
 
     def __copy__(self):
         return self.__class__(self.variable, self.location, self.density_cap)
+
+    def __deepcopy__(self, memo=None):
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        import copy
+        variable = copy.deepcopy(self.variable, memo)
+        result = self.__class__(variable, self.location, self.density_cap)
+        memo[id_self] = result
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         return {**super().to_json(), "location": self.location, "density_cap": self.density_cap}

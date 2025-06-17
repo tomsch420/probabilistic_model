@@ -102,6 +102,19 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
     def __copy__(self):
         return self.__class__(self.variable, self.interval)
 
+    def __deepcopy__(self, memo=None):
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        import copy
+        variable = copy.deepcopy(self.variable, memo)
+        interval = copy.deepcopy(self.interval, memo)
+        result = self.__class__(variable, interval)
+        memo[id_self] = result
+        return result
+
     def to_json(self) -> Dict[str, Any]:
         return {**super().to_json(), "interval": self.interval.to_json()}
 

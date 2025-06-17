@@ -75,8 +75,15 @@ class ContinuousLayerWithFiniteSupport(ContinuousLayer, ABC):
         result["interval"] = self.interval.tolist()
         return result
 
-    def __deepcopy__(self):
-        return self.__class__(self.variables[0].item(), self.interval.copy())
+    def __deepcopy__(self, memo=None):
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        result = self.__class__(self.variables[0].item(), self.interval.copy())
+        memo[id_self] = result
+        return result
 
 
 class DiracDeltaLayer(ContinuousLayer):

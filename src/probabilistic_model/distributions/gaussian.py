@@ -111,6 +111,18 @@ class GaussianDistribution(ContinuousDistribution):
     def __copy__(self):
         return self.__class__(self.variable, self.location, self.scale)
 
+    def __deepcopy__(self, memo=None):
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        import copy
+        variable = copy.deepcopy(self.variable, memo)
+        result = self.__class__(variable, self.location, self.scale)
+        memo[id_self] = result
+        return result
+
     def to_json(self) -> Dict[str, Any]:
         return {**super().to_json(), "location": self.location, "scale": self.scale}
 
@@ -260,6 +272,19 @@ class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, Gau
 
     def __copy__(self):
         return self.__class__(self.variable, self.interval, self.location, self.scale)
+
+    def __deepcopy__(self, memo=None):
+        if memo is None:
+            memo = {}
+        id_self = id(self)
+        if id_self in memo:
+            return memo[id_self]
+        import copy
+        variable = copy.deepcopy(self.variable, memo)
+        interval = copy.deepcopy(self.interval, memo)
+        result = self.__class__(variable, interval, self.location, self.scale)
+        memo[id_self] = result
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         return {**super().to_json(), "interval": self.interval.to_json()}
