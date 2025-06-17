@@ -757,83 +757,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     The outgoing edges of a sum unit contain the log-log_weights of the subcircuits.
     """
 
-    _cached_nodes: List[Unit]
-    """
-    Cached list of all nodes
-    """
-
-    _cached_unweighted_edges: List[Tuple[Unit, Unit]]
-    """
-    Cached list of unweighted edges
-    """
-
-    _cached_weighted_edges: List[Tuple[Unit, Unit, float]]
-    """
-    Cached list of weighted edges
-    """
-
-    _cached_topological_ordered_nodes: List[Unit]
-    """
-    Cached list of topological sorted units
-    """
-
-    _cached_reversed_topological_ordered_nodes: List[Tuple[Unit, Unit]]
-    """
-    Cached list of reverse topological sorted units
-    """
-
     def __init__(self):
         super().__init__(None)
         nx.DiGraph.__init__(self)
-
-    def cache_structure(self):
-        """
-        Call once after building the circuit:
-        - cache nodes
-        - cache edge lists
-        - cache topo order & reverse topo order
-        """
-        assert not any(
-            hasattr(self, k) for k in ["_cached_nodes", "_cached_unw", "_cached_w", "_cached_topo", "_cached_rev"]), (
-            "Cache was already set! You should have invalidated it before changing the graph."
-        )
-
-        # 1) Nodes
-        self._cached_nodes = list(self.nodes)
-
-        # 2) Edges
-        all_edges = list(self.edges(data=True))
-        self._cached_unweighted_edges = [(u, v) for u, v, attr in all_edges
-                                         if "log_weight" not in attr]
-        self._cached_weighted_edges   = [(u, v, attr["log_weight"]) for u, v, attr in all_edges
-                                         if "log_weight" in attr]
-
-        # 3) Build successor map & in-degree
-        succ = {n: [] for n in self._cached_nodes}
-        in_deg = {n: 0 for n in self._cached_nodes}
-        for u, v in self._cached_unweighted_edges + [(u, v) for (u, v, _) in self._cached_weighted_edges]:
-            succ[u].append(v)
-            in_deg[v] += 1
-
-        # 4) Single Kahn run
-        queue = deque(n for n, d in in_deg.items() if d == 0)
-        topo = []
-        while queue:
-            n = queue.popleft()
-            topo.append(n)
-            for m in succ[n]:
-                in_deg[m] -= 1
-                if in_deg[m] == 0:
-                    queue.append(m)
-
-        self._cached_topological_ordered_nodes = topo
-        self._cached_reversed_topological_ordered_nodes  = list(reversed(topo))
-
-    def _invalidate_cache(self):
-        """Call this before any structure-changing operation."""
-        for k in ["_cached_nodes", "_cached_unw", "_cached_w", "_cached_topo", "_cached_rev"]:
-            if hasattr(self, k):
-                delattr(self, k)
 
     @classmethod
     def from_other(cls, other: Self) -> Self:
@@ -869,7 +795,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         return nx.is_directed_acyclic_graph(self) and nx.is_weakly_connected(self)
 
     def add_node(self, node: Unit, **attr):
-        self._invalidate_cache()
+
         # write self as the nodes' circuit
         node.probabilistic_circuit = self
 
@@ -1276,10 +1202,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         self.add_edges_from(other.unweighted_edges)
         self.add_weighted_edges_from(other.log_weighted_edges, weight="log_weight")
 
-    def add_weighted_edges_from(
-        self, ebunch_to_add, weight = "log_weight", **attr
-    ):
-        self._invalidate_cache()
+    def add_weighted_edges_from(self, ebunch_to_add, weight = "log_weight", **attr):
         return super().add_weighted_edges_from(ebunch_to_add, weight=weight, **attr)
 
     def subgraph_of(self, node: Unit) -> Self:
