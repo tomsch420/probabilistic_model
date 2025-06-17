@@ -186,6 +186,10 @@ class SumLayer(InnerLayer):
             log_weights = log_weights[self._reachable]
             self.probabilistic_circuit.graph.add_edge(self.index, layer.index, log_weights)
 
+    def update_validity(self):
+        self._valid = self.log_normalization_constants == -np.inf
+
+
 
 class ProductLayer(InnerLayer):
     """
