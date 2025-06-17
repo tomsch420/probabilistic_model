@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import copy
 import itertools
 import math
 import queue
 import random
-from abc import abstractmethod
-from collections import deque, defaultdict
+from abc import abstractmethod, ABC
+from dataclasses import dataclass, field
 from enum import IntEnum
 
-import networkx as nx
-import networkx.drawing
+import rustworkx as rx
 import numpy as np
 from random_events.interval import SimpleInterval, Interval
 from scipy.special import logsumexp
@@ -20,7 +20,7 @@ from random_events.set import Set
 from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable, Symbolic, Continuous, Integer
 from sortedcontainers import SortedSet
-from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, Callable
+from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, Callable, Union
 
 from ...distributions import UnivariateDistribution, IntegerDistribution, SymbolicDistribution, DiscreteDistribution, \
     ContinuousDistribution
@@ -31,7 +31,9 @@ from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, Mo
 from ...utils import MissingDict
 
 
-class Unit(SubclassJSONSerializer, DrawIOInterface):
+
+@dataclass
+class Unit(SubclassJSONSerializer, DrawIOInterface, ABC):
     """
     Class for all units of a probabilistic circuit.
 
@@ -39,38 +41,38 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
     Use :class:`ProbabilisticCircuit` as interface to users.
     """
 
-    probabilistic_circuit: ProbabilisticCircuit
+    probabilistic_circuit: Optional[ProbabilisticCircuit] = field(kw_only=True, repr=False, default=None)
     """
     The circuit this component is part of. 
     """
 
-    result_of_current_query: Any = None
+    result_of_current_query: Any = field(init=False, default=None, repr=False)
     """
     The result of the current query. 
     """
 
-    def __init__(self, probabilistic_circuit: Optional[ProbabilisticCircuit] = None):
+    index: Optional[int] = field(kw_only=True, default=None, repr=False)
+    """
+    The index of the node in the graph of its circuit.
+    """
 
-        if probabilistic_circuit is None:
-            probabilistic_circuit = ProbabilisticCircuit()
-
-        self.probabilistic_circuit = probabilistic_circuit
-        self.probabilistic_circuit.add_node(self)
+    def __post_init__(self):
+        if self.probabilistic_circuit is not None:
+            self.probabilistic_circuit.add_node(self)
 
     @property
-    @abstractmethod
     def subcircuits(self) -> List[Unit]:
         """
         :return: The subcircuits of this unit.
         """
-        raise NotImplementedError
+        return self.probabilistic_circuit.successors(self)
 
     @property
     def parents(self) -> List[InnerUnit]:
         """
         :return: The parents of this unit.
         """
-        return list(self.probabilistic_circuit.graph.predecessors(self))
+        return self.probabilistic_circuit.predecessors(self)
 
     @abstractmethod
     def support(self):
@@ -97,7 +99,7 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
         """
         :return: The leaves of the circuit that are descendants of this node.
         """
-        raise NotImplementedError
+        return [unit for unit in self.probabilistic_circuit.descendants(self) if unit.is_leaf]
 
     def update_variables(self, new_variables: VariableMap):
         """
@@ -116,9 +118,8 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
 
         :param other: The other unit to connect the incoming edges to.
         """
-        incoming_edges = list(self.probabilistic_circuit.graph.in_edges(self, data=True))
-        for parent, _, data in incoming_edges:
-            self.probabilistic_circuit.graph.add_edge(parent, other, **data)
+        [self.probabilistic_circuit.add_edge(parent, other, data)
+         for parent, _ ,data in self.probabilistic_circuit.in_edges(self)]
 
     def mount(self, other: Unit):
         """
@@ -126,11 +127,10 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
 
         :param other: The other unit to mount.
         """
-        descendants = nx.descendants(other.probabilistic_circuit.graph, other)
+        descendants = self.probabilistic_circuit.descendants(self)
         descendants = descendants.union([other])
-        subgraph = other.probabilistic_circuit.__class__()
-        subgraph.graph = other.probabilistic_circuit.graph.subgraph(descendants)
-        self.probabilistic_circuit.add_edges_and_nodes_from_circuit(subgraph)
+        subgraph = self.probabilistic_circuit.graph.subgraph(descendants)
+        self.probabilistic_circuit.add_from_subgraph(subgraph)
 
     def filter_variable_map_by_self(self, variable_map: VariableMap):
         """
@@ -154,13 +154,13 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
         raise NotImplementedError
 
     def __hash__(self):
-        return id(self)
+        if self.probabilistic_circuit is not None and self.index is not None:
+            return (self.index, id(self.probabilistic_circuit))
+        else:
+            return id(self)
 
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.subcircuits == other.subcircuits
-
-    def __copy__(self):
-        raise NotImplementedError()
+    def copy_without_graph(self):
+        return self.empty_copy()
 
     def empty_copy(self) -> Self:
         """
@@ -205,6 +205,7 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
         return {"style": self.drawio_label, "width": 30, "height": 30, }
 
 
+@dataclass
 class LeafUnit(Unit):
     """
     Class for Leaf units.
@@ -215,12 +216,8 @@ class LeafUnit(Unit):
     The distribution contained in this leaf unit.
     """
 
-    def __init__(self, distribution: ProbabilisticModel, probabilistic_circuit: Optional[ProbabilisticCircuit] = None):
-        super().__init__(probabilistic_circuit)
-        self.distribution = distribution
-
-    def __repr__(self):
-        return repr(self.distribution)
+    # def __repr__(self):
+    #     return repr(self.distribution)
 
     @property
     def drawio_label(self):
@@ -264,9 +261,6 @@ class LeafUnit(Unit):
 
     def log_truncated_of_simple_event_in_place(self, event: SimpleEvent):
         self.distribution, self.result_of_current_query = self.distribution.log_truncated(event.as_composite_set())
-
-    def __copy__(self):
-        return self.__class__(self.distribution.__copy__())
 
     def moment(self, order, center, variable_to_index_map):
         result = np.zeros(len(variable_to_index_map))
@@ -313,6 +307,9 @@ class LeafUnit(Unit):
         else:
             self.result_of_current_query = 0.
 
+    def copy_without_graph(self):
+        return self.__class__(distribution = self.distribution.__copy__())
+
 
 class InnerUnit(Unit):
     """
@@ -320,16 +317,8 @@ class InnerUnit(Unit):
     """
 
     @property
-    def subcircuits(self) -> List[Unit]:
-        return list(self.probabilistic_circuit.successors(self))
-
-    @property
     def is_leaf(self):
         return False
-
-    @property
-    def leaves(self) -> List[LeafUnit]:
-        return [node for node in nx.descendants(self.probabilistic_circuit, self) if node.is_leaf]
 
     @abstractmethod
     def forward(self, *args, **kwargs):
@@ -358,9 +347,9 @@ class SumUnit(InnerUnit):
 
     TODO remove this when RE is fixed
     """
-
-    def __repr__(self):
-        return "⊕"
+    #
+    # def __repr__(self):
+    #     return "⊕"
 
     @property
     def representation(self) -> str:
@@ -375,8 +364,8 @@ class SumUnit(InnerUnit):
         """
         :return: The weighted subcircuits of this unit.
         """
-        return [(self.probabilistic_circuit.get_edge_data(self, subcircuit)["log_weight"], subcircuit) for subcircuit in
-                self.subcircuits]
+        return [(self.probabilistic_circuit.graph.get_edge_data(self.index, subcircuit.index), subcircuit)
+                for subcircuit in self.subcircuits]
 
     @property
     def variables(self) -> SortedSet:
@@ -429,9 +418,9 @@ class SumUnit(InnerUnit):
         self.result_of_current_query = logsumexp(result, axis=0)
 
     def support(self):
-        support = self.subcircuits[0].result_of_current_query.__deepcopy__()
+        support = self.subcircuits[0].result_of_current_query
         for subcircuit in self.subcircuits[1:]:
-            support |= subcircuit.result_of_current_query.__deepcopy__()
+            support |= subcircuit.result_of_current_query
         self.result_of_current_query = support
 
     @property
@@ -462,19 +451,10 @@ class SumUnit(InnerUnit):
                 subcircuit.result_of_current_query.append((start_index + total, count))
                 total += count
 
-    def __hash__(self):
-        return id(self)
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.log_weighted_subcircuits == other.log_weighted_subcircuits
-
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         result = cls()
         return result
-
-    def __copy__(self):
-        return self.empty_copy()
 
     def mount_with_interaction_terms(self, other: Self, interaction_model: ProbabilisticModel):
         """
@@ -664,8 +644,8 @@ class ProductUnit(InnerUnit):
     def drawio_label(self) -> str:
         return circled_product
 
-    def __repr__(self):
-        return "⊗"
+    # def __repr__(self):
+    #     return "⊗"
 
     def forward(self, *args, **kwargs):
         self.result_of_current_query = math.prod(
@@ -750,6 +730,7 @@ class ProductUnit(InnerUnit):
                 subcircuit.result_of_current_query.append([start_index, amount])
 
 
+@dataclass
 class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
     """
     Probabilistic Circuits as a directed, rooted, acyclic graph.
@@ -759,9 +740,10 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
     The outgoing edges of a sum unit contain the log-log_weights of the subcircuits.
     """
 
-    def __init__(self):
-        super().__init__()
-        self.graph = nx.DiGraph()
+    graph: rx.PyDAG[Unit] = field(default=rx.PyDAG(multigraph=False))
+    """
+    The graph to check connectivity from.
+    """
 
     def __len__(self):
         """
@@ -795,7 +777,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
 
     @property
     def layers(self) -> List[List[Unit]]:
-        return list(nx.bfs_layers(self.graph, self.root))
+        return rx.layers(self.graph, [self.root.index], index_output=False)
 
     @property
     def leaves(self) -> List[LeafUnit]:
@@ -810,113 +792,64 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
 
         :return: True if the graph is valid, False otherwise.
         """
-        return nx.is_directed_acyclic_graph(self.graph) and nx.is_weakly_connected(self.graph)
+        return rx.is_directed_acyclic_graph(self.graph) and rx.is_connected(self.graph)
 
-    def add_node(self, node: Unit, **attr):
+    def add_node(self, node: Unit):
+
+        if node.probabilistic_circuit is self and node.index is not None:
+            return
+        elif node.probabilistic_circuit is not None and node.probabilistic_circuit is not self:
+            raise NotImplementedError("Cannot add a node that already belongs to another circuit.")
+
+        node.index = self.graph.add_node(node)
 
         # write self as the nodes' circuit
         node.probabilistic_circuit = self
 
-        # add to graph
-        self.graph.add_node(node, **attr)
 
-    def add_nodes_from(self, nodes_for_adding, **attr):
-        for node in nodes_for_adding:
-            self.add_node(node, **attr)
+    def add_nodes_from(self, units: Iterable[Unit]):
+        [self.add_node(node) for node in units]
 
-    def add_edge(self, u_of_edge, v_of_edge, **attr):
-        """
-        Add an edge between u and v.
+    def add_edge(self, parent: Unit, child: Unit, log_weight: Optional[float] = None):
+        self.add_node(parent)
+        self.add_node(child)
+        self.graph.add_edge(parent.index, child.index, log_weight)
 
-        :param u_of_edge: The source node.
-        :param v_of_edge: The target node.
-        :param attr: Attributes to add to the edge.
-        """
-        self.graph.add_edge(u_of_edge, v_of_edge, **attr)
+    def add_edges_from(self, edges: Iterable[Union[Tuple[Unit, Unit], Tuple[Unit, Unit, float]]]):
+        [self.add_edge(*edge) for edge in edges]
 
-    def add_edges_from(self, ebunch_to_add, **attr):
-        """
-        Add all the edges in ebunch_to_add.
+    def successors(self, unit: Unit) -> List[Unit]:
+        return self.graph.successors(unit.index)
 
-        :param ebunch_to_add: Container of edges to add.
-        :param attr: Attributes to add to all edges.
-        """
-        self.graph.add_edges_from(ebunch_to_add, **attr)
+    def descendants(self, unit: Unit) -> Set[Unit]:
+        return [self.graph[unit] for unit in rx.descendants(self.graph, unit.index)]
 
-    def successors(self, n):
-        """
-        Return an iterator over successor nodes of n.
+    def predecessors(self, unit: Unit) -> List[InnerUnit]:
+        return self.graph.predecessors(unit.index)
 
-        :param n: A node in the graph.
-        :return: An iterator over successor nodes of n.
-        """
-        return self.graph.successors(n)
+    def remove_node(self, unit: Unit):
+        self.graph.remove_node(unit.index)
+        unit.index = None
+        unit.probabilistic_circuit = None
 
-    def predecessors(self, n):
-        """
-        Return an iterator over predecessor nodes of n.
+    def remove_nodes_from(self, units: Iterable[Unit]):
+        [self.remove_node(unit) for unit in units]
 
-        :param n: A node in the graph.
-        :return: An iterator over predecessor nodes of n.
-        """
-        return self.graph.predecessors(n)
+    def remove_edge(self, parent: Unit, child: Unit):
+        self.graph.remove_edge(parent.index, child.index)
 
-    def neighbors(self, n):
-        """
-        Return an iterator over the neighbors of node n.
+    def remove_edges_from(self, edges: Iterable[Tuple[Unit, Unit]]):
+        [self.remove_edge(*edge) for edge in edges]
 
-        :param n: A node in the graph.
-        :return: An iterator over the neighbors of node n.
-        """
-        return self.graph.neighbors(n)
+    def in_edges(self, unit: Unit) -> List[Tuple[Unit, Unit, Optional[float]]]:
+        return [(self.graph.get_node_data(parent_index), unit, edge_data,)
+                for parent_index, _, edge_data in self.graph.in_edges(unit.index)]
 
-    def remove_node(self, n):
-        """
-        Remove node n.
+    def add_from_subgraph(self, subgraph: rx.PyDAG[Unit]):
+        for edge in subgraph.edges():
+            self.add_edge(*edge)
 
-        :param n: A node in the graph.
-        """
-        self.graph.remove_node(n)
-
-    def remove_nodes_from(self, nodes):
-        """
-        Remove multiple nodes.
-
-        :param nodes: A container of nodes.
-        """
-        self.graph.remove_nodes_from(nodes)
-
-    def remove_edge(self, u, v):
-        """
-        Remove the edge between u and v.
-
-        :param u: The source node.
-        :param v: The target node.
-        """
-        self.graph.remove_edge(u, v)
-
-    def in_edges(self, n=None, data=False):
-        """
-        Return a list of the incoming edges.
-
-        :param n: A node in the graph.
-        :param data: If True, return edge data.
-        :return: A list of incoming edges.
-        """
-        return self.graph.in_edges(n, data=data)
-
-    def edges(self, nbunch=None, data=False, default=None):
-        """
-        Return a list of edges.
-
-        :param nbunch: A container of nodes.
-        :param data: If True, return edge data.
-        :param default: Default value for edge data.
-        :return: A list of edges.
-        """
-        return self.graph.edges(nbunch, data=data, default=default)
-
-    def nodes(self):
+    def nodes(self) -> List[Unit]:
         """
         Return an iterator over the nodes.
 
@@ -924,44 +857,14 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         return self.graph.nodes()
 
-    def in_degree(self, node):
-        """
-        Return the in-degree of node.
+    def edges(self):
+        return self.graph.edges()
 
-        :param node: A node in the graph.
-        :return: The in-degree of node.
-        """
-        return self.graph.in_degree(node)
+    def in_degree(self, unit: Unit):
+        return self.graph.in_degree(unit.index)
 
-    def get_edge_data(self, u, v, default=None):
-        """
-        Return the attribute dictionary associated with edge (u, v).
-
-        :param u: The source node.
-        :param v: The target node.
-        :param default: Default value if edge doesn't exist.
-        :return: The attribute dictionary associated with edge (u, v).
-        """
-        return self.graph.get_edge_data(u, v, default)
-
-    def has_edge(self, u, v):
-        """
-        Return True if the edge (u, v) is in the graph.
-
-        :param u: The source node.
-        :param v: The target node.
-        :return: True if the edge (u, v) is in the graph.
-        """
-        return self.graph.has_edge(u, v)
-
-    @property
-    def adj(self):
-        """
-        Return the adjacency dictionary of the graph.
-
-        :return: The adjacency dictionary of the graph.
-        """
-        return self.graph.adj
+    def has_edge(self, parent: Unit, child: Unit) -> bool:
+        return self.graph.has_edge(parent.index, child.index)
 
     @property
     def root(self) -> Unit:
@@ -971,11 +874,13 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
 
         :return: The root of the circuit.
         """
-        possible_roots = [node for node in self.graph.nodes() if self.graph.in_degree(node) == 0]
-        if len(possible_roots) > 1:
+        possible_roots = [node for node in self.nodes() if self.in_degree(node) == 0]
+        if len(possible_roots) == 1:
+            return possible_roots[0]
+        elif len(possible_roots) > 1:
             raise ValueError(f"More than one root found. Possible roots are {possible_roots}")
-
-        return possible_roots[0]
+        else:
+            raise ValueError(f"No root found.")
 
     def log_likelihood(self, events: np.array) -> np.array:
         variable_to_index_map = self.variable_to_index_map
@@ -1098,7 +1003,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         return self, result.result_of_current_query
 
     def log_truncated(self, event: Event) -> Tuple[Optional[Self], float]:
-        result = self.__copy__()
+        result = copy.deepcopy(self)
         return result.log_truncated_in_place(event)
 
     def marginal_in_place(self, variables: Iterable[Variable]) -> Optional[Self]:
@@ -1228,32 +1133,6 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         return self.__class__()
 
-    def __copy__(self, precomputed=None):
-        """
-        Fast copy: only use precomputed = (nodes, unw, weighted) if provided,
-        else fallback to walking the graph.
-        """
-        if precomputed is None:
-            nodes = list(self.graph.nodes())
-            unw = [(u, v) for u, v, attr in self.graph.edges(data=True)
-                   if "log_weight" not in attr]
-            wgt = [(u, v, attr["log_weight"]) for u, v, attr in self.graph.edges(data=True)
-                   if "log_weight" in attr]
-        else:
-            nodes, unw, wgt = precomputed
-
-        # Use fast dict comprehension for copying nodes
-        result = self.empty_copy()
-        new_map = {n: n.__copy__() for n in nodes}
-        result.add_nodes_from(new_map.values())
-        # Add edges directly from precomputed lists
-        result.graph.add_edges_from((new_map[u], new_map[v]) for u, v in unw)
-        result.add_weighted_edges_from(
-            ((new_map[u], new_map[v], lw) for u, v, lw in wgt),
-            weight="log_weight"
-        )
-        return result
-
     def __deepcopy__(self, memo=None):
         """
         Deep copy of the circuit.
@@ -1271,24 +1150,12 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         result = self.empty_copy()
         memo[id_self] = result
 
-        # Get all nodes and edges
-        nodes = list(self.graph.nodes())
-        unw = [(u, v) for u, v, attr in self.graph.edges(data=True)
-               if "log_weight" not in attr]
-        wgt = [(u, v, attr["log_weight"]) for u, v, attr in self.graph.edges(data=True)
-               if "log_weight" in attr]
+        # remap nodes to new copies
+        remapped_indices = {node.index: copy.deepcopy(node) for node in self.nodes()}
+        result.add_nodes_from(remapped_indices.values())
 
-        # Use deep copy for nodes
-        import copy
-        new_map = {n: copy.deepcopy(n, memo) for n in nodes}
-        result.add_nodes_from(new_map.values())
-
-        # Add edges
-        result.graph.add_edges_from((new_map[u], new_map[v]) for u, v in unw)
-        result.add_weighted_edges_from(
-            ((new_map[u], new_map[v], lw) for u, v, lw in wgt),
-            weight="log_weight"
-        )
+        for parent, child, data in self.graph.edges():
+            result.graph.add_edge(remapped_indices[parent].index, remapped_indices[child].index, data)
 
         return result
 
@@ -1725,14 +1592,14 @@ class ShallowProbabilisticCircuit(ProbabilisticCircuit):
             if len(list(probabilistic_circuit.predecessors(succ))) == 0:
                 self.remove_node_and_successor_structure(succ)
 
-
+@dataclass
 class UnivariateLeaf(LeafUnit):
 
     @property
     def variable(self) -> Variable:
         return self.distribution.variables[0]
 
-
+@dataclass
 class UnivariateContinuousLeaf(UnivariateLeaf):
     distribution: Optional[ContinuousDistribution]
 
@@ -1787,7 +1654,7 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
         result.result_of_current_query = np.log(total_probability)
         return result
 
-
+@dataclass
 class UnivariateDiscreteLeaf(UnivariateLeaf):
 
     distribution: Optional[DiscreteDistribution]
@@ -1841,6 +1708,6 @@ def leaf(distribution: UnivariateDistribution, probabilistic_circuit: Optional[P
     :return: The leaf.
     """
     if isinstance(distribution.variable, Continuous):
-        return UnivariateContinuousLeaf(distribution, probabilistic_circuit)
+        return UnivariateContinuousLeaf(distribution, probabilistic_circuit=probabilistic_circuit)
     else:
-        return UnivariateDiscreteLeaf(distribution, probabilistic_circuit)
+        return UnivariateDiscreteLeaf(distribution, probabilistic_circuit=probabilistic_circuit)
