@@ -163,7 +163,7 @@ class InductionStepTestCase(unittest.TestCase):
         data = [1., 1.]
         distribution = self.induction_step.nyga_distribution
         distribution.fit(data)
-        self.assertEqual(len(distribution.nodes), 1)
+        self.assertEqual(len(list(distribution.nodes())), 1)
         self.assertIsInstance(distribution.root.distribution, DiracDeltaDistribution)
 
     def test_serialization(self):

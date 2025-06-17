@@ -31,7 +31,7 @@ class ContinuousDistributionTestCase(unittest.TestCase):
     def test_conditional_from_simple_event(self):
         event = SimpleEvent({self.variable: closed(0.5, 2)}).as_composite_set()
         conditional, probability = self.leaf.probabilistic_circuit.truncated(event)
-        self.assertEqual(len(list(conditional.nodes)), 1)
+        self.assertEqual(len(list(conditional.nodes())), 1)
         self.assertEqual(probability, 0.5)
         self.assertEqual(conditional.root.distribution.univariate_support, closed(0.5, 1))
 
@@ -42,7 +42,7 @@ class ContinuousDistributionTestCase(unittest.TestCase):
 
         conditional, probability = self.leaf.probabilistic_circuit.conditional({self.variable: 0.3})
 
-        self.assertEqual(len(conditional.nodes), 1)
+        self.assertEqual(len(list(conditional.nodes())), 1)
         self.assertEqual(probability, 1.)
         self.assertAlmostEqual(conditional.root.distribution.location, 0.3)
 
@@ -51,8 +51,8 @@ class ContinuousDistributionTestCase(unittest.TestCase):
         event = SimpleEvent({self.variable: interval})
         conditional, probability = self.leaf.probabilistic_circuit.truncated(event.as_composite_set())
 
-        self.assertEqual(len(list(conditional.nodes)), 3)
-        self.assertEqual(len(list(conditional.edges)), 2)
+        self.assertEqual(len(list(conditional.nodes())), 3)
+        self.assertEqual(len(list(conditional.edges())), 2)
         self.assertIsInstance(conditional.root, SumUnit)
 
     def test_conditional_with_none(self):
@@ -91,4 +91,3 @@ class DiscreteDistributionTestCase(unittest.TestCase):
         self.assertIsInstance(result.distribution, IntegerDistribution)
         self.assertTrue(np.allclose(np.array(list(result.distribution.probabilities.values())),
                                     np.array([0.1, 0.2, 0.7])))
-

@@ -70,7 +70,7 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
         """
         :return: The parents of this unit.
         """
-        return list(self.probabilistic_circuit.predecessors(self))
+        return list(self.probabilistic_circuit.graph.predecessors(self))
 
     @abstractmethod
     def support(self):
@@ -116,9 +116,9 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
 
         :param other: The other unit to connect the incoming edges to.
         """
-        incoming_edges = list(self.probabilistic_circuit.in_edges(self, data=True))
+        incoming_edges = list(self.probabilistic_circuit.graph.in_edges(self, data=True))
         for parent, _, data in incoming_edges:
-            self.probabilistic_circuit.add_edge(parent, other, **data)
+            self.probabilistic_circuit.graph.add_edge(parent, other, **data)
 
     def mount(self, other: Unit):
         """
@@ -126,9 +126,10 @@ class Unit(SubclassJSONSerializer, DrawIOInterface):
 
         :param other: The other unit to mount.
         """
-        descendants = nx.descendants(other.probabilistic_circuit, other)
+        descendants = nx.descendants(other.probabilistic_circuit.graph, other)
         descendants = descendants.union([other])
-        subgraph = other.probabilistic_circuit.subgraph(descendants)
+        subgraph = other.probabilistic_circuit.__class__()
+        subgraph.graph = other.probabilistic_circuit.graph.subgraph(descendants)
         self.probabilistic_circuit.add_edges_and_nodes_from_circuit(subgraph)
 
     def filter_variable_map_by_self(self, variable_map: VariableMap):
@@ -354,7 +355,7 @@ class SumUnit(InnerUnit):
     """
     The latent variable of this unit.
     This has to be here due to the rvalue/lvalue problem in random events.
-    
+
     TODO remove this when RE is fixed
     """
 
@@ -374,7 +375,7 @@ class SumUnit(InnerUnit):
         """
         :return: The weighted subcircuits of this unit.
         """
-        return [(self.probabilistic_circuit.edges[self, subcircuit]["log_weight"], subcircuit) for subcircuit in
+        return [(self.probabilistic_circuit.get_edge_data(self, subcircuit)["log_weight"], subcircuit) for subcircuit in
                 self.subcircuits]
 
     @property
@@ -613,7 +614,8 @@ class SumUnit(InnerUnit):
         """
         total_weight = logsumexp(self.log_weights)
         for subcircuit in self.subcircuits:
-            self.probabilistic_circuit.edges[self, subcircuit]["log_weight"] -= total_weight
+            edge_data = self.probabilistic_circuit.get_edge_data(self, subcircuit)
+            edge_data["log_weight"] -= total_weight
 
     def is_deterministic(self) -> bool:
         """
@@ -748,7 +750,7 @@ class ProductUnit(InnerUnit):
                 subcircuit.result_of_current_query.append([start_index, amount])
 
 
-class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerializer):
+class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
     """
     Probabilistic Circuits as a directed, rooted, acyclic graph.
 
@@ -758,8 +760,24 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     """
 
     def __init__(self):
-        super().__init__(None)
-        nx.DiGraph.__init__(self)
+        super().__init__()
+        self.graph = nx.DiGraph()
+
+    def __len__(self):
+        """
+        Return the number of nodes in the graph.
+
+        :return: The number of nodes in the graph.
+        """
+        return len(self.graph)
+
+    def __iter__(self):
+        """
+        Return an iterator over the nodes in the graph.
+
+        :return: An iterator over the nodes in the graph.
+        """
+        return iter(self.graph.nodes())
 
     @classmethod
     def from_other(cls, other: Self) -> Self:
@@ -777,7 +795,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
     @property
     def layers(self) -> List[List[Unit]]:
-        return list(nx.bfs_layers(self, self.root))
+        return list(nx.bfs_layers(self.graph, self.root))
 
     @property
     def leaves(self) -> List[LeafUnit]:
@@ -792,19 +810,158 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         :return: True if the graph is valid, False otherwise.
         """
-        return nx.is_directed_acyclic_graph(self) and nx.is_weakly_connected(self)
+        return nx.is_directed_acyclic_graph(self.graph) and nx.is_weakly_connected(self.graph)
 
     def add_node(self, node: Unit, **attr):
 
         # write self as the nodes' circuit
         node.probabilistic_circuit = self
 
-        # call super
-        super().add_node(node, **attr)
+        # add to graph
+        self.graph.add_node(node, **attr)
 
     def add_nodes_from(self, nodes_for_adding, **attr):
         for node in nodes_for_adding:
             self.add_node(node, **attr)
+
+    def add_edge(self, u_of_edge, v_of_edge, **attr):
+        """
+        Add an edge between u and v.
+
+        :param u_of_edge: The source node.
+        :param v_of_edge: The target node.
+        :param attr: Attributes to add to the edge.
+        """
+        self.graph.add_edge(u_of_edge, v_of_edge, **attr)
+
+    def add_edges_from(self, ebunch_to_add, **attr):
+        """
+        Add all the edges in ebunch_to_add.
+
+        :param ebunch_to_add: Container of edges to add.
+        :param attr: Attributes to add to all edges.
+        """
+        self.graph.add_edges_from(ebunch_to_add, **attr)
+
+    def successors(self, n):
+        """
+        Return an iterator over successor nodes of n.
+
+        :param n: A node in the graph.
+        :return: An iterator over successor nodes of n.
+        """
+        return self.graph.successors(n)
+
+    def predecessors(self, n):
+        """
+        Return an iterator over predecessor nodes of n.
+
+        :param n: A node in the graph.
+        :return: An iterator over predecessor nodes of n.
+        """
+        return self.graph.predecessors(n)
+
+    def neighbors(self, n):
+        """
+        Return an iterator over the neighbors of node n.
+
+        :param n: A node in the graph.
+        :return: An iterator over the neighbors of node n.
+        """
+        return self.graph.neighbors(n)
+
+    def remove_node(self, n):
+        """
+        Remove node n.
+
+        :param n: A node in the graph.
+        """
+        self.graph.remove_node(n)
+
+    def remove_nodes_from(self, nodes):
+        """
+        Remove multiple nodes.
+
+        :param nodes: A container of nodes.
+        """
+        self.graph.remove_nodes_from(nodes)
+
+    def remove_edge(self, u, v):
+        """
+        Remove the edge between u and v.
+
+        :param u: The source node.
+        :param v: The target node.
+        """
+        self.graph.remove_edge(u, v)
+
+    def in_edges(self, n=None, data=False):
+        """
+        Return a list of the incoming edges.
+
+        :param n: A node in the graph.
+        :param data: If True, return edge data.
+        :return: A list of incoming edges.
+        """
+        return self.graph.in_edges(n, data=data)
+
+    def edges(self, nbunch=None, data=False, default=None):
+        """
+        Return a list of edges.
+
+        :param nbunch: A container of nodes.
+        :param data: If True, return edge data.
+        :param default: Default value for edge data.
+        :return: A list of edges.
+        """
+        return self.graph.edges(nbunch, data=data, default=default)
+
+    def nodes(self):
+        """
+        Return an iterator over the nodes.
+
+        :return: An iterator over the nodes.
+        """
+        return self.graph.nodes()
+
+    def in_degree(self, node):
+        """
+        Return the in-degree of node.
+
+        :param node: A node in the graph.
+        :return: The in-degree of node.
+        """
+        return self.graph.in_degree(node)
+
+    def get_edge_data(self, u, v, default=None):
+        """
+        Return the attribute dictionary associated with edge (u, v).
+
+        :param u: The source node.
+        :param v: The target node.
+        :param default: Default value if edge doesn't exist.
+        :return: The attribute dictionary associated with edge (u, v).
+        """
+        return self.graph.get_edge_data(u, v, default)
+
+    def has_edge(self, u, v):
+        """
+        Return True if the edge (u, v) is in the graph.
+
+        :param u: The source node.
+        :param v: The target node.
+        :return: True if the edge (u, v) is in the graph.
+        """
+        return self.graph.has_edge(u, v)
+
+    @property
+    def adj(self):
+        """
+        Return the adjacency dictionary of the graph.
+
+        :return: The adjacency dictionary of the graph.
+        """
+        return self.graph.adj
 
     @property
     def root(self) -> Unit:
@@ -814,7 +971,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         :return: The root of the circuit.
         """
-        possible_roots = [node for node in self.nodes() if self.in_degree(node) == 0]
+        possible_roots = [node for node in self.graph.nodes() if self.graph.in_degree(node) == 0]
         if len(possible_roots) > 1:
             raise ValueError(f"More than one root found. Possible roots are {possible_roots}")
 
@@ -866,9 +1023,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         Remove all nodes that are not reachable from the root.
         """
-        reachable_nodes = nx.descendants(self, root)
-        unreachable_nodes = set(self.nodes) - (reachable_nodes | {root})
-        self.remove_nodes_from(unreachable_nodes)
+        reachable_nodes = nx.descendants(self.graph, root)
+        unreachable_nodes = set(self.graph.nodes()) - (reachable_nodes | {root})
+        self.graph.remove_nodes_from(unreachable_nodes)
 
     def log_truncated_of_simple_event_in_place(self, simple_event: SimpleEvent) -> Tuple[Optional[Self], float]:
         """
@@ -887,10 +1044,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                     unit.log_forward()
 
         root = self.root
-        [self.remove_node(node) for layer in reversed(self.layers) for node in layer if
+        [self.graph.remove_node(node) for layer in reversed(self.layers) for node in layer if
          node.result_of_current_query == -np.inf]
 
-        if root not in self.nodes:
+        if root not in self.graph.nodes():
             return None, -np.inf
 
         # clean the circuit up
@@ -906,7 +1063,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         # skip trivial case
         if event.is_empty():
-            self.remove_nodes_from(list(self.nodes))
+            self.graph.remove_nodes_from(list(self.graph.nodes()))
             return None, -np.inf
 
 
@@ -920,7 +1077,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
                                 in event.simple_sets]
 
         # clear this circuit
-        self.remove_nodes_from(list(self.nodes))
+        self.graph.remove_nodes_from(list(self.graph.nodes()))
 
         # filtered out impossible conditionals
         conditional_circuits = [(conditional, log_probability) for conditional, log_probability in conditional_circuits
@@ -970,10 +1127,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         # clean the circuit up
         root = self.root
-        [self.remove_node(node) for layer in reversed(self.layers) for node in layer if
+        [self.graph.remove_node(node) for layer in reversed(self.layers) for node in layer if
          node.result_of_current_query == -np.inf]
 
-        if root not in self.nodes:
+        if root not in self.graph.nodes():
             return None, -np.inf
 
         self.remove_unreachable_nodes(root)
@@ -1014,7 +1171,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
     def sample(self, amount: int) -> np.array:
 
         # initialize all results
-        for node in self.nodes:
+        for node in self.graph.nodes():
             node.result_of_current_query = []
 
         variable_to_index_map = self.variable_to_index_map
@@ -1077,10 +1234,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         else fallback to walking the graph.
         """
         if precomputed is None:
-            nodes = list(self.nodes)
-            unw = [(u, v) for u, v, attr in self.edges(data=True)
+            nodes = list(self.graph.nodes())
+            unw = [(u, v) for u, v, attr in self.graph.edges(data=True)
                    if "log_weight" not in attr]
-            wgt = [(u, v, attr["log_weight"]) for u, v, attr in self.edges(data=True)
+            wgt = [(u, v, attr["log_weight"]) for u, v, attr in self.graph.edges(data=True)
                    if "log_weight" in attr]
         else:
             nodes, unw, wgt = precomputed
@@ -1090,7 +1247,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         new_map = {n: n.__copy__() for n in nodes}
         result.add_nodes_from(new_map.values())
         # Add edges directly from precomputed lists
-        result.add_edges_from((new_map[u], new_map[v]) for u, v in unw)
+        result.graph.add_edges_from((new_map[u], new_map[v]) for u, v in unw)
         result.add_weighted_edges_from(
             ((new_map[u], new_map[v], lw) for u, v, lw in wgt),
             weight="log_weight"
@@ -1103,7 +1260,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         hash_to_node_map = dict()
 
-        for node in self.nodes:
+        for node in self.graph.nodes():
             node_json = node.to_json()
             hash_to_node_map[hash(node)] = node_json
 
@@ -1129,10 +1286,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             result.add_node(node)
 
         for source_hash, target_hash in data["unweighted_edges"]:
-            result.add_edge(hash_remap[source_hash], hash_remap[target_hash])
+            result.graph.add_edge(hash_remap[source_hash], hash_remap[target_hash])
 
         for source_hash, target_hash, weight in data["log_weighted_edges"]:
-            result.add_edge(hash_remap[source_hash], hash_remap[target_hash], log_weight=weight)
+            result.graph.add_edge(hash_remap[source_hash], hash_remap[target_hash], log_weight=weight)
 
         return result
 
@@ -1151,8 +1308,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         weighted_edges = []
 
-        for edge in self.edges:
-            edge_ = self.edges[edge]
+        for edge in self.graph.edges():
+            edge_ = self.graph.get_edge_data(*edge)
 
             if "log_weight" in edge_.keys():
                 weight = edge_["log_weight"]
@@ -1167,8 +1324,8 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         """
         unweighted_edges = []
 
-        for edge in self.edges:
-            edge_ = self.edges[edge]
+        for edge in self.graph.edges():
+            edge_ = self.graph.get_edge_data(*edge)
 
             if "weight" not in edge_.keys():
                 unweighted_edges.append(edge)
@@ -1184,13 +1341,13 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         support = self.support
 
         # check for determinism of every node
-        return all(node.is_deterministic() for node in self.nodes if isinstance(node, SumUnit))
+        return all(node.is_deterministic() for node in self.graph.nodes() if isinstance(node, SumUnit))
 
     def normalize(self):
         """
         Normalize every sum node of this circuit in-place.
         """
-        [node.normalize() for node in self.nodes if isinstance(node, SumUnit)]
+        [node.normalize() for node in self.graph.nodes() if isinstance(node, SumUnit)]
 
     def add_edges_and_nodes_from_circuit(self, other: Self):
         """
@@ -1198,12 +1355,12 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         :param other: The other circuit to add.
         """
-        self.add_nodes_from(other.nodes)
-        self.add_edges_from(other.unweighted_edges)
+        self.add_nodes_from(other.graph.nodes())
+        self.graph.add_edges_from(other.unweighted_edges)
         self.add_weighted_edges_from(other.log_weighted_edges, weight="log_weight")
 
     def add_weighted_edges_from(self, ebunch_to_add, weight = "log_weight", **attr):
-        return super().add_weighted_edges_from(ebunch_to_add, weight=weight, **attr)
+        return self.graph.add_weighted_edges_from(ebunch_to_add, weight=weight, **attr)
 
     def subgraph_of(self, node: Unit) -> Self:
         """
@@ -1212,8 +1369,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         :param node: The root of the subgraph.
         :return: The subgraph.
         """
-        nodes_to_keep = list(nx.descendants(self, node)) + [node]
-        return nx.subgraph(self, nodes_to_keep)
+        nodes_to_keep = list(nx.descendants(self.graph, node)) + [node]
+        result = self.__class__()
+        result.graph = self.graph.subgraph(nodes_to_keep)
+        return result
 
     def fill_node_colors(self, node_colors: Dict[Unit, str]):
         """
@@ -1224,7 +1383,7 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         # fill the colors for the nodes
         if node_colors is None:
             node_colors = dict()
-        for node in self.nodes:
+        for node in self.graph.nodes():
             if node not in node_colors:
                 node_colors[node] = "black"
         return node_colors
@@ -1249,48 +1408,48 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         node_colors = self.fill_node_colors(node_colors)
 
         # get the positions of the nodes
-        positions = networkx.drawing.bfs_layout(self, self.root)
+        positions = networkx.drawing.bfs_layout(self.graph, self.root)
         position_for_variable_name = {node: (x + variable_name_offset, y) for node, (x, y) in positions.items()}
 
 
 
         # draw the edges
-        alpha_for_edges = [np.exp(self.get_edge_data(*edge)["log_weight"]) if self.get_edge_data(*edge) else 1. for edge in
-                           self.edges]
+        alpha_for_edges = [np.exp(self.graph.get_edge_data(*edge)["log_weight"]) if self.graph.get_edge_data(*edge) else 1. for edge in
+                           self.graph.edges()]
 
-        nx.draw_networkx_edges(self, positions, alpha=alpha_for_edges, node_size=node_size)
+        nx.draw_networkx_edges(self.graph, positions, alpha=alpha_for_edges, node_size=node_size)
         edge_labels = {(s, t): round(np.exp(w), 2) for (s, t, w) in self.log_weighted_edges}
-        nx.draw_networkx_edge_labels(self, positions, edge_labels, label_pos=0.25)
+        nx.draw_networkx_edge_labels(self.graph, positions, edge_labels, label_pos=0.25)
 
         # filter different types of nodes
-        sum_nodes = [node for node in self.nodes if isinstance(node, SumUnit)]
+        sum_nodes = [node for node in self.graph.nodes() if isinstance(node, SumUnit)]
         sum_node_colors = [node_colors[node] for node in sum_nodes]
-        product_nodes = [node for node in self.nodes if isinstance(node, ProductUnit)]
+        product_nodes = [node for node in self.graph.nodes() if isinstance(node, ProductUnit)]
         product_node_colors = [node_colors[node] for node in product_nodes]
-        leaf_nodes = [node for node in self.nodes if isinstance(node, LeafUnit)]
+        leaf_nodes = [node for node in self.graph.nodes() if isinstance(node, LeafUnit)]
         leaf_node_colors = [node_colors[node] for node in leaf_nodes]
 
         # draw sum nodes
-        nx.draw_networkx_nodes(self, positions, nodelist=sum_nodes, node_color="#FFFFFF", node_shape="o",
+        nx.draw_networkx_nodes(self.graph, positions, nodelist=sum_nodes, node_color="#FFFFFF", node_shape="o",
                                edgecolors=sum_node_colors, node_size=node_size)
-        nx.draw_networkx_nodes(self, positions, nodelist=sum_nodes, node_color=sum_node_colors, node_shape="+",
+        nx.draw_networkx_nodes(self.graph, positions, nodelist=sum_nodes, node_color=sum_node_colors, node_shape="+",
                                node_size=node_size * 0.5)
 
         # draw product nodes
-        nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color="#FFFFFF", node_shape="o",
+        nx.draw_networkx_nodes(self.graph, positions, nodelist=product_nodes, node_color="#FFFFFF", node_shape="o",
                                edgecolors=product_node_colors, node_size=node_size)
-        nx.draw_networkx_nodes(self, positions, nodelist=product_nodes, node_color=product_node_colors, node_shape="x",
+        nx.draw_networkx_nodes(self.graph, positions, nodelist=product_nodes, node_color=product_node_colors, node_shape="x",
                                node_size=node_size * 6 / 11 * 0.5)
 
         # draw leaf nodes
         labels = {node: node.distribution.abbreviated_symbol for node in leaf_nodes}
-        nx.draw_networkx_nodes(self, positions, nodelist=leaf_nodes, node_color="#FFFFFF", node_shape="o",
+        nx.draw_networkx_nodes(self.graph, positions, nodelist=leaf_nodes, node_color="#FFFFFF", node_shape="o",
                                edgecolors=leaf_node_colors, node_size=node_size)
 
         for node, label in labels.items():
-            nx.draw_networkx_labels(self, positions, {node: label}, font_size=16, font_color=node_colors[node],
+            nx.draw_networkx_labels(self.graph, positions, {node: label}, font_size=16, font_color=node_colors[node],
                                     verticalalignment="center_baseline", horizontalalignment="center")
-            nx.draw_networkx_labels(self, position_for_variable_name, {node: node.variables[0].name}, font_size=16,
+            nx.draw_networkx_labels(self.graph, position_for_variable_name, {node: node.variables[0].name}, font_size=16,
                                     font_color=node_colors[node], )
 
         # Iterating over all the axes in the figure
@@ -1308,9 +1467,9 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
 
         # plot the results of the queries
         positions_for_results = {node: (x, y + inference_result_offset) for node, (x, y) in positions.items()}
-        inference_labels = {node: inference_representation(node) for node in self.nodes if
+        inference_labels = {node: inference_representation(node) for node in self.graph.nodes() if
                             node.result_of_current_query is not None}
-        nx.draw_networkx_labels(self, positions_for_results, inference_labels, font_size=8, font_color="black",
+        nx.draw_networkx_labels(self.graph, positions_for_results, inference_labels, font_size=8, font_color="black",
                                 verticalalignment="center_baseline", horizontalalignment="center")
 
     def nodes_weights(self) -> dict:
@@ -1326,10 +1485,10 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
         to_visit_nodes.put(self.root)
         while not to_visit_nodes.empty():
             node = to_visit_nodes.get()
-            succ_iter = self.successors(node)
+            succ_iter = self.graph.successors(node)
             for succ in succ_iter:
-                if self.has_edge(node, succ):
-                    weight = self.get_edge_data(node, succ).get("weight", 1)
+                if self.graph.has_edge(node, succ):
+                    weight = self.graph.get_edge_data(node, succ).get("weight", 1)
                     node_weights[hash(succ)] = [old * weight for old in node_weights[hash(node)]] + node_weights.get(
                         hash(succ), [])
                     if hash(succ) not in seen_nodes:
@@ -1347,15 +1506,15 @@ class ProbabilisticCircuit(ProbabilisticModel, nx.DiGraph, SubclassJSONSerialize
             if isinstance(leaf, UnivariateDiscreteLeaf):
                 leaf: UnivariateDiscreteLeaf
                 sum_leaf = leaf.as_deterministic_sum()
-                old_predecessors = list(self.predecessors(leaf))
+                old_predecessors = list(self.graph.predecessors(leaf))
                 for predecessor in old_predecessors:
-                    weight = self.get_edge_data(predecessor, leaf).get("log_weight", -1)
+                    weight = self.graph.get_edge_data(predecessor, leaf).get("log_weight", -1)
                     if weight == -1:
                         predecessor.add_subcircuit(sum_leaf)
                     else:
                         predecessor.add_subcircuit(sum_leaf, log_weight=weight)
-                    self.remove_edge(predecessor, leaf)
-                self.remove_node(leaf)
+                    self.graph.remove_edge(predecessor, leaf)
+                self.graph.remove_node(leaf)
 
     def translate(self, translation: Dict[Variable, float]):
         for leaf in self.leaves:

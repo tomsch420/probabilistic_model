@@ -23,7 +23,7 @@ class DrawIoExporter:
         diagram = drawio_diagram()
         diagram.add_diagram("Structure", width=1360, height=1864)
 
-        for unit, (x, y) in networkx.drawing.bfs_layout(self.model, self.model.root).items():
+        for unit, (x, y) in networkx.drawing.bfs_layout(self.model.graph, self.model.root).items():
             diagram.add_node(id=str(hash(unit)), x_pos=x * 100, y_pos=y * 100, **unit.drawio_style)
             if not unit.is_leaf:
                 diagram.current_root[-1].attrib["label"] = ""

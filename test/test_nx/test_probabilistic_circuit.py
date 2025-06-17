@@ -148,19 +148,19 @@ class DiracMixtureConditioningTestCase(unittest.TestCase):
 
         conditional, probability = self.model.truncated(event)
         self.assertAlmostEqual(probability, 0.25)
-        self.assertEqual(len(conditional.nodes), 3)
+        self.assertEqual(len(list(conditional.nodes())), 3)
         self.assertTrue(all([isinstance(node.distribution, UniformDistribution) for node in conditional.leaves]))
 
     def test_conditioning_singleton(self):
         event = SimpleEvent({self.x: singleton(0.5)}).as_composite_set()
 
         conditional, probability = self.model.truncated(event)
-        self.assertEqual(len(conditional.nodes), 1)
+        self.assertEqual(len(list(conditional.nodes())), 1)
         self.assertIsInstance(conditional.root.distribution, DiracDeltaDistribution)
 
         conditional, probability = self.model.conditional({self.x: 0.5})
         self.assertAlmostEqual(probability, 1.5)
-        self.assertEqual(len(conditional.nodes), 1)
+        self.assertEqual(len(list(conditional.nodes())), 1)
         self.assertTrue(all([isinstance(node.distribution, DiracDeltaDistribution) for node in conditional.leaves]))
 
 

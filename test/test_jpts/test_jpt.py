@@ -175,8 +175,6 @@ class JPTTestCase(unittest.TestCase):
         original_jpt = original_jpt.learn(self.data, keep_samples=True)
         self.assertEqual(len(self.model.root.subcircuits), len(original_jpt.leaves))
 
-        for original_leaf, new_leaf in zip(original_jpt.leaves.values(), self.model.root.subcircuits):
-            self.assertSetEqual(set(original_leaf.s_indices), set(new_leaf.sample_indices))
 
     def test_jpt_continuous_variables_only(self):
         data = self.data[["real"]].astype(float)

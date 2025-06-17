@@ -25,8 +25,8 @@ class FullyFactorizedTestCase(unittest.TestCase):
         cls.model = fully_factorized([cls.x, cls.y], mean, variance)
 
     def test_fully_factorized(self):
-        self.assertEqual(len(self.model.nodes), 3)
-        self.assertEqual(len(self.model.edges), 2)
+        self.assertEqual(len(list(self.model.nodes())), 3)
+        self.assertEqual(len(list(self.model.edges())), 2)
 
     def test_conditioning_on_mode(self):
         event = SimpleEvent({self.x: closed(0, 2), self.y: closed(0, 2)}).as_composite_set().complement()
