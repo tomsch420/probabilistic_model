@@ -857,9 +857,6 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         return self.graph.nodes()
 
-    def edges(self):
-        return self.graph.edges()
-
     def in_degree(self, unit: Unit):
         return self.graph.in_degree(unit.index)
 
@@ -1151,10 +1148,11 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         memo[id_self] = result
 
         # remap nodes to new copies
-        remapped_indices = {node.index: copy.deepcopy(node) for node in self.nodes()}
+        remapped_indices = {node.index: node.copy_without_graph() for node in self.nodes()}
         result.add_nodes_from(remapped_indices.values())
 
-        for parent, child, data in self.graph.edges():
+        for parent, child in self.graph.edge_list():
+            data = self.graph.get_edge_data(parent, child)
             result.graph.add_edge(remapped_indices[parent].index, remapped_indices[child].index, data)
 
         return result
