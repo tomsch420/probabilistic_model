@@ -11,6 +11,7 @@ from enum import IntEnum
 
 import rustworkx as rx
 import numpy as np
+import rustworkx.visualization
 from random_events.interval import SimpleInterval, Interval
 from scipy.special import logsumexp
 import tqdm
@@ -19,6 +20,7 @@ from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import Set
 from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable, Symbolic, Continuous, Integer
+from sklearn.gaussian_process.kernels import Product
 from sortedcontainers import SortedSet
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, Callable, Union
 
@@ -30,7 +32,9 @@ from ...interfaces.drawio.drawio import DrawIOInterface, circled_product, circle
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ...utils import MissingDict
 
-
+class PlotAlignment(IntEnum):
+    HORIZONTAL = 0
+    VERTICAL = 1
 
 @dataclass
 class Unit(SubclassJSONSerializer, DrawIOInterface, ABC):
@@ -127,10 +131,14 @@ class Unit(SubclassJSONSerializer, DrawIOInterface, ABC):
 
         :param other: The other unit to mount.
         """
-        descendants = self.probabilistic_circuit.descendants(self)
-        descendants = descendants.union([other])
-        subgraph = self.probabilistic_circuit.graph.subgraph(descendants)
-        self.probabilistic_circuit.add_from_subgraph(subgraph)
+
+        if other.probabilistic_circuit is not None:
+            descendants = other.probabilistic_circuit.descendants(other)
+            descendants = descendants.union([other])
+            subgraph = other.probabilistic_circuit.graph.subgraph([u.index for u in descendants])
+            self.probabilistic_circuit.add_from_subgraph(subgraph)
+        else:
+            self.probabilistic_circuit.add_node(other)
 
     def filter_variable_map_by_self(self, variable_map: VariableMap):
         """
@@ -155,7 +163,7 @@ class Unit(SubclassJSONSerializer, DrawIOInterface, ABC):
 
     def __hash__(self):
         if self.probabilistic_circuit is not None and self.index is not None:
-            return hash(self.index, id(self.probabilistic_circuit))
+            return hash((self.index, id(self.probabilistic_circuit)))
         else:
             return id(self)
 
@@ -350,6 +358,8 @@ class SumUnit(InnerUnit):
     #
     # def __repr__(self):
     #     return "⊕"
+
+    __hash__ = Unit.__hash__
 
     @property
     def representation(self) -> str:
@@ -555,9 +565,9 @@ class SumUnit(InnerUnit):
         if len(self.subcircuits) == 1:
 
             # redirect every incoming edge to the child
-            incoming_edges = list(self.probabilistic_circuit.in_edges(self, data=True))
+            incoming_edges = list(self.probabilistic_circuit.in_edges(self))
             for parent, _, data in incoming_edges:
-                self.probabilistic_circuit.add_edge(parent, self.subcircuits[0], **data)
+                self.probabilistic_circuit.add_edge(parent, self.subcircuits[0], data)
 
             # remove this node
             self.probabilistic_circuit.remove_node(self)
@@ -593,9 +603,8 @@ class SumUnit(InnerUnit):
         Normalize the log_weights of the subcircuits such that they sum up to 1 inplace.
         """
         total_weight = logsumexp(self.log_weights)
-        for subcircuit in self.subcircuits:
-            edge_data = self.probabilistic_circuit.get_edge_data(self, subcircuit)
-            edge_data["log_weight"] -= total_weight
+        for log_weight, subcircuit in self.log_weighted_subcircuits:
+            self.probabilistic_circuit.graph.add_edge(self.index, subcircuit.index, log_weight - total_weight)
 
     def is_deterministic(self) -> bool:
         """
@@ -639,6 +648,7 @@ class ProductUnit(InnerUnit):
     """
 
     representation = "×"
+    __hash__ = Unit.__hash__
 
     @property
     def drawio_label(self) -> str:
@@ -806,7 +816,6 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         # write self as the nodes' circuit
         node.probabilistic_circuit = self
 
-
     def add_nodes_from(self, units: Iterable[Unit]):
         [self.add_node(node) for node in units]
 
@@ -822,7 +831,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         return self.graph.successors(unit.index)
 
     def descendants(self, unit: Unit) -> Set[Unit]:
-        return [self.graph[unit] for unit in rx.descendants(self.graph, unit.index)]
+        return {self.graph[unit] for unit in rx.descendants(self.graph, unit.index)}
 
     def predecessors(self, unit: Unit) -> List[InnerUnit]:
         return self.graph.predecessors(unit.index)
@@ -846,8 +855,10 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
                 for parent_index, _, edge_data in self.graph.in_edges(unit.index)]
 
     def add_from_subgraph(self, subgraph: rx.PyDAG[Unit]):
-        for edge in subgraph.edges():
-            self.add_edge(*edge)
+        [self.add_edge(subgraph[parent].copy_without_graph(),
+                       subgraph[child].copy_without_graph(),
+                       subgraph.get_edge_data(parent, child)) for parent, child in subgraph.edge_list()]
+
 
     def nodes(self) -> List[Unit]:
         """
@@ -925,7 +936,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         Remove all nodes that are not reachable from the root.
         """
-        reachable_nodes = nx.descendants(self.graph, root)
+        reachable_nodes = self.descendants(root)
         unreachable_nodes = set(self.graph.nodes()) - (reachable_nodes | {root})
         self.graph.remove_nodes_from(unreachable_nodes)
 
@@ -946,7 +957,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
                     unit.log_forward()
 
         root = self.root
-        [self.graph.remove_node(node) for layer in reversed(self.layers) for node in layer if
+        [self.remove_node(node) for node in self.nodes() if
          node.result_of_current_query == -np.inf]
 
         if root not in self.graph.nodes():
@@ -1047,7 +1058,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
             root = self.root
 
         # add dirac parts
-        new_root = ProductUnit(self)
+        new_root = ProductUnit(probabilistic_circuit=self)
 
         if len(remaining_variables) > 0:
             new_root.add_subcircuit(root, False)
@@ -1063,11 +1074,11 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         return self, root.result_of_current_query
 
     def log_conditional(self, point: Dict[Variable, Any]) -> Tuple[Optional[Self], float]:
-        result = self.__copy__()
+        result = self.__deepcopy__()
         return result.log_conditional_in_place(point)
 
     def marginal(self, variables: Iterable[Variable]) -> Optional[Self]:
-        result = self.__copy__()
+        result = self.__deepcopy__()
         return result.marginal_in_place(variables)
 
     def sample(self, amount: int) -> np.array:
@@ -1293,7 +1304,44 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
                 node_colors[node] = "black"
         return node_colors
 
-    def plot_structure(self, node_colors: Optional[Dict[Unit, str]] = None, node_size=550, variable_name_offset=0.2,
+    def bfs_layout(self, scale: float = 1., align: PlotAlignment = PlotAlignment.VERTICAL) -> Dict[int, np.array]:
+        """
+        Generate a bfs layout for this circuit.
+
+        :return: A dict mapping the node indices to 2d coordinates.
+        """
+        layers = self.layers
+
+        pos = None
+        nodes = []
+        width = len(layers)
+        for i, layer in enumerate(layers):
+            height = len(layer)
+            xs = np.repeat(i, height)
+            ys = np.arange(0, height, dtype=float)
+            offset = ((width - 1) / 2, (height - 1) / 2)
+            layer_pos = np.column_stack([xs, ys]) - offset
+            if pos is None:
+                pos = layer_pos
+            else:
+                pos = np.concatenate([pos, layer_pos])
+            nodes.extend(layer)
+
+        # Find max length over all dimensions
+        pos -= pos.mean(axis=0)
+        lim = np.abs(pos).max()  # max coordinate for all axes
+        # rescale to (-scale, scale) in all directions, preserves aspect
+        if lim > 0:
+            pos *= scale / lim
+
+        if align == PlotAlignment.HORIZONTAL:
+            pos = pos[:, ::-1]  # swap x and y coords
+
+        pos = dict(zip([node.index for node in nodes], pos))
+        return pos
+
+
+    def plot_structure(self, node_colors: Optional[Dict[Unit, str]] = None, variable_name_offset=0.2,
                        plot_inference=False,
                        inference_representation: Callable = lambda node: str(node.result_of_current_query),
                        inference_result_offset: float = -0.25):
@@ -1311,71 +1359,33 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
 
         # fill the colors for the nodes
         node_colors = self.fill_node_colors(node_colors)
+        scale = 1.
+        layers = self.layers
 
         # get the positions of the nodes
-        positions = networkx.drawing.bfs_layout(self.graph, self.root)
+        positions = self.bfs_layout(scale=scale, align=PlotAlignment.VERTICAL)
         position_for_variable_name = {node: (x + variable_name_offset, y) for node, (x, y) in positions.items()}
 
 
+        def node_labels(node: Unit) -> str:
+            if isinstance(node, SumUnit):
+                return "+"
+            elif isinstance(node, ProductUnit):
+                return "×"
+            elif isinstance(node, LeafUnit):
+                return str(node.distribution)
+            else:
+                raise NotImplementedError
 
-        # draw the edges
-        alpha_for_edges = [np.exp(self.graph.get_edge_data(*edge)["log_weight"]) if self.graph.get_edge_data(*edge) else 1. for edge in
-                           self.graph.edges()]
+        def edge_labels(data) -> str:
+            if data is None:
+                return ""
+            else:
+                return str(np.round(data, decimals=2))
 
-        nx.draw_networkx_edges(self.graph, positions, alpha=alpha_for_edges, node_size=node_size)
-        edge_labels = {(s, t): round(np.exp(w), 2) for (s, t, w) in self.log_weighted_edges}
-        nx.draw_networkx_edge_labels(self.graph, positions, edge_labels, label_pos=0.25)
+        rustworkx.visualization.mpl_draw(self.graph, pos=positions, labels=node_labels, with_labels=True,
+                                         edge_labels=edge_labels)
 
-        # filter different types of nodes
-        sum_nodes = [node for node in self.graph.nodes() if isinstance(node, SumUnit)]
-        sum_node_colors = [node_colors[node] for node in sum_nodes]
-        product_nodes = [node for node in self.graph.nodes() if isinstance(node, ProductUnit)]
-        product_node_colors = [node_colors[node] for node in product_nodes]
-        leaf_nodes = [node for node in self.graph.nodes() if isinstance(node, LeafUnit)]
-        leaf_node_colors = [node_colors[node] for node in leaf_nodes]
-
-        # draw sum nodes
-        nx.draw_networkx_nodes(self.graph, positions, nodelist=sum_nodes, node_color="#FFFFFF", node_shape="o",
-                               edgecolors=sum_node_colors, node_size=node_size)
-        nx.draw_networkx_nodes(self.graph, positions, nodelist=sum_nodes, node_color=sum_node_colors, node_shape="+",
-                               node_size=node_size * 0.5)
-
-        # draw product nodes
-        nx.draw_networkx_nodes(self.graph, positions, nodelist=product_nodes, node_color="#FFFFFF", node_shape="o",
-                               edgecolors=product_node_colors, node_size=node_size)
-        nx.draw_networkx_nodes(self.graph, positions, nodelist=product_nodes, node_color=product_node_colors, node_shape="x",
-                               node_size=node_size * 6 / 11 * 0.5)
-
-        # draw leaf nodes
-        labels = {node: node.distribution.abbreviated_symbol for node in leaf_nodes}
-        nx.draw_networkx_nodes(self.graph, positions, nodelist=leaf_nodes, node_color="#FFFFFF", node_shape="o",
-                               edgecolors=leaf_node_colors, node_size=node_size)
-
-        for node, label in labels.items():
-            nx.draw_networkx_labels(self.graph, positions, {node: label}, font_size=16, font_color=node_colors[node],
-                                    verticalalignment="center_baseline", horizontalalignment="center")
-            nx.draw_networkx_labels(self.graph, position_for_variable_name, {node: node.variables[0].name}, font_size=16,
-                                    font_color=node_colors[node], )
-
-        # Iterating over all the axes in the figure
-        # and make the Spines Visibility as False
-        for pos in ['right', 'top', 'bottom', 'left']:
-            plt.gca().spines[pos].set_visible(False)
-
-        # adjust plot size
-        xticks, xticklabels = plt.xticks()
-        xmin = (3 * xticks[0] - xticks[1]) / 2.
-        plt.xlim(xmin, max([x for x, _ in positions.values()]) + 1)
-
-        if not plot_inference:
-            return
-
-        # plot the results of the queries
-        positions_for_results = {node: (x, y + inference_result_offset) for node, (x, y) in positions.items()}
-        inference_labels = {node: inference_representation(node) for node in self.graph.nodes() if
-                            node.result_of_current_query is not None}
-        nx.draw_networkx_labels(self.graph, positions_for_results, inference_labels, font_size=8, font_color="black",
-                                verticalalignment="center_baseline", horizontalalignment="center")
 
     def nodes_weights(self) -> dict:
         """
@@ -1603,6 +1613,8 @@ class UnivariateLeaf(LeafUnit):
 class UnivariateContinuousLeaf(UnivariateLeaf):
     distribution: Optional[ContinuousDistribution]
 
+    __hash__ = Unit.__hash__
+
     def log_truncated_of_simple_event_in_place(self, event: SimpleEvent):
         return self.univariate_log_truncated_of_simple_event_in_place(event[self.variable])
 
@@ -1622,7 +1634,7 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
         total_probability = 0.
 
         # calculate the truncated distribution as sum unit
-        result = SumUnit(self.probabilistic_circuit)
+        result = SumUnit(probabilistic_circuit=self.probabilistic_circuit)
 
         for simple_interval in event.simple_sets:
             current_conditional, current_log_probability = self.distribution.log_conditional_from_simple_interval(
@@ -1632,7 +1644,8 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
             if current_probability == 0:
                 continue
 
-            current_conditional = self.__class__(current_conditional, self.probabilistic_circuit)
+            current_conditional = self.__class__(distribution=current_conditional,
+                                                 probabilistic_circuit=self.probabilistic_circuit)
             result.add_subcircuit(current_conditional, np.log(current_probability), mount=False)
             total_probability += current_probability
 
@@ -1658,6 +1671,7 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
 class UnivariateDiscreteLeaf(UnivariateLeaf):
 
     distribution: Optional[DiscreteDistribution]
+    __hash__ = Unit.__hash__
 
     def as_deterministic_sum(self) -> SumUnit:
         """

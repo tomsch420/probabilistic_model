@@ -347,7 +347,7 @@ class DiscreteDistribution(UnivariateDistribution):
         if id_self in memo:
             return memo[id_self]
         import copy
-        variable = copy.deepcopy(self.variable, memo)
+        variable = self.variable.__class__(self.variable.name, self.variable.domain)
         probabilities = copy.deepcopy(self.probabilities, memo)
         result = self.__class__(variable, probabilities)
         memo[id_self] = result
@@ -642,8 +642,8 @@ class DiracDeltaDistribution(ContinuousDistribution):
         id_self = id(self)
         if id_self in memo:
             return memo[id_self]
-        import copy
-        variable = copy.deepcopy(self.variable, memo)
+
+        variable = self.variable.__class__(self.variable.name)
         result = self.__class__(variable, self.location, self.density_cap)
         memo[id_self] = result
         return result
