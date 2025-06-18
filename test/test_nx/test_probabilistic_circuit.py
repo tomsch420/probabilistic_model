@@ -85,6 +85,15 @@ class SmallCircuitTestCast(unittest.TestCase):
         probability = self.model.probability(event)
         self.assertAlmostEqual(probability, 0.375)
 
+    def test_copy(self):
+        copied = self.model.__deepcopy__()
+        self.assertTrue(copied is not self.model)
+        self.assertTrue(copied.graph is not self.model.graph)
+        self.assertTrue(copied.is_valid())
+        self.assertEqual(len(copied.nodes()), len(self.model.nodes()))
+        self.assertEqual(len(copied.graph.edges()), len(self.model.graph.edges()))
+
+
 #
 # class SymbolicPlottingTestCase(unittest.TestCase):
 #     x = Symbolic("x", Set.from_iterable(SymbolEnum))

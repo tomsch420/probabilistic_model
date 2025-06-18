@@ -155,7 +155,7 @@ class Unit(SubclassJSONSerializer, DrawIOInterface, ABC):
 
     def __hash__(self):
         if self.probabilistic_circuit is not None and self.index is not None:
-            return (self.index, id(self.probabilistic_circuit))
+            return hash(self.index, id(self.probabilistic_circuit))
         else:
             return id(self)
 
@@ -308,7 +308,7 @@ class LeafUnit(Unit):
             self.result_of_current_query = 0.
 
     def copy_without_graph(self):
-        return self.__class__(distribution = self.distribution.__copy__())
+        return self.__class__(distribution = self.distribution.__deepcopy__())
 
 
 class InnerUnit(Unit):
@@ -740,7 +740,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
     The outgoing edges of a sum unit contain the log-log_weights of the subcircuits.
     """
 
-    graph: rx.PyDAG[Unit] = field(default=rx.PyDAG(multigraph=False))
+    graph: rx.PyDAG[Unit] = field(default_factory= lambda: rx.PyDAG(multigraph=False))
     """
     The graph to check connectivity from.
     """
@@ -792,7 +792,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
 
         :return: True if the graph is valid, False otherwise.
         """
-        return rx.is_directed_acyclic_graph(self.graph) and rx.is_connected(self.graph)
+        return rx.is_directed_acyclic_graph(self.graph) and self.root
 
     def add_node(self, node: Unit):
 
@@ -1130,7 +1130,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         return self.__class__()
 
-    def __deepcopy__(self, memo=None):
+    def __deepcopy__(self, memo=None) -> Self:
         """
         Deep copy of the circuit.
 
@@ -1149,11 +1149,13 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
 
         # remap nodes to new copies
         remapped_indices = {node.index: node.copy_without_graph() for node in self.nodes()}
+
+        # add copied nodes
         result.add_nodes_from(remapped_indices.values())
 
-        for parent, child in self.graph.edge_list():
-            data = self.graph.get_edge_data(parent, child)
-            result.graph.add_edge(remapped_indices[parent].index, remapped_indices[child].index, data)
+        # copy edges and edge data
+        [result.graph.add_edge(remapped_indices[parent].index, remapped_indices[child].index,
+                               self.graph.get_edge_data(parent, child)) for parent, child in self.graph.edge_list()]
 
         return result
 
