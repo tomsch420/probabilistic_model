@@ -346,6 +346,20 @@ class InnerUnit(Unit):
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         return cls()
 
+    def add_subcircuit(self, subcircuit: Unit, log_weight: float = None):
+        """
+        Add a subcircuit to the subcircuits of this unit.
+
+        .. note::
+
+            This method does not normalize the edges to the subcircuits.
+
+
+        :param subcircuit: The subcircuit to add.
+        :param log_weight: The logarithmic weight of the subcircuit.
+        Only needed if this is a sum unit-
+        """
+        self.probabilistic_circuit.add_edge(self, subcircuit, log_weight)
 
 class SumUnit(InnerUnit):
     _latent_variable: Optional[Symbolic] = None
@@ -389,24 +403,6 @@ class SumUnit(InnerUnit):
         result = Symbolic(name, Set.from_iterable(subcircuit_enum))
         self._latent_variable = result
         return result
-
-    def add_subcircuit(self, subcircuit: Unit, log_weight: float, mount: bool = True):
-        """
-        Add a subcircuit to the subcircuits of this unit.
-
-        .. note::
-
-            This method does not normalize the edges to the subcircuits.
-
-
-        :param subcircuit: The subcircuit to add.
-        :param log_weight: The logarithmic weight of the subcircuit.
-        :param mount: If the subcircuit should be mounted to the pc of this unit.
-
-        """
-        if mount:
-            self.mount(subcircuit)
-        self.probabilistic_circuit.add_edge(self, subcircuit, log_weight=log_weight)
 
     def forward(self, *args, **kwargs):
         self.result_of_current_query = np.sum(
@@ -683,16 +679,6 @@ class ProductUnit(InnerUnit):
 
         self.result_of_current_query = support
 
-    def add_subcircuit(self, subcircuit: Unit, mount: bool = True):
-        """
-        Add a subcircuit to the subcircuits of this unit.
-
-        :param subcircuit: The subcircuit to add.
-        :param mount: If the subcircuit should be mounted to this units pc instance.
-        """
-        if mount:
-            self.mount(subcircuit)
-        self.probabilistic_circuit.add_edge(self, subcircuit)
 
     def is_decomposable(self):
         for index, subcircuit in enumerate(self.subcircuits):
@@ -867,6 +853,10 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         :return: An iterator over the nodes.
         """
         return self.graph.nodes()
+
+    def edges(self) -> List[Tuple[Unit, Unit, Optional[float]]]:
+        return [(self.graph[parent], self.graph[child], self.graph.get_edge_data(parent, child))
+                for parent, child in self.graph.edge_list()]
 
     def in_degree(self, unit: Unit):
         return self.graph.in_degree(unit.index)
@@ -1646,7 +1636,7 @@ class UnivariateContinuousLeaf(UnivariateLeaf):
 
             current_conditional = self.__class__(distribution=current_conditional,
                                                  probabilistic_circuit=self.probabilistic_circuit)
-            result.add_subcircuit(current_conditional, np.log(current_probability), mount=False)
+            result.add_subcircuit(current_conditional, np.log(current_probability))
             total_probability += current_probability
 
         # if the event is impossible
@@ -1681,12 +1671,11 @@ class UnivariateDiscreteLeaf(UnivariateLeaf):
 
         :return: The deterministic sum unit that encodes the same distribution.
         """
-        result = SumUnit(self.probabilistic_circuit)
+        result = SumUnit(probabilistic_circuit=self.probabilistic_circuit)
 
         for element, probability in self.distribution.probabilities.items():
-            result.add_subcircuit(UnivariateDiscreteLeaf(self.distribution.__class__(self.variable,
-                                                                                     MissingDict(float, {element: 1.})),
-                                                         self.probabilistic_circuit), np.log(probability), mount=False)
+            result.add_subcircuit(leaf(self.distribution.__class__(self.variable, MissingDict(float, {element: 1.})),
+                                                         self.probabilistic_circuit), np.log(probability))
         self.connect_incoming_edges_to(result)
         self.probabilistic_circuit.remove_node(self)
         return result

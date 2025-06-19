@@ -35,27 +35,27 @@ class SmallCircuitTestCast(unittest.TestCase):
         sum4, sum5 = SumUnit(probabilistic_circuit=model), SumUnit(probabilistic_circuit=model)
         prod1, prod2 = ProductUnit(probabilistic_circuit=model), ProductUnit(probabilistic_circuit=model)
 
-        sum1.add_subcircuit(prod1, np.log(0.5), mount=False)
-        sum1.add_subcircuit(prod2, np.log(0.5), mount=False)
-        prod1.add_subcircuit(sum2, mount=False)
-        prod1.add_subcircuit(sum4, mount=False)
-        prod2.add_subcircuit(sum3, mount=False)
-        prod2.add_subcircuit(sum5, mount=False)
+        sum1.add_subcircuit(prod1, np.log(0.5))
+        sum1.add_subcircuit(prod2, np.log(0.5))
+        prod1.add_subcircuit(sum2)
+        prod1.add_subcircuit(sum4)
+        prod2.add_subcircuit(sum3)
+        prod2.add_subcircuit(sum5)
 
         d_x1 = leaf(UniformDistribution(self.x, SimpleInterval(0, 1)), probabilistic_circuit=model)
         d_x2 = leaf(UniformDistribution(self.x, SimpleInterval(2, 3)), probabilistic_circuit=model)
         d_y1 = leaf(UniformDistribution(self.y, SimpleInterval(0, 1)), probabilistic_circuit=model)
         d_y2 = leaf(UniformDistribution(self.y, SimpleInterval(3, 4)), probabilistic_circuit=model)
 
-        sum2.add_subcircuit(d_x1, np.log(0.8), mount=False)
-        sum2.add_subcircuit(d_x2, np.log(0.2), mount=False)
-        sum3.add_subcircuit(d_x1, np.log(0.7), mount=False)
-        sum3.add_subcircuit(d_x2, np.log(0.3), mount=False)
+        sum2.add_subcircuit(d_x1, np.log(0.8))
+        sum2.add_subcircuit(d_x2, np.log(0.2))
+        sum3.add_subcircuit(d_x1, np.log(0.7))
+        sum3.add_subcircuit(d_x2, np.log(0.3))
 
-        sum4.add_subcircuit(d_y1, np.log(0.5), mount=False)
-        sum4.add_subcircuit(d_y2, np.log(0.5), mount=False)
-        sum5.add_subcircuit(d_y1, np.log(0.1), mount=False)
-        sum5.add_subcircuit(d_y2, np.log(0.9), mount=False)
+        sum4.add_subcircuit(d_y1, np.log(0.5))
+        sum4.add_subcircuit(d_y2, np.log(0.5))
+        sum5.add_subcircuit(d_y1, np.log(0.1))
+        sum5.add_subcircuit(d_y2, np.log(0.9))
 
         self.model = sum1.probabilistic_circuit
 
@@ -69,7 +69,7 @@ class SmallCircuitTestCast(unittest.TestCase):
         conditional, prob = self.model.truncated(event)
         self.assertAlmostEqual(prob, 0.375)
         conditional.plot_structure()
-        plt.show()
+        #plt.show()
 
     def test_plot(self):
         self.model.log_likelihood(np.array([[0.5, 0.5]]))
@@ -228,11 +228,12 @@ class ConditioningTestCase(unittest.TestCase):
         probabilities[hash(SymbolEnum.A)] = 7 / 20
         probabilities[hash(SymbolEnum.B)] = 13 / 20
 
+
         old_root = model.root
         new_root = ProductUnit(probabilistic_circuit=model)
         p_s = leaf(SymbolicDistribution(s, probabilities), model)
-        new_root.add_subcircuit(old_root, mount=False)
-        new_root.add_subcircuit(p_s, mount=True)
+        new_root.add_subcircuit(old_root,)
+        new_root.add_subcircuit(p_s,)
 
         model.conditional({s: SymbolEnum.A})
 
