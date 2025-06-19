@@ -56,12 +56,8 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
         :return: The layered circuit.
         """
 
-        # calculate the depth of each node
-        node_to_depth_map = {node: len(path) for node, path in nx.single_source_shortest_path(pc, pc.root).items()}
-
         # group nodes by depth
-        layer_to_nodes_map = {depth: [node for node, n_depth in node_to_depth_map.items() if depth == n_depth] for depth
-                              in set(node_to_depth_map.values())}
+        layer_to_nodes_map = {index: layer for index, layer in enumerate(pc.layers)}
         reversed_layers_to_nodes_map = dict(reversed(layer_to_nodes_map.items()))
 
         # create layers from nodes
