@@ -6,7 +6,7 @@ from random_events.variable import Continuous
 from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer, GaussianDistribution
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import \
-    SumUnit, UnivariateContinuousLeaf
+    SumUnit, UnivariateContinuousLeaf, ProbabilisticCircuit as NXProbabilisticCircuit
 
 
 class GaussianLayerTestCase(unittest.TestCase):
@@ -27,13 +27,15 @@ class GaussianLayerTestCase(unittest.TestCase):
         self.assertTrue(jnp.allclose(ll, result, atol=1e-3))
 
     def test_from_nx_circuit(self):
+        nx_pc = NXProbabilisticCircuit()
         x = Continuous("x")
-        g1 = UnivariateContinuousLeaf(GaussianDistribution(x, 0.0, 0.99))
-        g2 = UnivariateContinuousLeaf(GaussianDistribution(x, 1.0, 1.0))
-        s = SumUnit()
-        s.add_subcircuit(g1, 0.5)
+        g1 = UnivariateContinuousLeaf(GaussianDistribution(x, 0.0, 0.99), probabilistic_circuit=nx_pc)
+        g2 = UnivariateContinuousLeaf(GaussianDistribution(x, 1.0, 1.0), probabilistic_circuit=nx_pc)
+        s = SumUnit(probabilistic_circuit=nx_pc)
         s.add_subcircuit(g2, 0.5)
-        nx_pc = s.probabilistic_circuit
+        s.add_subcircuit(g1, 0.5)
+
+
         jax_pc = ProbabilisticCircuit.from_nx(nx_pc)
         gaussian_layer = jax_pc.root.child_layers[0]
         self.assertIsInstance(gaussian_layer, GaussianLayer)
