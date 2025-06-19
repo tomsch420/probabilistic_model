@@ -19,7 +19,11 @@ from ...probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductU
 from ...utils import MissingDict
 
 
-class JPT(ProbabilisticCircuit):
+class JPT:
+    """
+    Class that implements the JPT learning algorithm for probabilistic circuits.
+    """
+
     targets: Tuple[Variable, ...]
     """
     The variables to optimize for.
@@ -77,11 +81,20 @@ class JPT(ProbabilisticCircuit):
     we need to store the variables from initialization here.
     """
 
+    probabilistic_circuit: ProbabilisticCircuit
+    """
+    The probabilistic circuit the result will appear in.
+    """
+
+    root: Optional[SumUnit] = None
+    """
+    The root of the circuit that will be learned.
+    """
+
     def __init__(self, variables: Iterable[Variable], targets: Optional[Iterable[Variable]] = None,
                  features: Optional[Iterable[Variable]] = None, min_samples_leaf: Union[int, float] = 1,
                  min_impurity_improvement: float = 0.0, max_leaves: Union[int, float] = float("inf"),
                  max_depth: Union[int, float] = float("inf"), dependencies: Optional[VariableMap] = None, ):
-        super().__init__()
         self.variables_from_init = tuple(sorted(variables))
         self.set_targets_and_features(targets, features)
         self._min_samples_leaf = min_samples_leaf
@@ -93,6 +106,8 @@ class JPT(ProbabilisticCircuit):
             self.dependencies = VariableMap({var: list(self.targets) for var in self.features})
         else:
             self.dependencies = dependencies
+
+        self.probabilistic_circuit = ProbabilisticCircuit()
 
     def set_targets_and_features(self, targets: Optional[Iterable[Variable]],
                                  features: Optional[Iterable[Variable]]) -> None:
@@ -193,7 +208,7 @@ class JPT(ProbabilisticCircuit):
         :param data: The data to fit the model to.
         :return: The fitted model.
         """
-        root = SumUnit(self)
+        self.root = SumUnit(probabilistic_circuit=self.probabilistic_circuit)
         preprocessed_data = self.preprocess_data(data)
 
         self.total_samples = len(preprocessed_data)
@@ -221,7 +236,6 @@ class JPT(ProbabilisticCircuit):
         """
 
         number_of_samples = end - start
-        root = self.root
         # if the inducing in this step results in inadmissible nodes, skip the impurity calculation
         if depth >= self.max_depth or number_of_samples < 2 * self.min_samples_leaf:
             max_gain = -float("inf")
@@ -234,7 +248,7 @@ class JPT(ProbabilisticCircuit):
             # create decomposable product node
             leaf_node = self.create_leaf_node(data[self.indices[start:end]])
             weight = number_of_samples / len(data)
-            root.add_subcircuit(leaf_node, np.log(weight))
+            self.root.add_subcircuit(leaf_node, np.log(weight))
 
             if self.keep_sample_indices:
                 leaf_node.sample_indices = self.indices[start:end]
@@ -259,7 +273,7 @@ class JPT(ProbabilisticCircuit):
         :param data: The preprocessed data to use for training
         :return: The leaf node.
         """
-        result = ProductUnit()
+        result = ProductUnit(probabilistic_circuit=self.probabilistic_circuit)
         result.total_samples = len(data)
 
         for index, variable in enumerate(self.variables_from_init):
@@ -326,42 +340,6 @@ class JPT(ProbabilisticCircuit):
                         n_num_vars_total, numeric_features, symbolic_features, symbols, max_variances,
                         dependency_indices)
 
-    def plot(self, number_of_samples: int = 1000, surface=True) -> List:
-        try:
-            return super().plot(number_of_samples, surface)
-        except NotImplementedError:
-            return self.plot_univariate_distributions()
-
-    def plot_univariate_distributions(self, sample_amount: int = 5000) -> List:
-        """
-        Plot the model.
-        """
-        subplot_titles = [distribution.__class__.__name__ for child in self.subcircuits
-                          for distribution in child.subcircuits]
-        figure = make_subplots(rows=len(self.subcircuits), cols=len(self.variables),
-                               row_titles=[f"P(Leaf = {child_index}) = {weight}" for weight, child_index
-                                           in zip(self.weights, range(len(self.subcircuits)))],
-                               subplot_titles=subplot_titles)
-
-        for child_index, child in enumerate(self.subcircuits):
-            child: ProductUnit
-
-            for distribution_index, distribution in enumerate(child.subcircuits):
-                distribution: UnivariateDistribution
-                traces: List[go.Scatter] = distribution.plot()
-                legend_group = child_index * len(self.variables) + distribution_index + 1
-                traces = [trace.update(legendgroup=legend_group)
-                          for trace in traces]
-                figure.add_traces(traces, rows=child_index + 1, cols=distribution_index + 1)
-                figure.update_xaxes(title_text=distribution.variable.name,
-                                    row=child_index + 1,
-                                    col=distribution_index + 1)
-
-        figure.update_layout(height=300 * len(self.subcircuits), width=600 * len(self.variables),
-                             title=f"Joint Probability Tree over {len(self.variables)} variables", )
-
-        return figure
-
     def _variable_dependencies_to_json(self) -> Dict[str, List[str]]:
         """
         Convert the variable dependencies to a json compatible format.
@@ -381,7 +359,7 @@ class JPT(ProbabilisticCircuit):
         return result
 
     def to_json(self) -> Dict[str, Any]:
-        result = super().to_json()
+        result = {}
         result["variables_from_init"] = [variable.to_json() for variable in self.variables_from_init]
         result["targets"] = [variable.name for variable in self.targets]
         result["features"] = [variable.name for variable in self.features]
@@ -391,6 +369,7 @@ class JPT(ProbabilisticCircuit):
         result["max_depth"] = self.max_depth
         result["dependencies"] = self._variable_dependencies_to_json()
         result["total_samples"] = self.total_samples
+        result["probabilistic_circuit"] = self.probabilistic_circuit.to_json()
         return result
 
     @classmethod
@@ -411,31 +390,3 @@ class JPT(ProbabilisticCircuit):
                      max_leaves=max_leaves, max_depth=max_depth, dependencies=dependencies)
         result.total_samples = data["total_samples"]
         return result
-
-    def marginal(self, variables: Iterable[Variable], simplify_if_univariate=True) \
-            -> Optional[Self]:
-        """
-        Marginalize the model to the given variables.
-        :param variables: The variables to marginalize to.
-        :param simplify_if_univariate: If the result is univariate, simplify it to a univariate distribution.
-        :param as_deterministic_sum: If the result is univariate and discrete, return it as a deterministic sum
-        instead of the distribution itself.
-
-        :return: The marginal JPT.
-        """
-        result = super().marginal(variables)
-
-        # if no simplification is needed
-        if result is None or len(result.variables) > 1 or not simplify_if_univariate:
-            return result
-
-        variable = result.variables[0]
-
-        if isinstance(variable, Continuous):
-            distribution = NygaDistribution.from_uniform_mixture(result)
-
-        elif isinstance(variable, (Integer, Symbolic)):
-            distribution = UnivariateDiscreteLeaf.from_mixture(result).probabilistic_circuit
-        else:
-            raise NotImplementedError(f"Variable {variable} not supported.")
-        return distribution

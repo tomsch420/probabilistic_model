@@ -125,21 +125,6 @@ class Unit(SubclassJSONSerializer, DrawIOInterface, ABC):
         [self.probabilistic_circuit.add_edge(parent, other, data)
          for parent, _ ,data in self.probabilistic_circuit.in_edges(self)]
 
-    def mount(self, other: Unit):
-        """
-        Mount another unit including its descendants. There will be no edge from `self` to `other`.
-
-        :param other: The other unit to mount.
-        """
-
-        if other.probabilistic_circuit is not None:
-            descendants = other.probabilistic_circuit.descendants(other)
-            descendants = descendants.union([other])
-            subgraph = other.probabilistic_circuit.graph.subgraph([u.index for u in descendants])
-            self.probabilistic_circuit.add_from_subgraph(subgraph)
-        else:
-            self.probabilistic_circuit.add_node(other)
-
     def filter_variable_map_by_self(self, variable_map: VariableMap):
         """
         Filter a variable map by the variables of this unit.
@@ -168,7 +153,9 @@ class Unit(SubclassJSONSerializer, DrawIOInterface, ABC):
             return id(self)
 
     def copy_without_graph(self):
-        return self.empty_copy()
+        result = self.empty_copy()
+        result.result_of_current_query = self.result_of_current_query
+        return result
 
     def empty_copy(self) -> Self:
         """
@@ -224,8 +211,8 @@ class LeafUnit(Unit):
     The distribution contained in this leaf unit.
     """
 
-    # def __repr__(self):
-    #     return repr(self.distribution)
+    def __repr__(self):
+        return f"leaf({repr(self.distribution)}"
 
     @property
     def drawio_label(self):
@@ -261,7 +248,7 @@ class LeafUnit(Unit):
         self.result_of_current_query = self.distribution.probability_of_simple_event(event)
 
     def support(self):
-        self.result_of_current_query = self.distribution.support  # .__deepcopy__()
+        self.result_of_current_query = self.distribution.support # .__deepcopy__()
 
     def simplify(self):
         if self.distribution is None:
@@ -369,9 +356,9 @@ class SumUnit(InnerUnit):
 
     TODO remove this when RE is fixed
     """
-    #
-    # def __repr__(self):
-    #     return "⊕"
+
+    def __repr__(self):
+        return "⊕"
 
     __hash__ = Unit.__hash__
 
@@ -409,7 +396,6 @@ class SumUnit(InnerUnit):
             [np.exp(weight) * subcircuit.result_of_current_query for weight, subcircuit in self.log_weighted_subcircuits], axis=0)
 
     def log_forward(self, *args, **kwargs):
-
         result = [lw + s.result_of_current_query for lw, s in self.log_weighted_subcircuits]
         self.result_of_current_query = logsumexp(result, axis=0)
     moment = forward
@@ -426,7 +412,7 @@ class SumUnit(InnerUnit):
     def support(self):
         support = self.subcircuits[0].result_of_current_query
         for subcircuit in self.subcircuits[1:]:
-            support |= subcircuit.result_of_current_query
+            support |= subcircuit.result_of_current_query.__deepcopy__()
         self.result_of_current_query = support
 
     @property
@@ -611,6 +597,7 @@ class SumUnit(InnerUnit):
             # check if they intersect
             if not subcircuit_a.result_of_current_query.intersection_with(
                     subcircuit_b.result_of_current_query).is_empty():
+                print(subcircuit_a.result_of_current_query, subcircuit_b.result_of_current_query)
                 return False
 
         # if none intersect, the subcircuit is deterministic
@@ -650,8 +637,8 @@ class ProductUnit(InnerUnit):
     def drawio_label(self) -> str:
         return circled_product
 
-    # def __repr__(self):
-    #     return "⊗"
+    def __repr__(self):
+        return "⊗"
 
     def forward(self, *args, **kwargs):
         self.result_of_current_query = math.prod(
@@ -840,10 +827,19 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         return [(self.graph.get_node_data(parent_index), unit, edge_data,)
                 for parent_index, _, edge_data in self.graph.in_edges(unit.index)]
 
-    def add_from_subgraph(self, subgraph: rx.PyDAG[Unit]):
-        [self.add_edge(subgraph[parent].copy_without_graph(),
-                       subgraph[child].copy_without_graph(),
-                       subgraph.get_edge_data(parent, child)) for parent, child in subgraph.edge_list()]
+    def add_from_subgraph(self, subgraph: rx.PyDAG[Unit]) -> Dict[int, Unit]:
+        """
+        Add nodes and edges from a subgraph to this circuit.
+
+        :param subgraph: The subgraph to add nodes from.
+        :return: A dictionary mapping the node indices in the subgraph to the new units in this circuit.
+        """
+        new_nodes = {node.index: node.copy_without_graph() for node in subgraph.nodes()}
+        self.add_nodes_from(new_nodes.values())
+
+        [self.graph.add_edge(new_nodes[parent].index, new_nodes[child].index,
+                             subgraph.get_edge_data(parent, child)) for parent, child in subgraph.edge_list()]
+        return new_nodes
 
 
     def nodes(self) -> List[Unit]:
@@ -976,11 +972,11 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
             return result
 
         # create a conditional circuit for every simple event
-        conditional_circuits = [self.__copy__().log_truncated_of_simple_event_in_place(simple_event) for simple_event
+        conditional_circuits = [self.__deepcopy__().log_truncated_of_simple_event_in_place(simple_event) for simple_event
                                 in event.simple_sets]
 
         # clear this circuit
-        self.graph.remove_nodes_from(list(self.graph.nodes()))
+        self.remove_nodes_from(list(self.graph.nodes()))
 
         # filtered out impossible conditionals
         conditional_circuits = [(conditional, log_probability) for conditional, log_probability in conditional_circuits
@@ -991,11 +987,14 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
             return None, -np.inf
 
         # create a new sum unit
-        result = SumUnit(self)
+        result = SumUnit(probabilistic_circuit=self)
 
         # add the conditionals to the sum unit
-        [result.add_subcircuit(conditional.root, log_probability) for conditional, log_probability in
-         conditional_circuits]
+        for conditional, log_probability in conditional_circuits:
+            root = conditional.root
+            new_nodes = result.probabilistic_circuit.add_from_subgraph(conditional.graph)
+            result.add_subcircuit(new_nodes[root.index], log_probability)
+
         result.log_forward()
         result.normalize()
         return self, result.result_of_current_query
@@ -1118,8 +1117,8 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         return all([subcircuit.is_decomposable() for subcircuit in self.leaves if isinstance(subcircuit, ProductUnit)])
 
-    def __eq__(self, other: 'ProbabilisticCircuit'):
-        return self.root == other.root
+    def __eq__(self, other: Self):
+        raise NotImplementedError
 
     def empty_copy(self) -> Self:
         """
@@ -1391,6 +1390,25 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         for leaf in self.leaves:
             if any(v.is_numeric for v in leaf.variables):
                 leaf.distribution.scale(scale)
+
+    def mount(self, other: Unit) -> Dict[int, Unit]:
+        """
+        Mount another unit including its descendants. There will be no edge from `self` to `other`.
+        This will also remove the nodes in other and their descendants from their circuit.
+
+        :param other: The other unit to mount.
+        """
+        if other.probabilistic_circuit is not None:
+            descendants = other.probabilistic_circuit.descendants(other)
+            descendants = descendants.union([other])
+            subgraph = other.probabilistic_circuit.graph.subgraph([u.index for u in descendants])
+            result = self.add_from_subgraph(subgraph)
+            return result
+        else:
+            raise ValueError("Trying to mount a unit that doesn't belong to any probabilistic circuit.")
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} with {len(self.nodes())} nodes and {len(self.edges())} edges"
 
 class ShallowProbabilisticCircuit(ProbabilisticCircuit):
     """

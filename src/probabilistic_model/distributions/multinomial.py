@@ -6,7 +6,8 @@ from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Symbolic, Variable
 from typing_extensions import Self, Any, Iterable, List, Optional, Tuple, Dict
 
-from ..probabilistic_circuit.nx.probabilistic_circuit import SymbolicDistribution, UnivariateDiscreteLeaf, ProductUnit, SumUnit
+from ..probabilistic_circuit.nx.probabilistic_circuit import SymbolicDistribution, UnivariateDiscreteLeaf, ProductUnit, \
+    SumUnit, ProbabilisticCircuit, leaf
 from ..probabilistic_model import ProbabilisticModel
 from ..utils import MissingDict
 
@@ -195,15 +196,18 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
 
         :return: The distribution as a probabilistic circuit.
         """
+
+        pc = ProbabilisticCircuit()
+
         # initialize the result as a deterministic sum unit
-        result = SumUnit()
+        result = SumUnit(probabilistic_circuit=pc)
 
         # iterate through all states of this distribution
         for event in itertools.product(*[list(range(len(variable.domain.simple_sets)))
                                          for variable in self.variables]):
 
             # create a product unit for the current state
-            product_unit = ProductUnit()
+            product_unit = ProductUnit(probabilistic_circuit=pc)
 
             # iterate through all variables
             for variable, value in zip(self.variables, event):
@@ -215,7 +219,7 @@ class MultinomialDistribution(ProbabilisticModel, SubclassJSONSerializer):
                 distribution = SymbolicDistribution(variable, weights)
 
                 # mount the distribution to the product unit
-                product_unit.add_subcircuit(UnivariateDiscreteLeaf(distribution))
+                product_unit.add_subcircuit(leaf(distribution, pc))
 
             # calculate the probability of the current state
             probability = self.likelihood(np.array([event]))[0]

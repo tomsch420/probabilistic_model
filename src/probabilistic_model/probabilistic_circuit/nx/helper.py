@@ -66,33 +66,46 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
     return uniform_model.probabilistic_circuit
 
 
-def fully_factorized(variables: Iterable[Variable], means: dict, variances: dict) -> ProbabilisticCircuit:
+def fully_factorized(variables: Iterable[Variable],
+                     means: Optional[Dict[Continuous, float]] = None,
+                     variances: Optional[Dict[Continuous, float]] = None) -> ProbabilisticCircuit:
     """
     Create a fully factorized distribution over a set of variables.
     For symbolic variables, the distribution is uniform.
     For continuous variables, the distribution is normal.
 
     :param variables: The variables.
+
     :param means: The means of the normal distributions.
+    Defaults to 0 for every not specified variable.
+
     :param variances: The variances of the normal distributions.
+    Defaults to 1 for every not specified variable.
+
     :return: The circuit describing the fully factorized normal distribution
     """
+    pc = ProbabilisticCircuit()
+    if means is None:
+        means = {}
+
+    if variances is None:
+        variances = {}
 
     # initialize the root of the circuit
-    root = ProductUnit()
+    root = ProductUnit(probabilistic_circuit=pc)
     for variable in variables:
 
         # create a normal distribution for every continuous variable
         if isinstance(variable, Continuous):
-            distribution = GaussianDistribution(variable, means[variable], variances[variable])
-            distribution = UnivariateContinuousLeaf(distribution)
+            distribution = GaussianDistribution(variable, means.get(variable, 0.), variances.get(variable, 1.))
+            distribution = leaf(distribution, pc)
 
         # create uniform distribution for symbolic variables
         elif isinstance(variable, Symbolic):
             domain_elements = list(variable.domain.simple_sets)
             distribution = SymbolicDistribution(variable, MissingDict(float, {hash(v): 1 / len(domain_elements)
                                                                               for v in domain_elements}))
-            distribution = UnivariateDiscreteLeaf(distribution)
+            distribution = leaf(distribution, pc)
         else:
             raise NotImplementedError(f"Variable type not supported: {variable}")
         root.add_subcircuit(distribution)
