@@ -344,7 +344,7 @@ class InnerUnit(Unit):
 
         :param subcircuit: The subcircuit to add.
         :param log_weight: The logarithmic weight of the subcircuit.
-        Only needed if this is a sum unit-
+        Only needed if this is a sum unit
         """
         self.probabilistic_circuit.add_edge(self, subcircuit, log_weight)
 
@@ -705,7 +705,7 @@ class ProductUnit(InnerUnit):
 
                 # mount the children of that circuit directly
                 for sub_subcircuit in subcircuit.subcircuits:
-                    subcircuit.add_subcircuit(sub_subcircuit, mount=False)
+                    subcircuit.add_subcircuit(sub_subcircuit)
 
     def sample(self, *args, **kwargs):
         for start_index, amount in self.result_of_current_query:

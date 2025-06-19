@@ -218,7 +218,7 @@ class BayesianNetwork(nx.DiGraph):
 
         # for each edge in reverse bfs order
         for parent, child in reversed(list(edges)):
-
+            current_pc = ProbabilisticCircuit()
             # type hinting
             parent: BayesianNetworkMixin
             child: BayesianNetworkMixin
@@ -226,7 +226,7 @@ class BayesianNetwork(nx.DiGraph):
             # if the parent circuit does not yet exist
             if parent not in pointers_to_sum_units.keys():
                 # create the parent circuit
-                forward_of_parent = UnivariateDiscreteLeaf(parent.forward_message)
+                forward_of_parent = UnivariateDiscreteLeaf(parent.forward_message, probabilistic_circuit=current_pc)
                 pointers_to_sum_units[parent] = forward_of_parent.as_deterministic_sum()
 
             # get parent and child circuits

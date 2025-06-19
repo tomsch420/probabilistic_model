@@ -26,12 +26,13 @@ class RootDistribution(BayesianNetworkMixin, SymbolicDistribution):
         self.forward_probability = np.exp(self.forward_probability)
 
     def joint_distribution_with_parent(self) -> SumUnit:
-        result = SumUnit()
+        pc = ProbabilisticCircuit()
+        result = SumUnit(probabilistic_circuit=pc)
 
         for event in self.variable.domain.simple_sets:
             event = SimpleEvent({self.variable: event})
             conditional, probability = self.forward_message.log_conditional_of_composite_set(event[self.variable])
-            result.add_subcircuit(UnivariateDiscreteLeaf(conditional), probability)
+            result.add_subcircuit(UnivariateDiscreteLeaf(conditional, probabilistic_circuit=pc), probability)
 
         return result
 
@@ -123,9 +124,9 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         return table
 
     def joint_distribution_with_parent(self) -> SumUnit:
-
+        pc = ProbabilisticCircuit()
         # initialize result
-        result = SumUnit()
+        result = SumUnit(probabilistic_circuit=pc)
 
         # get parent hash map
         parent_hash_map = self.parent.variable.domain.hash_map
@@ -137,7 +138,7 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         distribution_template = SymbolicDistribution(self.variable, template_probabilities)
         for value in self.variable.domain.simple_sets:
             distribution_node, _ = distribution_template.log_conditional_of_composite_set(value.as_composite_set())
-            distribution_nodes[hash(value)] = UnivariateDiscreteLeaf(distribution_node)
+            distribution_nodes[hash(value)] = UnivariateDiscreteLeaf(distribution_node, probabilistic_circuit=pc)
 
         # for every parent event and truncated distribution
         for parent_event, distribution in self.conditional_probability_distributions.items():
@@ -151,10 +152,10 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
 
             for child_event_index, child_probability in distribution.probabilities.items():
                 # initialize the product unit
-                product_unit = ProductUnit()
+                product_unit = ProductUnit(probabilistic_circuit=pc)
 
                 # add the encoded parent distribution and a copy of this distribution to the product unit
-                product_unit.add_subcircuit(UnivariateDiscreteLeaf(parent_distribution))
+                product_unit.add_subcircuit(UnivariateDiscreteLeaf(parent_distribution, probabilistic_circuit=pc))
                 product_unit.add_subcircuit(distribution_nodes[child_event_index])
 
                 result.add_subcircuit(product_unit, parent_log_probability + np.log(child_probability))
@@ -162,7 +163,8 @@ class ConditionalProbabilityTable(BayesianNetworkMixin):
         return result
 
     def forward_message_as_sum_unit(self) -> SumUnit:
-        result = UnivariateDiscreteLeaf(self.forward_message)
+        pc = ProbabilisticCircuit()
+        result = UnivariateDiscreteLeaf(self.forward_message, probabilistic_circuit=pc)
         return result.as_deterministic_sum()
 
     def interaction_term(self, node_latent_variable: Symbolic, parent_latent_variable: Symbolic) -> \
@@ -232,8 +234,8 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
         self.forward_message = marginal.root
 
     def joint_distribution_with_parent(self) -> SumUnit:
-
-        result = SumUnit()
+        pc = ProbabilisticCircuit()
+        result = SumUnit(probabilistic_circuit=pc)
         parent_hash_map = self.parent.variable.domain.hash_map
 
         for parent_event, distribution in self.conditional_probability_distributions.items():
@@ -245,9 +247,11 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
             if parent_distribution is None:
                 continue
 
-            product_unit = ProductUnit()
-            product_unit.add_subcircuit(UnivariateDiscreteLeaf(parent_distribution))
-            product_unit.add_subcircuit(distribution.root)
+            product_unit = ProductUnit(probabilistic_circuit=pc)
+            product_unit.add_subcircuit(UnivariateDiscreteLeaf(parent_distribution, probabilistic_circuit=pc))
+
+            new_nodes = pc.mount(distribution.root)
+            product_unit.add_subcircuit(new_nodes[distribution.root.index])
 
             result.add_subcircuit(product_unit, parent_log_probability)
 
@@ -260,18 +264,18 @@ class ConditionalProbabilisticCircuit(BayesianNetworkMixin):
             ProbabilisticCircuit:
 
         assert node_latent_variable.domain == parent_latent_variable.domain
-
-        result = SumUnit()
+        pc = ProbabilisticCircuit()
+        result = SumUnit(probabilistic_circuit=pc)
 
         for state, weight in self.parent.forward_message.probabilities.items():
             probabilities = MissingDict(float)
             probabilities[state] = 1
-            product_unit = ProductUnit()
-            product_unit.add_subcircuit(leaf(SymbolicDistribution(parent_latent_variable, probabilities)))
-            product_unit.add_subcircuit(leaf(SymbolicDistribution(node_latent_variable, probabilities)))
+            product_unit = ProductUnit(probabilistic_circuit=pc)
+            product_unit.add_subcircuit(leaf(SymbolicDistribution(parent_latent_variable, probabilities), pc))
+            product_unit.add_subcircuit(leaf(SymbolicDistribution(node_latent_variable, probabilities), pc))
             result.add_subcircuit(product_unit, np.log(weight))
 
-        return result.probabilistic_circuit
+        return pc
 
     def from_unit(self, unit: Unit) -> Self:
         """

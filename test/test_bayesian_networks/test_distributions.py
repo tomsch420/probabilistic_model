@@ -14,7 +14,8 @@ from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwor
 from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
                                                                 ConditionalProbabilisticCircuit)
 from probabilistic_model.distributions import SymbolicDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import  SumUnit, ProductUnit, UnivariateContinuousLeaf
+from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProductUnit, \
+    UnivariateContinuousLeaf, ProbabilisticCircuit, leaf
 from probabilistic_model.utils import MissingDict
 
 
@@ -117,13 +118,15 @@ class CircuitDistributionTestCase(unittest.TestCase):
         self.bayesian_network = BayesianNetwork()
         self.p_x = RootDistribution(self.x, MissingDict(float, zip([0, 1], [0.7, 0.3])))
 
-        d1 = ProductUnit()
-        d1.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.y, closed(0, 1).simple_sets[0])))
-        d1.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.z, closed(0, 1).simple_sets[0])))
+        pc1 = ProbabilisticCircuit()
+        d1 = ProductUnit(probabilistic_circuit=pc1)
+        d1.add_subcircuit(leaf(UniformDistribution(self.y, closed(0, 1).simple_sets[0]), pc1))
+        d1.add_subcircuit(leaf(UniformDistribution(self.z, closed(0, 1).simple_sets[0]), pc1))
 
-        d2 = ProductUnit()
-        d2.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.y, closed(0, 2).simple_sets[0])))
-        d2.add_subcircuit(UnivariateContinuousLeaf(UniformDistribution(self.z, closed(0, 3).simple_sets[0])))
+        pc2 = ProbabilisticCircuit()
+        d2 = ProductUnit(probabilistic_circuit=pc2)
+        d2.add_subcircuit(leaf(UniformDistribution(self.y, closed(0, 2).simple_sets[0]), pc2))
+        d2.add_subcircuit(leaf(UniformDistribution(self.z, closed(0, 3).simple_sets[0]), pc2))
 
         self.p_yzx.conditional_probability_distributions[0] = d1.probabilistic_circuit
         self.p_yzx.conditional_probability_distributions[1] = d2.probabilistic_circuit
