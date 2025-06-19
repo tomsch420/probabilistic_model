@@ -643,7 +643,7 @@ class DiracDeltaDistribution(ContinuousDistribution):
         if id_self in memo:
             return memo[id_self]
 
-        variable = self.variable.__class__(self.variable.name)
+        variable = Continuous(self.variable.name)
         result = self.__class__(variable, self.location, self.density_cap)
         memo[id_self] = result
         return result

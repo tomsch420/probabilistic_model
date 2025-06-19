@@ -1182,7 +1182,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
 
         for index, node_data in data["index_to_node_map"].items():
             node = Unit.from_json(node_data)
-            hash_remap[index] = node
+            hash_remap[int(index)] = node
             result.add_node(node)
 
         [result.graph.add_edge(hash_remap[parent_index].index, hash_remap[child_index].index, data)

@@ -109,7 +109,7 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
         if id_self in memo:
             return memo[id_self]
 
-        variable = self.variable.__class__(self.variable.name)
+        variable = Continuous(self.variable.name)
         interval = self.interval.__deepcopy__()
         result = self.__class__(variable, interval)
         memo[id_self] = result

@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 from jpt.learning.impurity import Impurity
 from plotly.subplots import make_subplots
 from random_events.product_algebra import VariableMap
+from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable
 from typing_extensions import Self
 
@@ -19,7 +20,7 @@ from ...probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductU
 from ...utils import MissingDict
 
 
-class JPT:
+class JPT(SubclassJSONSerializer):
     """
     Class that implements the JPT learning algorithm for probabilistic circuits.
     """
@@ -75,7 +76,7 @@ class JPT:
     Rather to store the sample indices in the leaves or not.
     """
 
-    variables_from_init: Tuple[Variable, ...]
+    variables: Tuple[Variable, ...]
     """
     The variables from initialization. Since variables will be overwritten as soon as the model is learned,
     we need to store the variables from initialization here.
@@ -95,7 +96,7 @@ class JPT:
                  features: Optional[Iterable[Variable]] = None, min_samples_leaf: Union[int, float] = 1,
                  min_impurity_improvement: float = 0.0, max_leaves: Union[int, float] = float("inf"),
                  max_depth: Union[int, float] = float("inf"), dependencies: Optional[VariableMap] = None, ):
-        self.variables_from_init = tuple(sorted(variables))
+        self.variables = tuple(sorted(variables))
         self.set_targets_and_features(targets, features)
         self._min_samples_leaf = min_samples_leaf
         self.min_impurity_improvement = min_impurity_improvement
@@ -126,12 +127,12 @@ class JPT:
 
             # and features are not specified
             if features is None:
-                self.targets = self.variables_from_init
-                self.features = self.variables_from_init
+                self.targets = self.variables
+                self.features = self.variables
 
             # and features are specified
             else:
-                self.targets = tuple(sorted(set(self.variables_from_init) - set(features)))
+                self.targets = tuple(sorted(set(self.variables) - set(features)))
                 self.features = tuple(sorted(features))
 
         # if targets are specified
@@ -139,7 +140,7 @@ class JPT:
             # and features are not specified
             if features is None:
                 self.targets = tuple(sorted(set(targets)))
-                self.features = tuple(sorted(set(self.variables_from_init) - set(targets)))
+                self.features = tuple(sorted(set(self.variables) - set(targets)))
 
             # and features are specified
             else:
@@ -158,7 +159,7 @@ class JPT:
 
     @property
     def numeric_variables(self):
-        return [variable for variable in self.variables_from_init if isinstance(variable, (Continuous, Integer))]
+        return [variable for variable in self.variables if isinstance(variable, (Continuous, Integer))]
 
     @property
     def numeric_targets(self):
@@ -170,7 +171,7 @@ class JPT:
 
     @property
     def symbolic_variables(self):
-        return [variable for variable in self.variables_from_init if isinstance(variable, Symbolic)]
+        return [variable for variable in self.variables if isinstance(variable, Symbolic)]
 
     @property
     def symbolic_targets(self):
@@ -190,7 +191,7 @@ class JPT:
 
         result = np.zeros(data.shape)
 
-        for variable_index, variable in enumerate(self.variables_from_init):
+        for variable_index, variable in enumerate(self.variables):
             column = data[variable.name]
             if isinstance(variable, ScaledContinuous):
                 column = variable.encode(column)
@@ -201,7 +202,7 @@ class JPT:
 
         return result
 
-    def fit(self, data: pd.DataFrame) -> Self:
+    def fit(self, data: pd.DataFrame) -> ProbabilisticCircuit:
         """
         Fit the model to the data.
 
@@ -222,7 +223,7 @@ class JPT:
         while self.c45queue:
             self.c45(*self.c45queue.popleft())
 
-        return self
+        return self.probabilistic_circuit
 
     def c45(self, data: np.ndarray, start: int, end: int, depth: int):
         """
@@ -276,30 +277,36 @@ class JPT:
         result = ProductUnit(probabilistic_circuit=self.probabilistic_circuit)
         result.total_samples = len(data)
 
-        for index, variable in enumerate(self.variables_from_init):
+        for index, variable in enumerate(self.variables):
             if isinstance(variable, Continuous):
                 distribution = NygaDistribution(variable,
                                                 min_likelihood_improvement=variable.min_likelihood_improvement,
                                                 min_samples_per_quantile=variable.min_samples_per_quantile)
-                distribution.fit(data[:, index])
+                distribution = distribution.fit(data[:, index])
 
                 if isinstance(distribution.root, DiracDeltaDistribution):
                     distribution.root.density_cap = 1 / variable.minimal_distance
-                distribution = distribution.root
+                nyga_root = distribution.root
+                new_nodes = self.probabilistic_circuit.mount(nyga_root)
+                result.add_subcircuit(new_nodes[nyga_root.index])
 
             elif isinstance(variable, Symbolic):
                 distribution = SymbolicDistribution(variable, probabilities=MissingDict(float))
                 distribution.fit_from_indices(data[:, index].astype(int))
-                distribution = UnivariateDiscreteLeaf(distribution)
+                distribution = UnivariateDiscreteLeaf(distribution,
+                                                      probabilistic_circuit=self.probabilistic_circuit)
+                result.add_subcircuit(distribution)
 
             elif isinstance(variable, Integer):
                 distribution = IntegerDistribution(variable, probabilities=MissingDict(float))
                 distribution.fit(data[:, index])
-                distribution = UnivariateDiscreteLeaf(distribution)
+                distribution = UnivariateDiscreteLeaf(distribution,
+                                                      probabilistic_circuit=self.probabilistic_circuit)
+                result.add_subcircuit(distribution)
+
             else:
                 raise ValueError(f"Variable {variable} is not supported.")
 
-            result.add_subcircuit(distribution)
 
         return result
 
@@ -307,10 +314,10 @@ class JPT:
         min_samples_leaf = self.min_samples_leaf
 
         numeric_vars = (
-            np.array([index for index, variable in enumerate(self.variables_from_init)
+            np.array([index for index, variable in enumerate(self.variables)
                       if variable in self.numeric_targets], dtype=int))
         symbolic_vars = np.array(
-            [index for index, variable in enumerate(self.variables_from_init)
+            [index for index, variable in enumerate(self.variables)
              if variable in self.symbolic_targets], dtype=int)
 
         invert_impurity = np.array([0] * len(self.symbolic_targets), dtype=int)
@@ -319,10 +326,10 @@ class JPT:
         n_num_vars_total = len(self.numeric_variables)
 
         numeric_features = np.array(
-            [index for index, variable in enumerate(self.variables_from_init)
+            [index for index, variable in enumerate(self.variables)
              if variable in self.numeric_features], dtype=int)
         symbolic_features = np.array(
-            [index for index, variable in enumerate(self.variables_from_init)
+            [index for index, variable in enumerate(self.variables)
              if variable in self.symbolic_features], dtype=int)
 
         symbols = np.array([len(variable.domain.simple_sets) for variable in self.symbolic_variables])
@@ -332,8 +339,8 @@ class JPT:
 
         for variable, dep_vars in self.dependencies.items():
             # get the index version of the dependent variables and store them
-            idx_var = self.variables_from_init.index(variable)
-            idc_dep = [self.variables_from_init.index(var) for var in dep_vars]
+            idx_var = self.variables.index(variable)
+            idc_dep = [self.variables.index(var) for var in dep_vars]
             dependency_indices[idx_var] = idc_dep
 
         return Impurity(min_samples_leaf, numeric_vars, symbolic_vars, invert_impurity, n_sym_vars_total,
@@ -349,7 +356,7 @@ class JPT:
                 for variable, dependencies in self.dependencies.items()}
 
     def empty_copy(self):
-        result = self.__class__(variables=self.variables_from_init,
+        result = self.__class__(variables=self.variables,
                                 targets=self.targets,
                                 features=self.features,
                                 min_samples_leaf=self.min_samples_leaf,
@@ -359,8 +366,8 @@ class JPT:
         return result
 
     def to_json(self) -> Dict[str, Any]:
-        result = {}
-        result["variables_from_init"] = [variable.to_json() for variable in self.variables_from_init]
+        result = super().to_json()
+        result["variables_from_init"] = [variable.to_json() for variable in self.variables]
         result["targets"] = [variable.name for variable in self.targets]
         result["features"] = [variable.name for variable in self.features]
         result["_min_samples_leaf"] = self._min_samples_leaf
@@ -373,7 +380,7 @@ class JPT:
         return result
 
     @classmethod
-    def parameters_from_json(cls, data: Dict[str, Any]) -> Self:
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
         variable_from_init = [Variable.from_json(variable) for variable in data["variables_from_init"]]
         name_to_variable_map = {variable.name: variable for variable in variable_from_init}
         targets = [name_to_variable_map[name] for name in data["targets"]]
@@ -389,4 +396,9 @@ class JPT:
                      min_samples_leaf=_min_samples_leaf, min_impurity_improvement=min_impurity_improvement,
                      max_leaves=max_leaves, max_depth=max_depth, dependencies=dependencies)
         result.total_samples = data["total_samples"]
+        result.probabilistic_circuit = ProbabilisticCircuit.from_json(data["probabilistic_circuit"])
         return result
+
+    def __eq__(self, other: Self):
+        return (isinstance(other, self.__class__) and self.variables == other.variables and
+                self.targets == other.targets and self.features == other.features)
