@@ -1164,17 +1164,12 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         # get super result
         result = super().to_json()
 
-        hash_to_node_map = dict()
+        index_to_node_map = {node.index: node.to_json() for node in self.nodes()}
+        edges = [(parent.index, child.index, data) for parent, child, data in self.edges()]
 
-        for node in self.graph.nodes():
-            node_json = node.to_json()
-            hash_to_node_map[hash(node)] = node_json
+        result["index_to_node_map"] = index_to_node_map
+        result["edges"] = edges
 
-        unweighted_edges = [(hash(source), hash(target)) for source, target in self.unweighted_edges]
-        weighted_edges = [(hash(source), hash(target), weight) for source, target, weight in self.log_weighted_edges]
-        result["hash_to_node_map"] = hash_to_node_map
-        result["unweighted_edges"] = unweighted_edges
-        result["log_weighted_edges"] = weighted_edges
         return result
 
     @classmethod
@@ -1186,16 +1181,13 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         result = cls.parameters_from_json(data)
         hash_remap: Dict[int, Unit] = dict()
 
-        for hash_, node_data in data["hash_to_node_map"].items():
+        for index, node_data in data["index_to_node_map"].items():
             node = Unit.from_json(node_data)
-            hash_remap[int(hash_)] = node
+            hash_remap[index] = node
             result.add_node(node)
 
-        for source_hash, target_hash in data["unweighted_edges"]:
-            result.graph.add_edge(hash_remap[source_hash], hash_remap[target_hash])
-
-        for source_hash, target_hash, weight in data["log_weighted_edges"]:
-            result.graph.add_edge(hash_remap[source_hash], hash_remap[target_hash], log_weight=weight)
+        [result.graph.add_edge(hash_remap[parent_index].index, hash_remap[child_index].index, data)
+         for parent_index, child_index, data in data["edges"]]
 
         return result
 
@@ -1206,37 +1198,6 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         :param new_variables: The new variables to set.
         """
         self.root.update_variables(new_variables)
-
-    @property
-    def log_weighted_edges(self):
-        """
-        :return: All log-weighted edges of the circuit.
-        """
-        weighted_edges = []
-
-        for edge in self.graph.edges():
-            edge_ = self.graph.get_edge_data(*edge)
-
-            if "log_weight" in edge_.keys():
-                weight = edge_["log_weight"]
-                weighted_edges.append((*edge, weight))
-
-        return weighted_edges
-
-    @property
-    def unweighted_edges(self):
-        """
-        :return: All unweighted edges of the circuit.
-        """
-        unweighted_edges = []
-
-        for edge in self.graph.edges():
-            edge_ = self.graph.get_edge_data(*edge)
-
-            if "weight" not in edge_.keys():
-                unweighted_edges.append(edge)
-
-        return unweighted_edges
 
     def is_deterministic(self) -> bool:
         """

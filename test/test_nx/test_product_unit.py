@@ -15,10 +15,11 @@ class ProductUnitTestCase(unittest.TestCase):
     model: ProbabilisticCircuit
 
     def setUp(self):
-        u1 = UnivariateContinuousLeaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
-        u2 = UnivariateContinuousLeaf(UniformDistribution(self.y, closed(3, 4).simple_sets[0]))
+        pc = ProbabilisticCircuit()
+        u1 = leaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]), pc)
+        u2 = leaf(UniformDistribution(self.y, closed(3, 4).simple_sets[0]), pc)
 
-        product_unit = ProductUnit()
+        product_unit = ProductUnit(probabilistic_circuit=pc)
         product_unit.add_subcircuit(u1)
         product_unit.add_subcircuit(u2)
         self.model = product_unit.probabilistic_circuit
@@ -88,14 +89,16 @@ class ProductUnitTestCase(unittest.TestCase):
         self.assertEqual(domain, domain_by_hand)
 
     def test_serialization(self):
+        event = SimpleEvent({self.x: closed(0, 0.5), self.y: closed(3, 3.5)}).as_composite_set()
         serialized = self.model.to_json()
-        deserialized = ProductUnit.from_json(serialized)
-        self.assertEqual(self.model, deserialized)
+        deserialized = ProbabilisticCircuit.from_json(serialized)
+        self.assertEqual(deserialized.probability(event), self.model.probability(event))
 
     def test_copy(self):
-        copy = self.model.__copy__()
-        self.assertEqual(self.model, copy)
+        event = SimpleEvent({self.x: closed(0, 0.5), self.y: closed(3, 3.5)}).as_composite_set()
+        copy = self.model.__deepcopy__()
         self.assertNotEqual(id(copy), id(self.model))
+        self.assertEqual(copy.probability(event), self.model.probability(event))
 
     def test_sample_not_equal(self):
         samples = self.model.sample(10)
