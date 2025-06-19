@@ -4,28 +4,22 @@ import inspect
 import math
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
-from functools import cached_property
 
 import equinox as eqx
 import jax
-import numpy as np
 import tqdm
 from jax import numpy as jnp
-from jax.tree_util import tree_flatten
 from jax.experimental.sparse import BCOO, bcoo_concatenate
+from jax.scipy.special import logsumexp
+from jax.tree_util import tree_flatten
 from jaxtyping import Int
-from random_events.product_algebra import SimpleEvent
 from random_events.utils import recursive_subclasses, SubclassJSONSerializer
 from random_events.variable import Variable
-from scipy.sparse import coo_matrix, coo_array, csc_array
 from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Self, Optional
 
-from . import shrink_index_array, embed_sparse_array_in_nan_array
-from .utils import copy_bcoo, sample_from_sparse_probabilities_csc, sparse_remove_rows_and_cols_where_all
-from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, Unit,
-                                        ProbabilisticCircuit as NXProbabilisticCircuit)
-from jax.scipy.special import logsumexp
+from .utils import copy_bcoo
+from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, Unit, ProbabilisticCircuit as NXProbabilisticCircuit)
 
 
 def inverse_class_of(clazz: Type[Unit]) -> Type[Layer]:
@@ -113,7 +107,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         return tuple()
 
     def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
-              progress_bar: Optional[tqdm.tqdm] = None,) -> List[Unit]:
+              progress_bar: Optional[tqdm.tqdm] = None, ) -> List[Unit]:
         """
         Convert the layer to a networkx circuit.
         For every node in this circuit, a corresponding node in the networkx circuit
@@ -129,9 +123,8 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
         raise NotImplementedError
 
     @staticmethod
-    def create_layers_from_nodes(nodes: List[Unit], child_layers: List[NXConverterLayer],
-                                 progress_bar: bool = True) \
-            -> List[NXConverterLayer]:
+    def create_layers_from_nodes(nodes: List[Unit], child_layers: List[NXConverterLayer], progress_bar: bool = True) -> \
+    List[NXConverterLayer]:
         """
         Create a layer from a list of nodes.
         """
@@ -139,8 +132,8 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
 
         unique_types = set(type(node) if not node.is_leaf else type(node.distribution) for node in nodes)
         for unique_type in unique_types:
-            nodes_of_current_type = [node for node in nodes if (isinstance(node, unique_type) if not node.is_leaf
-                                                                else isinstance(node.distribution, unique_type))]
+            nodes_of_current_type = [node for node in nodes if (
+                isinstance(node, unique_type) if not node.is_leaf else isinstance(node.distribution, unique_type))]
 
             if nodes[0].is_leaf:
                 unique_type = type(nodes_of_current_type[0].distribution)
@@ -161,10 +154,8 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
 
     @classmethod
     @abstractmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[Unit],
-                                                         child_layers: List[NXConverterLayer],
-                                                         progress_bar: bool = True) -> \
-            NXConverterLayer:
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[Unit], child_layers: List[NXConverterLayer],
+                                                         progress_bar: bool = True) -> NXConverterLayer:
         """
         Create a layer from a list of nodes with the same type and scope.
         """
@@ -209,7 +200,7 @@ class InnerLayer(Layer, ABC):
     def __init__(self, child_layers: List[Layer]):
         super().__init__()
         self.child_layers = child_layers
-        self.variables # initialize the variables of the layer
+        self.variables  # initialize the variables of the layer
 
     def set_variables(self, value: jnp.array):
         raise AttributeError("Variables of inner layers are read-only.")
@@ -271,7 +262,6 @@ class InputLayer(Layer, ABC):
 
 
 class SumLayer(InnerLayer, ABC):
-
     log_weights: List[Union[jax.array, BCOO]]
     child_layers: Union[List[[ProductLayer]], List[InputLayer]]
 
@@ -281,7 +271,8 @@ class SumLayer(InnerLayer, ABC):
 
     def validate(self):
         for log_weights in self.log_weights:
-            assert log_weights.shape[0] == self.number_of_nodes, "The number of nodes must match the number of log_weights."
+            assert log_weights.shape[
+                       0] == self.number_of_nodes, "The number of nodes must match the number of log_weights."
 
         for log_weights, child_layer in self.log_weighted_child_layers:
             assert log_weights.shape[
@@ -307,7 +298,6 @@ class SumLayer(InnerLayer, ABC):
 
 
 class SparseSumLayer(SumLayer):
-
     log_weights: List[BCOO]
 
     @classmethod
@@ -356,8 +346,8 @@ class SparseSumLayer(SumLayer):
             # multiply the log_weights with the child layer likelihood
             cloned_log_weights.data += child_layer_log_likelihood[cloned_log_weights.indices[:, 1]]
             cloned_log_weights.data = jnp.exp(cloned_log_weights.data)  # exponent log_weights
-            result = result.at[cloned_log_weights.indices[:, 0]].add(cloned_log_weights.data,
-                                                                     indices_are_sorted=False, unique_indices=False)
+            result = result.at[cloned_log_weights.indices[:, 0]].add(cloned_log_weights.data, indices_are_sorted=False,
+                                                                     unique_indices=False)
 
         return jnp.log(result) - self.log_normalization_constants
 
@@ -381,15 +371,14 @@ class SparseSumLayer(SumLayer):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         child_layer = [Layer.from_json(child_layer) for child_layer in data["child_layers"]]
-        log_weights = [BCOO((jnp.array(lw[0]), jnp.array(lw[1])), shape=lw[2],
-                            indices_sorted=True, unique_indices=True) for lw in data["log_weights"]]
+        log_weights = [BCOO((jnp.array(lw[0]), jnp.array(lw[1])), shape=lw[2], indices_sorted=True, unique_indices=True)
+                       for lw in data["log_weights"]]
         return cls(child_layer, log_weights)
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[SumUnit],
                                                          child_layers: List[NXConverterLayer],
-                                                         progress_bar: bool = True) -> \
-            NXConverterLayer:
+                                                         progress_bar: bool = True) -> NXConverterLayer:
 
         result_hash_remap = {hash(node): index for index, node in enumerate(nodes)}
         variables = jnp.array(
@@ -398,8 +387,8 @@ class SparseSumLayer(SumLayer):
         number_of_nodes = len(nodes)
 
         # filter the child layers to only contain layers with the same scope as this one
-        filtered_child_layers = [child_layer for child_layer in child_layers if (child_layer.layer.variables ==
-                                                                                 variables).all()]
+        filtered_child_layers = [child_layer for child_layer in child_layers if
+                                 (child_layer.layer.variables == variables).all()]
         log_weights = []
 
         # for every possible child layer
@@ -410,8 +399,8 @@ class SparseSumLayer(SumLayer):
             values = []
 
             # gather indices and log log_weights
-            for index, node in enumerate(tqdm.tqdm(nodes, desc="Calculating log_weights for sum node")
-                                         if progress_bar else nodes):
+            for index, node in enumerate(
+                    tqdm.tqdm(nodes, desc="Calculating log_weights for sum node") if progress_bar else nodes):
                 for weight, subcircuit in node.log_weighted_subcircuits:
                     if hash(subcircuit) in child_layer.hash_remap:
                         indices.append((index, child_layer.hash_remap[hash(subcircuit)]))
@@ -419,8 +408,7 @@ class SparseSumLayer(SumLayer):
 
             # assemble sparse log weight matrix
             log_weights.append(BCOO((jnp.array(values), jnp.array(indices)),
-                                    shape=(number_of_nodes,
-                                           child_layer.layer.number_of_nodes)))
+                                    shape=(number_of_nodes, child_layer.layer.number_of_nodes)))
 
         sum_layer = cls([cl.layer for cl in filtered_child_layers], log_weights)
         return NXConverterLayer(sum_layer, nodes, result_hash_remap)
@@ -433,7 +421,7 @@ class SparseSumLayer(SumLayer):
         if progress_bar:
             progress_bar.set_postfix_str(f"Parsing Sum Layer for variables {variables_}")
 
-        units = [SumUnit(result) for _ in range(self.number_of_nodes)]
+        units = [SumUnit(probabilistic_circuit=result) for _ in range(self.number_of_nodes)]
 
         child_layer_nx = [cl.to_nx(variables, result, progress_bar) for cl in self.child_layers]
 
@@ -441,7 +429,7 @@ class SparseSumLayer(SumLayer):
 
             # extract the log_weights for the child layer
             for ((row, col), log_weight) in zip(log_weights.indices, log_weights.data):
-                units[row].add_subcircuit(child_layer[col], log_weight.item(), False)
+                units[row].add_subcircuit(child_layer[col], log_weight.item())
                 if progress_bar:
                     progress_bar.update()
 
@@ -449,23 +437,20 @@ class SparseSumLayer(SumLayer):
 
         return units
 
+
 class DenseSumLayer(SumLayer):
-
-
-
     log_weights: List[jnp.array]
     child_layers: Union[List[[ProductLayer]], List[InputLayer]]
 
     @classmethod
     def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[Unit], child_layers: List[NXConverterLayer],
-                                                         progress_bar: bool = True) -> \
-            NXConverterLayer:
+                                                         progress_bar: bool = True) -> NXConverterLayer:
         raise NotImplementedError
 
     @property
     def number_of_components(self) -> int:
-        return sum([cl.number_of_components for cl in self.child_layers]) + sum([math.prod(lw.shape)
-                                                                                 for lw in self.log_weights])
+        return sum([cl.number_of_components for cl in self.child_layers]) + sum(
+            [math.prod(lw.shape) for lw in self.log_weights])
 
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
@@ -526,7 +511,6 @@ class DenseSumLayer(SumLayer):
         log_weights = [jnp.asarray(lw) for lw in data["log_weights"]]
         return cls(child_layer, log_weights)
 
-
     def to_nx(self, variables: SortedSet[Variable], result: NXProbabilisticCircuit,
               progress_bar: Optional[tqdm.tqdm] = None) -> List[Unit]:
 
@@ -535,7 +519,7 @@ class DenseSumLayer(SumLayer):
         if progress_bar:
             progress_bar.set_postfix_str(f"Parsing Dense Sum Layer for variables {variables_}")
 
-        units = [SumUnit(result) for _ in range(self.number_of_nodes)]
+        units = [SumUnit(probabilistic_circuit=result) for _ in range(self.number_of_nodes)]
 
         child_layer_nx = [cl.to_nx(variables, result, progress_bar) for cl in self.child_layers]
 
@@ -543,7 +527,7 @@ class DenseSumLayer(SumLayer):
             # extract the log_weights for the child layer
             for row in range(log_weights.shape[0]):
                 for col in range(log_weights.shape[1]):
-                    units[row].add_subcircuit(child_layer[col], jnp.exp(log_weights[row, col]).item(), False)
+                    units[row].add_subcircuit(child_layer[col], jnp.exp(log_weights[row, col]).item())
 
                     if progress_bar:
                         progress_bar.update()
@@ -551,7 +535,6 @@ class DenseSumLayer(SumLayer):
         [unit.normalize() for unit in units]
 
         return units
-
 
 
 class ProductLayer(InnerLayer):
@@ -589,9 +572,9 @@ class ProductLayer(InnerLayer):
         self.variables
 
     def validate(self):
-        assert self.edges.shape == (len(self.child_layers), self.number_of_nodes), \
-            (f"The shape of the edges must be {(len(self.child_layers), self.number_of_nodes)} "
-             f"but was {self.edges.shape}.")
+        assert self.edges.shape == (len(self.child_layers), self.number_of_nodes), (
+            f"The shape of the edges must be {(len(self.child_layers), self.number_of_nodes)} "
+            f"but was {self.edges.shape}.")
 
     @property
     def number_of_nodes(self) -> int:
@@ -653,10 +636,8 @@ class ProductLayer(InnerLayer):
         return cls(child_layer, edges)
 
     @classmethod
-    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[Unit],
-                                                         child_layers: List[NXConverterLayer],
-                                                         progress_bar: bool = True) -> \
-            NXConverterLayer:
+    def create_layer_from_nodes_with_same_type_and_scope(cls, nodes: List[Unit], child_layers: List[NXConverterLayer],
+                                                         progress_bar: bool = True) -> NXConverterLayer:
 
         hash_remap = {hash(node): index for index, node in enumerate(nodes)}
         number_of_nodes = len(nodes)
@@ -684,8 +665,8 @@ class ProductLayer(InnerLayer):
                 progress_bar.update(1)
 
         # assemble sparse edge tensor
-        edges = (BCOO((jnp.array(edge_values), jnp.array(edge_indices)), shape=(len(child_layers), number_of_nodes)).
-                 sort_indices().sum_duplicates(remove_zeros=False))
+        edges = (BCOO((jnp.array(edge_values), jnp.array(edge_indices)),
+                      shape=(len(child_layers), number_of_nodes)).sort_indices().sum_duplicates(remove_zeros=False))
         layer = cls([cl.layer for cl in child_layers], edges)
         return NXConverterLayer(layer, nodes, hash_remap)
 
@@ -699,11 +680,11 @@ class ProductLayer(InnerLayer):
         if progress_bar:
             progress_bar.set_postfix_str(f"Parsing Product Layer of variables {variables_}")
 
-        units = [ProductUnit(result) for _ in range(self.number_of_nodes)]
+        units = [ProductUnit(probabilistic_circuit=result) for _ in range(self.number_of_nodes)]
 
         child_layer_nx = [cl.to_nx(variables, result, progress_bar) for cl in self.child_layers]
         for (row, col), data in zip(self.edges.indices, self.edges.data):
-            units[col].add_subcircuit(child_layer_nx[row][data], mount=False)
+            units[col].add_subcircuit(child_layer_nx[row][data])
 
             if progress_bar:
                 progress_bar.update()

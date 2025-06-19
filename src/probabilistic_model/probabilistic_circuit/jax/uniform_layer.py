@@ -76,7 +76,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
                                 interval=random_events.interval.SimpleInterval(lower.item(), upper.item(),
                                                                                random_events.interval.Bound.OPEN,
                                                                                random_events.interval.Bound.OPEN)),
-            result)
+            probabilistic_circuit=result)
             for lower, upper in self.interval]
 
         if progress_bar:
