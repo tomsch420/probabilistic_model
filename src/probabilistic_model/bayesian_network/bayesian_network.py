@@ -1,243 +1,230 @@
 from __future__ import annotations
 
-from abc import abstractmethod
-from functools import cached_property
+from dataclasses import dataclass, field
+from typing import Self, List, Tuple, Set, Iterable, Dict
 
-import networkx as nx
-import numpy as np
-from random_events.product_algebra import SimpleEvent
-from random_events.variable import Variable, Symbolic
-from typing_extensions import Self, List, Tuple, Iterable, Optional, Dict
+import rustworkx as rx
+from random_events.variable import Symbolic, Variable
+from sortedcontainers import SortedSet
+from typing_extensions import Optional
 
-from ..probabilistic_circuit.nx.probabilistic_circuit import (ProbabilisticCircuit, SumUnit, SymbolicDistribution,
-                                                              UnivariateDiscreteLeaf)
+from ..distributions import SymbolicDistribution
+from ..probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit
 
 
-class BayesianNetworkMixin:
+@dataclass
+class Node:
     """
-    Mixin class for truncated probability distributions in tree shaped bayesian networks.
+    A node in the bayesian network
     These distributions do not inherit from probabilistic models,
     since inference in Bayesian Networks is intractable.
+    For inference, convert the bayesian network to a probabilistic circuit.
     """
 
-    bayesian_network: BayesianNetwork
-
-    forward_message: Optional[SymbolicDistribution]
+    bayesian_network: Optional[BayesianNetwork] = field(kw_only=True, repr=False, default=None)
     """
-    The marginal distribution of this nodes variable (message) as calculated in the forward pass.
+    The bayesian network this node is part of. 
     """
 
-    forward_probability: float
+    index: Optional[int] = field(kw_only=True, default=None, repr=False)
     """
-    The probability of the forward message at each node.
+    The index of the node in the graph of its circuit.
     """
 
-    @property
-    @abstractmethod
-    def variables(self) -> Tuple[Variable, ...]:
-        raise NotImplementedError
-
-    @property
-    def parent(self) -> Optional[Self]:
-        """
-        The parent node if it exists and None if this is a root.
-        :return:
-        """
-        parents = list(self.bayesian_network.predecessors(self))
-        if len(parents) > 1:
-            raise ValueError("Bayesian Network is not a tree.")
-        elif len(parents) == 1:
-            return parents[0]
-        else:
-            return None
-
-    @property
-    def is_root(self) -> bool:
-        """
-        :return: Rather this is the root or not.
-        """
-        return self.parent is None
-
-    @property
-    def parent_and_node_variables(self) -> Tuple[Variable, ...]:
-        """
-        Get the parent variables together with this nodes variable.
-
-        :return: A tuple containing first the parent variable and second this nodes variable.
-        """
-        if self.is_root:
-            return self.variables
-        else:
-            return self.parent.variables + self.variables
+    def __post_init__(self):
+        if self.bayesian_network is not None:
+            self.bayesian_network.add_node(self)
 
     def __hash__(self):
-        return id(self)
+        if self.bayesian_network is not None and self.index is not None:
+            return hash((self.index, id(self.bayesian_network)))
+        else:
+            return id(self)
 
-    def joint_distribution_with_parent(self) -> SumUnit:
-        """
-        Calculate the joint distribution of the node and its parent.
-        The joint distribution is formed w. r. t. the forward message of the parent.
-        Hence, this can only be called after the forward pass has been performed.
-
-        :return: The joint distribution of the node and its parents.
-        """
-        raise NotImplementedError
-
-    def forward_pass(self, event: SimpleEvent):
-        """
-        Calculate the forward pass for this node given the event.
-        This includes calculating the forward message and the forward probability of said event.
-        :param event: The event to account for
-        """
-        raise NotImplementedError
-
-    def forward_message_as_sum_unit(self) -> SumUnit:
-        """
-        Convert this leaf nodes forward message to a sum unit.
-        This is used for the start of the conversion to a probabilistic circuit and only called for leaf nodes.
-
-        :return: The forward message as sum unit.
-        """
-        raise NotImplementedError
-
-    def interaction_term(self, node_latent_variable: Symbolic, parent_latent_variable: Symbolic) \
-            -> ProbabilisticCircuit:
-        """
-        Generate the interaction term that is used for mounting into the parent circuit in the generation of a
-        probabilistic circuit form the bayesian network.
-        :return: The interaction term as probabilistic circuit.
-        """
-        raise NotImplementedError
+    @property
+    def parent(self) -> Node:
+        return self.bayesian_network.predecessors(self)[0]
 
 
-class BayesianNetwork(nx.DiGraph):
+class BayesianNetwork:
     """
     Class for Bayesian Networks that are rooted, tree shaped and have univariate inner nodes.
     This class does not inherit from ProbabilisticModel since it cannot perform inference.
     Bayesian Networks can be converted to a probabilistic circuit which can perform inference.
     """
 
-    def __init__(self):
-        nx.DiGraph.__init__(self)
+    graph: rx.PyDAG[Node] = field(default_factory=lambda: rx.PyDAG(multigraph=False))
+    """
+    The graph to check connectivity from.
+    """
 
-    @cached_property
-    def nodes(self) -> Iterable[BayesianNetworkMixin]:
-        return super().nodes
+    def __len__(self):
+        """
+        Return the number of nodes in the graph.
 
-    @cached_property
-    def edges(self) -> Iterable[Tuple[BayesianNetworkMixin, BayesianNetworkMixin]]:
-        return super().edges
+        :return: The number of nodes in the graph.
+        """
+        return len(self.graph)
+
+    def __iter__(self):
+        """
+        Return an iterator over the nodes in the graph.
+
+        :return: An iterator over the nodes in the graph.
+        """
+        return iter(self.graph.nodes())
 
     @property
-    def variables(self) -> Tuple[Variable, ...]:
-        variables = [variable for node in self.nodes for variable in node.variables]
-        return tuple(sorted(variables))
+    def leaves(self) -> List[Node]:
+        return [node for node in self.nodes() if len(self.successors(node)) == 0]
 
-    @property
-    def leaves(self) -> List[BayesianNetworkMixin]:
-        return [node for node in self.nodes if self.out_degree(node) == 0]
+    def is_valid(self) -> bool:
+        """
+        Check if this graph is:
 
-    def add_node(self, node: BayesianNetworkMixin, **attr):
+        - acyclic
+        - connected
+
+        :return: True if the graph is valid, False otherwise.
+        """
+        return rx.is_connected(self.graph) and (len(self.edges()) == (len(self.nodes()) - 1)) and self.root
+
+    def add_node(self, node: Node):
+
+        if node.bayesian_network is self and node.index is not None:
+            return
+        elif node.bayesian_network is not None and node.bayesian_network is not self:
+            raise NotImplementedError("Cannot add a node that already belongs to another bayesian network.")
+
+        node.index = self.graph.add_node(node)
+
+        # write self as the nodes bn
         node.bayesian_network = self
-        super().add_node(node, **attr)
 
-    def add_nodes_from(self, nodes: Iterable[BayesianNetworkMixin], **attr):
+    def add_nodes_from(self, nodes: Iterable[Node]):
         [self.add_node(node) for node in nodes]
 
-    def forward_pass(self, event: SimpleEvent):
+    def add_edge(self, parent: Node, child: Node):
+        self.add_node(parent)
+        self.add_node(child)
+        self.graph.add_edge(parent.index, child.index, None)
+
+    def add_edges_from(self, edges: Iterable[Tuple[Node, Node]]):
+        [self.add_edge(*edge) for edge in edges]
+
+    def successors(self, node: Node) -> List[Node]:
+        return self.graph.successors(node.index)
+
+    def descendants(self, unit: Node) -> Set[Node]:
+        return {self.graph[unit] for unit in rx.descendants(self.graph, unit.index)}
+
+    def predecessors(self, unit: Node) -> List[Node]:
+        return self.graph.predecessors(unit.index)
+
+    def in_edges(self, node: Node) -> List[Tuple[Node, Node, Optional[float]]]:
+        return [(self.graph.get_node_data(parent_index), node, edge_data,)
+                for parent_index, _, edge_data in self.graph.in_edges(node.index)]
+
+    def nodes(self) -> List[Node]:
         """
-        Calculate all forward messages.
+        Return an iterator over the nodes.
+
+        :return: An iterator over the nodes.
         """
-        # calculate forward pass
-        for node in nx.bfs_tree(self, self.root):
-            node.forward_pass(event)
+        return self.graph.nodes()
+
+    def edges(self) -> List[Tuple[Node, Node]]:
+        return [(self.graph[parent], self.graph[child]) for parent, child in self.graph.edge_list()]
+
+    def in_degree(self, node: Node):
+        return self.graph.in_degree(node.index)
+
+    def has_edge(self, parent: Node, child: Node) -> bool:
+        return self.graph.has_edge(parent.index, child.index)
 
     @property
-    def root(self) -> BayesianNetworkMixin:
+    def root(self) -> Node:
         """
         The root of the circuit is the node with in-degree 0.
         This is the output node, that will perform the final computation.
 
         :return: The root of the circuit.
         """
-        possible_roots = [node for node in self.nodes if self.in_degree(node) == 0]
-        if len(possible_roots) > 1:
+        possible_roots = [node for node in self.nodes() if self.in_degree(node) == 0]
+        if len(possible_roots) == 1:
+            if not isinstance(possible_roots[0], Root):
+                raise ValueError("The root is not an instance of Root.")
+            return possible_roots[0]
+        elif len(possible_roots) > 1:
             raise ValueError(f"More than one root found. Possible roots are {possible_roots}")
-        return possible_roots[0]
+        else:
+            raise ValueError(f"No root found.")
 
-    def node_positions_for_structure_plot(self) -> Dict[BayesianNetworkMixin, Tuple[int, int]]:
+    def __eq__(self, other: Self):
+        raise NotImplementedError
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} with {len(self.nodes())} nodes and {len(self.edges())} edges"
+
+
+@dataclass
+class Root(Node):
+
+    distribution: SymbolicDistribution
+
+    @property
+    def variable(self) -> Symbolic:
+        return self.distribution.variable
+
+@dataclass
+class ConditionalProbabilityTable(Node):
+    """
+    Conditional probability distribution for Bayesian Network nodes given their parents.
+    The parent in this case must be exactly one node.
+    """
+
+    conditional_probability_distributions: Dict[int, SymbolicDistribution] = field(default_factory=dict)
+
+    @property
+    def variable(self) -> Symbolic:
+        return list(self.conditional_probability_distributions.values())[0].variable
+
+    def __repr__(self):
+        return f"P({self.variable.name}|{self.parent.variable.name})"
+
+    def to_tabulate(self) -> List[List[str]]:
         """
-        Calculate the positions of the nodes in the structure plot.
+        Tabulate the truncated probability table.
 
-        :return: The positions of the nodes as dictionary from unit to (x, y) coordinate.
+        :return: A table with the truncated probability table that can be printed using tabulate.
         """
-        # do a layer-wise BFS
-        layers = list(nx.bfs_layers(self, self.root))
+        table = [[self.parent.variable.name, self.variable.name, repr(self)]]
 
-        # calculate the positions of the nodes
-        maximum_layer_width = max([len(layer) for layer in layers])
-        positions = {}
-        for depth, layer in enumerate(layers):
-            number_of_nodes = len(layer)
-            positions_in_layer = np.linspace(0, maximum_layer_width, number_of_nodes, endpoint=False)
-            positions_in_layer += (maximum_layer_width - len(layer)) / (2 * len(layer))
-            for position, node in zip(positions_in_layer, layer):
-                positions[node] = (position, -depth)
+        parent_domain_hash_map = self.parent.variable.domain.hash_map
+        own_domain_hash_map = self.variable.domain.hash_map
 
-        return positions
+        for parent_hash, distribution in self.conditional_probability_distributions.items():
+            for own_hash, probability in distribution.probabilities.items():
+                table.append([str(parent_domain_hash_map[parent_hash]), str(own_domain_hash_map[own_hash]),
+                              str(probability)])
+        return table
 
-    def plot(self):
-        """
-        Plot the Bayesian Network.
-        """
-        positions = self.node_positions_for_structure_plot()
-        labels = {node: ", ".join([v.name for v in node.variables]) for node in self.nodes}
-        nx.draw(self, positions, node_color="#FFFFFF", node_shape="o", edgecolors="#000000", node_size=500,
-                labels=labels)
+@dataclass
+class ConditionalProbabilisticCircuit(Node):
+    """
+    Conditional probability distribution represented as Circuit for Bayesian Network nodes given their parents.
+    """
 
-    def as_probabilistic_circuit(self) -> ProbabilisticCircuit:
-        """
-        Convert the BayesianNetwork to a probabilistic circuit that expresses the same probability distribution.
-        :return: The probabilistic circuit.
-        """
+    conditional_probability_distributions: Dict[int, ProbabilisticCircuit] = field(default_factory=dict)
 
-        # this only works for bayesian trees
-        assert nx.is_tree(self)
+    @property
+    def parent(self) -> ConditionalProbabilityTable:
+        return super().parent
 
-        # calculate forward pass
-        event = SimpleEvent({variable: variable.domain for variable in self.variables})
-        self.forward_pass(event)
+    @property
+    def variables(self) -> SortedSet[Variable, ...]:
+        return list(self.conditional_probability_distributions.values())[0].variables
 
-        pointers_to_sum_units: Dict[BayesianNetworkMixin, SumUnit] = dict()
 
-        for leaf in self.leaves:
-            pointers_to_sum_units[leaf] = leaf.forward_message_as_sum_unit()
-
-        # iterate over the edges in reversed bfs order
-        edges = nx.bfs_edges(self, self.root)
-
-        # for each edge in reverse bfs order
-        for parent, child in reversed(list(edges)):
-            current_pc = ProbabilisticCircuit()
-            # type hinting
-            parent: BayesianNetworkMixin
-            child: BayesianNetworkMixin
-
-            # if the parent circuit does not yet exist
-            if parent not in pointers_to_sum_units.keys():
-                # create the parent circuit
-                forward_of_parent = UnivariateDiscreteLeaf(parent.forward_message, probabilistic_circuit=current_pc)
-                pointers_to_sum_units[parent] = forward_of_parent.as_deterministic_sum()
-
-            # get parent and child circuits
-            parent_sum_unit = pointers_to_sum_units[parent]
-            child_sum_unit = pointers_to_sum_units[child]
-
-            # calculate interaction term
-            interaction_term = child.interaction_term(child_sum_unit.latent_variable,
-                                                      parent_sum_unit.latent_variable)
-
-            # mount child into parent
-            parent_sum_unit.mount_with_interaction_terms(pointers_to_sum_units[child], interaction_term)
-
-        return pointers_to_sum_units[self.root].probabilistic_circuit
+    def __repr__(self):
+        return f"P({', '.join([v.name for v in self.variables])} | {self.parent.variable.name})"

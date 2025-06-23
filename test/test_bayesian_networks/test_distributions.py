@@ -11,8 +11,8 @@ from random_events.set import SetElement, Set
 from random_events.variable import Symbolic, Continuous
 
 from probabilistic_model.bayesian_network.bayesian_network import BayesianNetwork
-from probabilistic_model.bayesian_network.distributions import (ConditionalProbabilityTable, RootDistribution,
-                                                                ConditionalProbabilisticCircuit)
+from probabilistic_model.bayesian_network.bayesian_network import (ConditionalProbabilityTable,
+                                                                   ConditionalProbabilisticCircuit)
 from probabilistic_model.distributions import SymbolicDistribution, UniformDistribution
 from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProductUnit, \
     UnivariateContinuousLeaf, ProbabilisticCircuit, leaf
