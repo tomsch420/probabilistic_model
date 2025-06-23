@@ -6,6 +6,7 @@ import math
 import queue
 import random
 from abc import abstractmethod, ABC
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import IntEnum
 
@@ -971,9 +972,12 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
             result = self.log_truncated_of_simple_event_in_place(event.simple_sets[0])
             return result
 
-        # create a conditional circuit for every simple event
-        conditional_circuits = [self.__deepcopy__().log_truncated_of_simple_event_in_place(simple_event) for simple_event
-                                in event.simple_sets]
+        # Helper so every thread does its own deepcopy and truncation
+        def _copy_and_truncate(simple_event):
+            return self.__deepcopy__().log_truncated_of_simple_event_in_place(simple_event)
+
+        with ThreadPoolExecutor(max_workers=min(32, len(event.simple_sets))) as executor:
+            conditional_circuits = list(executor.map(_copy_and_truncate, event.simple_sets))
 
         # clear this circuit
         self.remove_nodes_from(list(self.graph.nodes()))
