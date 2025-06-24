@@ -925,7 +925,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
         """
         reachable_nodes = self.descendants(root)
         unreachable_nodes = set(self.graph.nodes()) - (reachable_nodes | {root})
-        self.graph.remove_nodes_from(unreachable_nodes)
+        self.remove_nodes_from(unreachable_nodes)
 
     def log_truncated_of_simple_event_in_place(self, simple_event: SimpleEvent) -> Tuple[Optional[Self], float]:
         """
