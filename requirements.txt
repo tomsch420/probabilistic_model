@@ -9,3 +9,4 @@ tqdm
 tabulate
 N2G
 python-igraph
+rustworkx>=0.16.0

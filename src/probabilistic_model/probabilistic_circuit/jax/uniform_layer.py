@@ -12,7 +12,7 @@ from typing_extensions import Type, Tuple, Self
 from .inner_layer import NXConverterLayer
 from .input_layer import ContinuousLayerWithFiniteSupport
 from .utils import simple_interval_to_open_array
-from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateContinuousLeaf
+from ..rx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateContinuousLeaf
 from ...distributions import UniformDistribution
 
 
@@ -76,7 +76,7 @@ class UniformLayer(ContinuousLayerWithFiniteSupport):
                                 interval=random_events.interval.SimpleInterval(lower.item(), upper.item(),
                                                                                random_events.interval.Bound.OPEN,
                                                                                random_events.interval.Bound.OPEN)),
-            result)
+            probabilistic_circuit=result)
             for lower, upper in self.interval]
 
         if progress_bar:

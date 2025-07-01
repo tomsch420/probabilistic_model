@@ -5,12 +5,12 @@ from matplotlib import pyplot as plt
 from random_events.interval import *
 from random_events.variable import Integer, Continuous
 
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import leaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import LeafUnit
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import leaf
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import LeafUnit
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.distributions.distributions import SymbolicDistribution, IntegerDistribution, \
     DiscreteDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 
 
@@ -26,7 +26,8 @@ class ContinuousDistributionTestCase(unittest.TestCase):
 
     def setUp(self):
         self.leaf = leaf(UniformDistribution(self.variable,
-                                                 closed(0, 1).simple_sets[0]))
+                                                 closed(0, 1).simple_sets[0]),
+                         probabilistic_circuit=ProbabilisticCircuit())
 
     def test_conditional_from_simple_event(self):
         event = SimpleEvent({self.variable: closed(0.5, 2)}).as_composite_set()
@@ -72,9 +73,11 @@ class DiscreteDistributionTestCase(unittest.TestCase):
         symbolic_probabilities = MissingDict(float, {hash(Animal.CAT): 0.1,
                                                      hash(Animal.DOG): 0.2,
                                                      hash(Animal.FISH): 0.7})
-        self.symbolic_distribution = leaf(SymbolicDistribution(self.symbol, symbolic_probabilities)).probabilistic_circuit
+        self.symbolic_distribution = leaf(SymbolicDistribution(self.symbol, symbolic_probabilities),
+                                          ProbabilisticCircuit()).probabilistic_circuit
         integer_probabilities = MissingDict(float, {0: 0.1, 1: 0.2, 2: 0.7})
-        self.integer_distribution = leaf(IntegerDistribution(self.integer, integer_probabilities)).probabilistic_circuit
+        self.integer_distribution = leaf(IntegerDistribution(self.integer, integer_probabilities),
+                                         ProbabilisticCircuit()).probabilistic_circuit
 
     def test_as_deterministic_sum(self):
         old_probs = self.symbolic_distribution.root.distribution.probabilities.values()
@@ -82,7 +85,7 @@ class DiscreteDistributionTestCase(unittest.TestCase):
         self.assertIsInstance(new_root, SumUnit)
         self.assertEqual(new_root, self.symbolic_distribution.root)
         self.assertEqual(len(new_root.subcircuits), 3)
-        self.assertTrue(np.allclose(new_root.log_weights, np.log(np.array(list(old_probs)))))
+        self.assertTrue(np.allclose(new_root.log_weights[::-1], np.log(np.array(list(old_probs)))))
 
     def test_from_deterministic_sum(self):
         self.integer_distribution.root.as_deterministic_sum()

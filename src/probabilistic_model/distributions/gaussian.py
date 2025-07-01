@@ -117,8 +117,8 @@ class GaussianDistribution(ContinuousDistribution):
         id_self = id(self)
         if id_self in memo:
             return memo[id_self]
-        import copy
-        variable = copy.deepcopy(self.variable, memo)
+
+        variable = self.variable.__class__(self.variable.name)
         result = self.__class__(variable, self.location, self.scale)
         memo[id_self] = result
         return result
@@ -280,8 +280,8 @@ class TruncatedGaussianDistribution(ContinuousDistributionWithFiniteSupport, Gau
         if id_self in memo:
             return memo[id_self]
         import copy
-        variable = copy.deepcopy(self.variable, memo)
-        interval = copy.deepcopy(self.interval, memo)
+        variable = self.variable.__class__(self.variable.name)
+        interval = self.interval.__deepcopy__()
         result = self.__class__(variable, interval, self.location, self.scale)
         memo[id_self] = result
         return result

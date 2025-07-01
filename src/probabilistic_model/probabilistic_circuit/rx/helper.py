@@ -30,17 +30,18 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
     """
 
     # initialize the root of the circuit
-    uniform_model = ProductUnit()
+    result = ProbabilisticCircuit()
+    uniform_model = ProductUnit(probabilistic_circuit=result)
     for variable, assignment in simple_event.items():
 
         # handle different variables
         if isinstance(variable, Continuous):
 
             # create a uniform distribution for every interval in a continuous variables description
-            distribution = SumUnit()
+            distribution = SumUnit(probabilistic_circuit=result)
             for assignment_ in assignment:
                 u = UniformDistribution(variable, assignment_)
-                distribution.add_subcircuit(UnivariateContinuousLeaf(u), 1 / u.pdf_value())
+                distribution.add_subcircuit(UnivariateContinuousLeaf(u, probabilistic_circuit=result), 1 / u.pdf_value())
             distribution.normalize()
 
         # create uniform distribution for symbolic variables
@@ -48,14 +49,14 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
             distribution = SymbolicDistribution(variable,
                                                 MissingDict(float, {hash(value): 1 / len(assignment.simple_sets) for
                                                                     value in assignment}))
-            distribution = UnivariateDiscreteLeaf(distribution)
+            distribution = UnivariateDiscreteLeaf(distribution, probabilistic_circuit=result)
 
         # create uniform distribution for integer variables
         elif isinstance(variable, Integer):
             distribution = IntegerDistribution(variable,
                                                MissingDict(float, {value.lower: 1 / len(assignment.simple_sets) for
                                                                    value in assignment}))
-            distribution = UnivariateDiscreteLeaf(distribution)
+            distribution = UnivariateDiscreteLeaf(distribution, probabilistic_circuit=result)
 
         else:
             raise NotImplementedError
@@ -63,36 +64,49 @@ def uniform_measure_of_simple_event(simple_event: SimpleEvent) -> ProbabilisticC
         # mount the distribution on the root
         uniform_model.add_subcircuit(distribution)
 
-    return uniform_model.probabilistic_circuit
+    return result
 
 
-def fully_factorized(variables: Iterable[Variable], means: dict, variances: dict) -> ProbabilisticCircuit:
+def fully_factorized(variables: Iterable[Variable],
+                     means: Optional[Dict[Continuous, float]] = None,
+                     variances: Optional[Dict[Continuous, float]] = None) -> ProbabilisticCircuit:
     """
     Create a fully factorized distribution over a set of variables.
     For symbolic variables, the distribution is uniform.
     For continuous variables, the distribution is normal.
 
     :param variables: The variables.
+
     :param means: The means of the normal distributions.
+    Defaults to 0 for every not specified variable.
+
     :param variances: The variances of the normal distributions.
+    Defaults to 1 for every not specified variable.
+
     :return: The circuit describing the fully factorized normal distribution
     """
+    pc = ProbabilisticCircuit()
+    if means is None:
+        means = {}
+
+    if variances is None:
+        variances = {}
 
     # initialize the root of the circuit
-    root = ProductUnit()
+    root = ProductUnit(probabilistic_circuit=pc)
     for variable in variables:
 
         # create a normal distribution for every continuous variable
         if isinstance(variable, Continuous):
-            distribution = GaussianDistribution(variable, means[variable], variances[variable])
-            distribution = UnivariateContinuousLeaf(distribution)
+            distribution = GaussianDistribution(variable, means.get(variable, 0.), variances.get(variable, 1.))
+            distribution = leaf(distribution, pc)
 
         # create uniform distribution for symbolic variables
         elif isinstance(variable, Symbolic):
             domain_elements = list(variable.domain.simple_sets)
             distribution = SymbolicDistribution(variable, MissingDict(float, {hash(v): 1 / len(domain_elements)
                                                                               for v in domain_elements}))
-            distribution = UnivariateDiscreteLeaf(distribution)
+            distribution = leaf(distribution, pc)
         else:
             raise NotImplementedError(f"Variable type not supported: {variable}")
         root.add_subcircuit(distribution)

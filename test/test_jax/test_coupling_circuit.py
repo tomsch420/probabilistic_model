@@ -21,6 +21,7 @@ import tqdm
 
 
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
 
 
 class TrivialConditioner(Conditioner):
@@ -95,8 +96,8 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
     number_of_samples = 1000
     cc: CouplingCircuit
     data: jax.Array
-    jpt: JPT
-    non_marginalized_jpt: JPT
+    jpt: NXProbabilisticCircuit
+    non_marginalized_jpt: NXProbabilisticCircuit
 
     @classmethod
     def setUpClass(cls):
@@ -108,9 +109,9 @@ class CouplingCircuit4DTestCase(unittest.TestCase):
         df = pd.DataFrame(samples, columns=[f"x_{i}" for i in range(cls.number_of_variables)])
         variables = infer_variables_from_dataframe(df, min_samples_per_quantile=30)
         jpt = JPT(variables, min_samples_leaf=0.1)
-        jpt.fit(df)
-        cls.non_marginalized_jpt = jpt
-        cls.jpt = jpt.marginal(variables[cls.number_of_variables // 2:])
+        cls.non_marginalized_jpt = jpt.fit(df)
+
+        cls.jpt = cls.non_marginalized_jpt.marginal(variables[cls.number_of_variables // 2:])
         circuit = ProbabilisticCircuit.from_nx(cls.jpt, False)
         conditioner = LinearConditioner(cls.number_of_variables // 2, circuit.root.number_of_trainable_parameters)
         cls.cc = CouplingCircuit(conditioner, jnp.array(list(range(cls.number_of_variables // 2))),

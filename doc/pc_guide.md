@@ -26,9 +26,7 @@ import plotly.graph_objs as go
 from random_events.interval import closed_open, closed
 from random_events.product_algebra import Continuous, Event, SimpleEvent
 from probabilistic_model.distributions import *
-from probabilistic_model.probabilistic_circuit.nx.helper import leaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
-from probabilistic_model.probabilistic_circuit.nx.distributions.distributions import *
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
 ```
 
 Let's have a look at input units.
@@ -50,35 +48,37 @@ For this tutorial, we will stick to normal distributions.
 ```{code-cell} ipython3
 x = Continuous("x")
 y = Continuous("y")
-
-p_x_1 = leaf(GaussianDistribution(x, 0, 1))
+pc = ProbabilisticCircuit()
+p_x_1 = leaf(GaussianDistribution(x, 0, 1), pc)
 ```
 
 We can always look at the graph that we have by calling the plot_structure method.
 
 ```{code-cell} ipython3
-p_x_1.probabilistic_circuit.plot_structure()
+pc.plot_structure()
 ```
 
 One node only is pretty boring, so let us create a gaussian mixture model.
 
 ```{code-cell} ipython3
-p_x_2 = leaf(GaussianDistribution(x, 2, 1))
-p_x = SumUnit()
+p_x_2 = leaf(GaussianDistribution(x, 2, 1), pc)
+p_x = SumUnit(probabilistic_circuit=pc)
 p_x.add_subcircuit(p_x_1, np.log(0.3))
 p_x.add_subcircuit(p_x_2, np.log(0.7))
-p_x.probabilistic_circuit.plot_structure()
+pc.plot_structure()
 ```
 
-Now we got a more interesting model. We can see the nodes we created and the connections between them. Even the log_weights are indicated by the opacity of an edge.
+Now we got a more interesting model. 
+We can see the nodes we created and the connections between them. 
+Even the log_weights are indicated by the opacity of an edge.
 Let's create a more complex model by becoming multivariate through product units.
 
 ```{code-cell} ipython3
-p_y = leaf(GaussianDistribution(y, 1, 2))
-p_xy = ProductUnit()
+p_y = leaf(GaussianDistribution(y, 1, 2), pc)
+p_xy = ProductUnit(probabilistic_circuit=pc)
 p_xy.add_subcircuit(p_x)
 p_xy.add_subcircuit(p_y)
-p_xy.probabilistic_circuit.plot_structure()
+pc.plot_structure()
 ```
 
 Now we have a model that is a bit more complex. 
@@ -102,11 +102,9 @@ We can also create a circuit from a bayesian network.
 
 ```{code-cell} ipython3
 from probabilistic_model.bayesian_network.bayesian_network import *
-from probabilistic_model.bayesian_network.distributions import *
 from random_events.set import *
 from random_events.variable import *
 from random_events.interval import *
-import networkx as nx
 from enum import IntEnum
 
 # Declare variable types and variables
@@ -131,52 +129,48 @@ mood = Symbolic("Mood", Set.from_iterable(Mood))
 bn = BayesianNetwork()
 
 # create root
-cpd_success = RootDistribution(success, MissingDict(float, {hash(Success.FAILURE): 0.8, hash(Success.SUCCESS): 0.2}))
-bn.add_node(cpd_success)
+cpd_success = Root(SymbolicDistribution(success, MissingDict(float, {hash(Success.FAILURE): 0.8, hash(Success.SUCCESS): 0.2})), bayesian_network=bn)
 
 # create P(ObjectPosition | Success)
-cpd_object_position = ConditionalProbabilityTable(object_position)
-cpd_object_position.conditional_probability_distributions[int(Success.FAILURE)] = SymbolicDistribution(object_position, 
-                                                                                                       MissingDict(float, {hash(ObjectPosition.LEFT): 0.3, 
-                                                                                                                           hash(ObjectPosition.RIGHT): 0.3, 
-                                                                                                                           hash(ObjectPosition.CENTER): 0.4}))
-cpd_object_position.conditional_probability_distributions[ int(Success.SUCCESS)] = SymbolicDistribution(object_position,
-                                                                                                        MissingDict(float, {hash(ObjectPosition.LEFT): 0.3, 
-                                                                                                                            hash(ObjectPosition.RIGHT): 0.3, 
-                                                                                                                            hash(ObjectPosition.CENTER): 0.4}))
-bn.add_node(cpd_object_position)
+cpd_object_position = ConditionalProbabilityTable(bayesian_network=bn)
+cpd_object_position.conditional_probability_distributions[Success.FAILURE] = SymbolicDistribution(object_position, 
+                                                                                                       MissingDict(float, {ObjectPosition.LEFT: 0.3, 
+                                                                                                                           ObjectPosition.RIGHT: 0.3, 
+                                                                                                                           ObjectPosition.CENTER: 0.4}))
+cpd_object_position.conditional_probability_distributions[Success.SUCCESS] = SymbolicDistribution(object_position,
+                                                                                                        MissingDict(float, {ObjectPosition.LEFT: 0.3, 
+                                                                                                                            ObjectPosition.RIGHT: 0.3, 
+                                                                                                                            ObjectPosition.CENTER: 0.4}))
 bn.add_edge(cpd_success, cpd_object_position)
 
 # create P(Mood | Success)
-cpd_mood = ConditionalProbabilityTable(mood)
-cpd_mood.conditional_probability_distributions[hash(Success.FAILURE)] = SymbolicDistribution(mood, 
-                                                                                            MissingDict(float, {hash(Mood.HAPPY): 0.2, 
-                                                                                                                hash(Mood.SAD): 0.8}))
-cpd_mood.conditional_probability_distributions[hash(Success.SUCCESS)] = SymbolicDistribution(mood, 
-                                                                                            MissingDict(float, {hash(Mood.HAPPY): 0.9, 
-                                                                                                                hash(Mood.SAD): 0.1}))
-bn.add_node(cpd_mood)
+cpd_mood = ConditionalProbabilityTable(bayesian_network=bn)
+cpd_mood.conditional_probability_distributions[Success.FAILURE] = SymbolicDistribution(mood, 
+                                                                                            MissingDict(float, {Mood.HAPPY: 0.2, 
+                                                                                                                Mood.SAD: 0.8}))
+cpd_mood.conditional_probability_distributions[Success.SUCCESS] = SymbolicDistribution(mood, 
+                                                                                            MissingDict(float, {Mood.HAPPY: 0.9, 
+                                                                                                                Mood.SAD: 0.1}))
 bn.add_edge(cpd_success, cpd_mood)
 
 # create P(X, Y | ObjectPosition)
-cpd_xy = ConditionalProbabilisticCircuit([x, y])
-product_unit = ProductUnit()
-product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(x, 0, 1)))
-product_unit.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(y, 0, 1)))
-default_circuit = product_unit.probabilistic_circuit
+cpd_xy = ConditionalProbabilisticCircuit(bayesian_network=bn)
+default_circuit = ProbabilisticCircuit()
+product_unit = ProductUnit(probabilistic_circuit=default_circuit)
+product_unit.add_subcircuit(leaf(GaussianDistribution(x, 0, 1), default_circuit))
+product_unit.add_subcircuit(leaf(GaussianDistribution(y, 0, 1), default_circuit))
 
 cpd_xy.conditional_probability_distributions[hash(ObjectPosition.LEFT)] = default_circuit.truncated(SimpleEvent({x: closed(-np.inf, -0.5)}).as_composite_set())[0]
 cpd_xy.conditional_probability_distributions[hash(ObjectPosition.RIGHT)] = default_circuit.truncated(SimpleEvent({x: open(0.5, np.inf)}).as_composite_set())[0]
 cpd_xy.conditional_probability_distributions[hash(ObjectPosition.CENTER)] = default_circuit.truncated(SimpleEvent({x: open_closed(-0.5, 0.5)}).as_composite_set())[0]
 
-bn.add_node(cpd_xy)
 bn.add_edge(cpd_object_position, cpd_xy)
 
 bn.plot()
 ```
 
 ```{code-cell} ipython3
-pc_bn = bn.as_probabilistic_circuit().simplify()
+pc_bn = bn.as_probabilistic_circuit()
 pc_bn.plot_structure()
 
 ```

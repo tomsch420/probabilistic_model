@@ -272,25 +272,23 @@ plotly.offline.init_notebook_mode()
 import plotly.graph_objects as go
 
 distribution = NygaDistribution(Continuous("x"), min_samples_per_quantile=100, min_likelihood_improvement=0.01)
-distribution.fit(dataset)
+distribution = distribution.fit(dataset)
 fig = go.Figure(distribution.plot(), distribution.plotly_layout())
 fig.show()
 ```
 
-Comparing this to the gaussian distribution we sampled from, we can see that the result is very similar.
+Comparing this to the Gaussian distribution we sampled from, we can see that the result is very similar.
 
 ```{code-cell} ipython3
 from probabilistic_model.distributions import GaussianDistribution
-from probabilistic_model.probabilistic_circuit.nx.distributions import *
-from probabilistic_model.probabilistic_circuit.nx.helper import leaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
 
-gaussian_1 = leaf(GaussianDistribution(Continuous("x"), 0, 1))
-gaussian_2 = leaf(GaussianDistribution(Continuous("x"), 5, 0.5))
-mixture = SumUnit()
-mixture.add_subcircuit(gaussian_1, np.log(0.5))
-mixture.add_subcircuit(gaussian_2, np.log(0.5))
-mixture = mixture.probabilistic_circuit
+mixture = ProbabilisticCircuit()
+gaussian_1 = leaf(GaussianDistribution(Continuous("x"), 0, 1), mixture)
+gaussian_2 = leaf(GaussianDistribution(Continuous("x"), 5, 0.5), mixture)
+s1 = SumUnit(probabilistic_circuit = mixture)
+s1.add_subcircuit(gaussian_1, np.log(0.5))
+s1.add_subcircuit(gaussian_2, np.log(0.5))
 fig.add_traces(mixture.plot())
 ```
 

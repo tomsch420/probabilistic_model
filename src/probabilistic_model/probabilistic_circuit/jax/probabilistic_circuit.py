@@ -15,7 +15,7 @@ from typing_extensions import Tuple, Self, List, Optional
 from . import ProductLayer, SparseSumLayer, InputLayer, InnerLayer
 from .discrete_layer import DiscreteLayer
 from .inner_layer import Layer, NXConverterLayer
-from ..nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
+from ..rx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
 import jax
 import tqdm
 import networkx as nx
@@ -56,12 +56,8 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
         :return: The layered circuit.
         """
 
-        # calculate the depth of each node
-        node_to_depth_map = {node: len(path) for node, path in nx.single_source_shortest_path(pc, pc.root).items()}
-
         # group nodes by depth
-        layer_to_nodes_map = {depth: [node for node, n_depth in node_to_depth_map.items() if depth == n_depth] for depth
-                              in set(node_to_depth_map.values())}
+        layer_to_nodes_map = {index: layer for index, layer in enumerate(pc.layers)}
         reversed_layers_to_nodes_map = dict(reversed(layer_to_nodes_map.items()))
 
         # create layers from nodes
@@ -83,7 +79,7 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
         """
         if progress_bar:
             number_of_edges = self.root.number_of_components
-            progress_bar = tqdm.tqdm(total=number_of_edges, desc="Converting to nx")
+            progress_bar = tqdm.tqdm(total=number_of_edges, desc="Converting to rx")
         else:
             progress_bar = None
         result = NXProbabilisticCircuit()

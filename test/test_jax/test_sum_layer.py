@@ -15,7 +15,7 @@ from probabilistic_model.probabilistic_circuit.jax.inner_layer import SparseSumL
 import jax
 
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
 
 
 class DiracSumUnitTestCase(unittest.TestCase):
@@ -151,8 +151,7 @@ class NygaDistributionTestCase(unittest.TestCase):
     def setUpClass(cls):
         cls.data = jax.random.normal(jax.random.PRNGKey(69), (1000, 1))
         model = NygaDistribution(Continuous("x"), min_samples_per_quantile=10)
-        model.fit(cls.data)
-        cls.nx_model = model
+        cls.nx_model = model.fit(cls.data)
         cls.jax_model = ProbabilisticCircuit.from_nx(cls.nx_model)
         cls.jax_model.root.validate()
 

@@ -19,7 +19,7 @@ While understanding the concepts of a probabilistic circuit is subject to math, 
 story.
 This section discusses different approaches to represent circuits.
 
-## the DAG (networkx) way
+## the DAG (rustworkx) way
 
 The easiest and naive way of implementing a circuit is using a directed acyclic graph (DAG).
 The graph directly follows definition {prf:ref}`def-probabilistic-circuit`.
@@ -29,9 +29,7 @@ Let's look at an example.
 ```{code-cell} ipython3
 import plotly
 plotly.offline.init_notebook_mode()
-from probabilistic_model.probabilistic_circuit.nx.helper import leaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
-from probabilistic_model.probabilistic_circuit.nx.distributions import *
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
 from probabilistic_model.distributions import *
 from random_events.variable import Continuous
 import networkx as nx
@@ -43,9 +41,10 @@ import equinox as eqx
 
 x = Continuous("x")
 y = Continuous("y")
-sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
-sum4, sum5 = SumUnit(), SumUnit()
-prod1, prod2 = ProductUnit(), ProductUnit()
+model = ProbabilisticCircuit()
+sum1, sum2, sum3 = SumUnit(probabilistic_circuit=model), SumUnit(probabilistic_circuit=model), SumUnit(probabilistic_circuit=model)
+sum4, sum5 = SumUnit(probabilistic_circuit=model), SumUnit(probabilistic_circuit=model)
+prod1, prod2 = ProductUnit(probabilistic_circuit=model), ProductUnit(probabilistic_circuit=model)
 
 sum1.add_subcircuit(prod1, np.log(0.5))
 sum1.add_subcircuit(prod2, np.log(0.5))
@@ -54,10 +53,10 @@ prod1.add_subcircuit(sum4)
 prod2.add_subcircuit(sum3)
 prod2.add_subcircuit(sum5)
 
-d_x1 = leaf(UniformDistribution(x, SimpleInterval(0, 1)))
-d_x2 = leaf(UniformDistribution(x, SimpleInterval(2, 3)))
-d_y1 = leaf(UniformDistribution(y, SimpleInterval(0, 1)))
-d_y2 = leaf(UniformDistribution(y, SimpleInterval(3, 4)))
+d_x1 = leaf(UniformDistribution(x, SimpleInterval(0, 1)), probabilistic_circuit=model)
+d_x2 = leaf(UniformDistribution(x, SimpleInterval(2, 3)), probabilistic_circuit=model)
+d_y1 = leaf(UniformDistribution(y, SimpleInterval(0, 1)), probabilistic_circuit=model)
+d_y2 = leaf(UniformDistribution(y, SimpleInterval(3, 4)), probabilistic_circuit=model)
 
 sum2.add_subcircuit(d_x1, np.log(0.8))
 sum2.add_subcircuit(d_x2, np.log(0.2))
@@ -69,7 +68,6 @@ sum4.add_subcircuit(d_y2, np.log(0.5))
 sum5.add_subcircuit(d_y1, np.log(0.1))
 sum5.add_subcircuit(d_y2, np.log(0.9))
 
-model = sum1.probabilistic_circuit
 model.plot_structure()
 plt.show()
 ```
@@ -88,8 +86,8 @@ The Benefits of the DAG representation are:
 - Great for teaching
 
 The drawbacks are:
-- Pure Python implementations are usually slow
-- Improvements of machine learning packages do not affect the DAG approach (besides networkx improvements)
+- Python implementations are usually slow
+- Rustowrkx does not benefit from SMID instruction like jax would
 - No benefit from modern hardware acceleration
 
 
@@ -130,16 +128,16 @@ The drawbacks are:
 
 As of today, the layered approach is implemented in jax and supports all inferences that do not change the structure of
 the circuit. 
-These are all but marginalization and conditioning. 
+These are all but marginalization and conditioning/truncation. 
 
 The JAX implementation uses equinox to aid with an OOP approach to the circuit.
 It uses sparse matrices to represent edges between the layers and hence does not suffer from extreme memory consumption
 like EinsumNetworks.
 
-JAX layered circuits are approximately **4000** times faster than the networkx implementation in calculating the 
+JAX layered circuits are approximately **20** times faster than the rustworkx implementation in calculating the 
 log-likelihood, and hence are a great tool for doing deep learning with circuits.
 For the speed-up to kick in, the JAX computational graph that describes the circuit has to be compiled.
-This is expensive if done often.
+This is expensive, so don't do it more than needed.
 However, for a fixed circuit, the speed-up is immense.
 
 In the scripts folder, you can reproduce these results.

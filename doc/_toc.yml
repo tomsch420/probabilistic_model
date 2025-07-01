@@ -20,8 +20,6 @@ parts:
     - file: truncated_gaussian
     - file: nyga_distribution
     - file: joint_probability_trees
-    - file: template_modelling
-    - file: area_validation_metric
   - caption: Miscellaneous
     chapters:
     - file: pendulum

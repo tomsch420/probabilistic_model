@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 import collections
-import dataclasses
+from dataclasses import dataclass, field
 from typing import Optional, List, Deque, Tuple, Dict, Any
 
 import numpy as np
 import random_events
 from random_events.interval import closed, closed_open, SimpleInterval, Bound
 from random_events.product_algebra import SimpleEvent
+from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Continuous, Variable
 from typing_extensions import Self
 
 from probabilistic_model.distributions import DiracDeltaDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
     UnivariateContinuousLeaf
 
 
-@dataclasses.dataclass
+@dataclass
 class InductionStep:
     """
     Class for performing induction in the NygaDistributions.
@@ -314,35 +315,37 @@ class InductionStep:
 
             # mount a uniform distribution
             distribution = self.create_uniform_distribution()
-            distribution = UnivariateContinuousLeaf(distribution)
-            self.nyga_distribution.root.add_subcircuit(distribution, np.log(weight))
+
+            self.nyga_distribution.probabilistic_circuit.root.add_subcircuit(
+                UnivariateContinuousLeaf(distribution,
+                                         probabilistic_circuit=self.nyga_distribution.probabilistic_circuit),
+                np.log(weight))
 
             return []
 
 
-class NygaDistribution(ProbabilisticCircuit):
+@dataclass
+class NygaDistribution(SubclassJSONSerializer):
     """
-    A Nyga distribution is a deterministic mixture of uniform distributions.
+    A Nyga distribution is a way to learn a deterministic mixture of uniform distributions.
     """
 
-    min_likelihood_improvement: float
+    variable: Continuous
+
+    min_likelihood_improvement: float = 0.01
     """
     The relative, minimal likelihood improvement needed to create a new quantile.
     """
 
-    min_samples_per_quantile: int
+    min_samples_per_quantile: int = 2
     """
     The minimal number of samples per quantile.
     """
 
-    def __init__(self, variable: Optional[Continuous] = None, min_samples_per_quantile: Optional[int] = 1,
-                 min_likelihood_improvement: Optional[float] = 0.1):
-        super().__init__()
-        self.variable = variable
-        self.min_samples_per_quantile = min_samples_per_quantile
-        self.min_likelihood_improvement = min_likelihood_improvement
+    probabilistic_circuit: ProbabilisticCircuit = field(init=False, default_factory=ProbabilisticCircuit,
+                                                        compare=False)
 
-    def fit(self, data: np.array, weights: Optional[np.array] = None) -> Self:
+    def fit(self, data: np.array, weights: Optional[np.array] = None) -> ProbabilisticCircuit:
         """
         Fit the distribution to the data.
 
@@ -359,10 +362,9 @@ class NygaDistribution(ProbabilisticCircuit):
         if len(sorted_unique_data) == 1:
             # mount a dirac delta distribution and return
             distribution = DiracDeltaDistribution(self.variable, sorted_unique_data[0])
-            distribution = UnivariateContinuousLeaf(distribution, self)
-            return self
+            UnivariateContinuousLeaf(distribution, probabilistic_circuit=self.probabilistic_circuit)
 
-        root = SumUnit(self)
+            return self.probabilistic_circuit
 
         # if the log_weights are not given
         if weights is None:
@@ -374,6 +376,9 @@ class NygaDistribution(ProbabilisticCircuit):
 
         cumulative_weights = np.cumsum(weights)
         cumulative_weights = np.insert(cumulative_weights, 0, 0)
+
+        # create the root
+        SumUnit(probabilistic_circuit=self.probabilistic_circuit)
 
         # construct the initial induction step
         initial_induction_step = InductionStep(data=sorted_unique_data, cumulative_weights=cumulative_weights,
@@ -389,27 +394,30 @@ class NygaDistribution(ProbabilisticCircuit):
             new_induction_steps = induction_step.induce()
             induction_steps.extend(new_induction_steps)
 
-        self.normalize()
-        return self
-
-    @classmethod
-    def parameters_from_json(cls, data: Dict[str, Any]) -> Self:
-        variable = Variable.from_json(data["variable"])
-        min_samples_per_quantile = data["min_samples_per_quantile"]
-        min_likelihood_improvement = data["min_likelihood_improvement"]
-        return cls(variable, min_samples_per_quantile, min_likelihood_improvement)
+        self.probabilistic_circuit.normalize()
+        return self.probabilistic_circuit
 
     def to_json(self) -> Dict[str, Any]:
         return {**super().to_json(),
                 "variable": self.variable.to_json(),
                 "min_samples_per_quantile": self.min_samples_per_quantile,
-                "min_likelihood_improvement": self.min_likelihood_improvement}
+                "min_likelihood_improvement": self.min_likelihood_improvement,
+                "probabilistic_circuit": self.probabilistic_circuit.to_json()}
+
+    @classmethod
+    def _from_json(cls, json_data: Dict[str, Any]) -> Self:
+
+        result = NygaDistribution(variable=Continuous.from_json(json_data["variable"]),
+                                  min_samples_per_quantile=int(json_data["min_samples_per_quantile"]),
+                                  min_likelihood_improvement=float(json_data["min_likelihood_improvement"]),)
+        result.probabilistic_circuit = ProbabilisticCircuit.from_json(json_data["probabilistic_circuit"])
+        return result
 
     def empty_copy(self) -> Self:
         return self.__class__(self.variable, self.min_samples_per_quantile, self.min_likelihood_improvement)
 
-    @classmethod
-    def from_uniform_mixture(cls, mixture: ProbabilisticCircuit) -> Self:
+    @staticmethod
+    def from_uniform_mixture(mixture: ProbabilisticCircuit) -> ProbabilisticCircuit:
         """
         Construct a Nyga Distribution from a mixture of uniform distributions.
         The mixture does not have to be deterministic.
@@ -419,10 +427,12 @@ class NygaDistribution(ProbabilisticCircuit):
         """
 
         assert len(mixture.variables) == 1, "Can only convert univariate circuits to nyga distributions."
+        assert all([isinstance(leaf.distribution, UniformDistribution) for leaf in mixture.leaves]), \
+            "Can only convert mixtures of uniform distributions to nyga distributions."
 
         variable: Continuous = mixture.variables[0]
-        result = cls(variable)
-        root = SumUnit(result)
+        result = ProbabilisticCircuit()
+        root = SumUnit(probabilistic_circuit=result)
 
         all_mixture_points = []
         for leaf in mixture.leaves:
@@ -437,7 +447,7 @@ class NygaDistribution(ProbabilisticCircuit):
             else:
                 interval = closed_open(lower, upper)
             distribution = UniformDistribution(variable, interval.simple_sets[0])
-            leaf = UnivariateContinuousLeaf(distribution)
+            leaf = UnivariateContinuousLeaf(distribution, probabilistic_circuit=result)
             weight = mixture.probability_of_simple_event(SimpleEvent({variable: interval}))
             root.add_subcircuit(leaf, np.log(weight))
 

@@ -18,8 +18,8 @@ from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
 from probabilistic_model.probabilistic_circuit.jax import SparseSumLayer, UniformLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.probabilistic_circuit.nx.helper import uniform_measure_of_event, leaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
+from probabilistic_model.probabilistic_circuit.rx.helper import uniform_measure_of_event, leaf
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (SumUnit, ProductUnit,
                                                                                 ProbabilisticCircuit as NXProbabilisticCircuit)
 
 np.random.seed(69)
@@ -35,9 +35,10 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        sum1, sum2, sum3 = SumUnit(), SumUnit(), SumUnit()
-        sum4, sum5 = SumUnit(), SumUnit()
-        prod1, prod2 = ProductUnit(), ProductUnit()
+        nx_model = NXProbabilisticCircuit()
+        sum1, sum2, sum3 = SumUnit(probabilistic_circuit=nx_model), SumUnit(probabilistic_circuit=nx_model), SumUnit(probabilistic_circuit=nx_model)
+        sum4, sum5 = SumUnit(probabilistic_circuit=nx_model), SumUnit(probabilistic_circuit=nx_model)
+        prod1, prod2 = ProductUnit(probabilistic_circuit=nx_model), ProductUnit(probabilistic_circuit=nx_model)
 
         sum1.add_subcircuit(prod1, np.log(0.5))
         sum1.add_subcircuit(prod2, np.log(0.5))
@@ -46,10 +47,10 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         prod2.add_subcircuit(sum3)
         prod2.add_subcircuit(sum5)
 
-        d_x1 = leaf(DiracDeltaDistribution(cls.x, 0, 1))
-        d_x2 = leaf(DiracDeltaDistribution(cls.x, 1, 2))
-        d_y1 = leaf(DiracDeltaDistribution(cls.y, 2, 3))
-        d_y2 = leaf(DiracDeltaDistribution(cls.y, 3, 4))
+        d_x1 = leaf(DiracDeltaDistribution(cls.x, 0, 1), nx_model)
+        d_x2 = leaf(DiracDeltaDistribution(cls.x, 1, 2), nx_model)
+        d_y1 = leaf(DiracDeltaDistribution(cls.y, 2, 3), nx_model)
+        d_y2 = leaf(DiracDeltaDistribution(cls.y, 3, 4), nx_model)
 
         sum2.add_subcircuit(d_x1, np.log(0.8))
         sum2.add_subcircuit(d_x2, np.log(0.2))
@@ -61,7 +62,7 @@ class SmallCircuitIntegrationTestCase(unittest.TestCase):
         sum5.add_subcircuit(d_y1, np.log(0.1))
         sum5.add_subcircuit(d_y2, np.log(0.9))
 
-        cls.nx_model = sum1.probabilistic_circuit
+        cls.nx_model = nx_model
         cls.jax_model = ProbabilisticCircuit.from_nx(cls.nx_model)
 
     def test_creation(self):
@@ -105,8 +106,8 @@ class JPTIntegrationTestCase(unittest.TestCase):
         df = pd.DataFrame(samples, columns=[f"x_{i}" for i in range(cls.number_of_variables)])
         variables = infer_variables_from_dataframe(df, min_samples_per_quantile=100)
         jpt = JPT(variables, min_samples_leaf=0.1)
-        jpt.fit(df)
-        cls.jpt = jpt
+
+        cls.jpt = jpt.fit(df)
 
     def test_from_jpt(self):
         model = ProbabilisticCircuit.from_nx(self.jpt, False)

@@ -22,9 +22,9 @@ from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import (ScaledContinuous, infer_variables_from_dataframe, Integer,
                                                         Symbolic)
 from probabilistic_model.learning.nyga_distribution import NygaDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
     ProductUnit, IntegerDistribution, \
-    SymbolicDistribution, UnivariateContinuousLeaf
+    SymbolicDistribution, UnivariateContinuousLeaf, leaf
 
 
 class SymbolEnum(Enum):
@@ -128,9 +128,9 @@ class JPTTestCase(unittest.TestCase):
         leaf_node = self.model.create_leaf_node(preprocessed_data)
 
         self.assertEqual(len(leaf_node.subcircuits), 3)
-        self.assertIsInstance(leaf_node.subcircuits[0].distribution, IntegerDistribution)
+        self.assertIsInstance(leaf_node.subcircuits[2].distribution, IntegerDistribution)
         self.assertIsInstance(leaf_node.subcircuits[1], SumUnit)
-        self.assertIsInstance(leaf_node.subcircuits[2].distribution, SymbolicDistribution)
+        self.assertIsInstance(leaf_node.subcircuits[0].distribution, SymbolicDistribution)
 
         # check that all likelihoods are greater than 0
         likelihood = leaf_node.probabilistic_circuit.likelihood(self.data.to_numpy())
@@ -145,13 +145,13 @@ class JPTTestCase(unittest.TestCase):
 
     def test_fit(self):
         self.model._min_samples_leaf = 10
-        self.model.fit(self.data)
-        self.assertTrue(len(self.model.root.subcircuits) <= math.floor(len(self.data) / self.model.min_samples_leaf))
-        self.assertTrue(all([weight > -np.inf for weight, _ in self.model.root.log_weighted_subcircuits]))
+        pc = self.model.fit(self.data)
+        self.assertTrue(len(pc.root.subcircuits) <= math.floor(len(self.data) / self.model.min_samples_leaf))
+        self.assertTrue(all([weight > -np.inf for weight, _ in pc.root.log_weighted_subcircuits]))
 
         # check that all likelihoods are greater than 0
         preprocessed_data = self.model.preprocess_data(self.data)
-        likelihood = self.model.likelihood(preprocessed_data)
+        likelihood = pc.likelihood(preprocessed_data)
 
         self.assertTrue(all(likelihood > 0))
 
@@ -194,13 +194,13 @@ class JPTTestCase(unittest.TestCase):
         data = self.data[["symbol"]]
         variables = infer_variables_from_dataframe(data)
         model = JPT(variables)
-        model.fit(data)
-        model.plot_structure()
-        self.assertEqual(len(model.root.subcircuits), 3)
+        pc = model.fit(data)
+        pc.plot_structure()
+        self.assertEqual(len(pc.root.subcircuits), 3)
 
     def test_variable_dependencies_to_json(self):
         serialized = self.model._variable_dependencies_to_json()
-        all_variable_names = [variable.name for variable in self.model.variables_from_init]
+        all_variable_names = [variable.name for variable in self.model.variables]
         self.assertEqual(serialized,
                          {'real': all_variable_names, 'integer': all_variable_names, 'symbol': all_variable_names})
 
@@ -215,6 +215,7 @@ class JPTTestCase(unittest.TestCase):
 class BreastCancerTestCase(unittest.TestCase):
     data: pd.DataFrame
     model: JPT
+    pc: ProbabilisticCircuit
 
     @classmethod
     def setUpClass(cls):
@@ -230,7 +231,7 @@ class BreastCancerTestCase(unittest.TestCase):
         variables = infer_variables_from_dataframe(cls.data, scale_continuous_types=False, min_samples_per_quantile=600)
 
         cls.model = JPT(variables, min_samples_leaf=0.4)
-        cls.model.fit(cls.data)
+        cls.pc = cls.model.fit(cls.data)
 
     def test_serialization(self):
         json_dict = self.model.to_json()
@@ -253,34 +254,34 @@ class BreastCancerTestCase(unittest.TestCase):
     def test_conditional_inference(self):
         evidence = SimpleEvent({variable: variable.domain for variable in self.model.variables}).as_composite_set()
         query = evidence
-        conditional_model, evidence_probability = self.model.truncated(evidence)
+        conditional_model, evidence_probability = self.pc.truncated(evidence)
         self.assertAlmostEqual(1., evidence_probability, delta=1e-5)
         self.assertAlmostEqual(1., conditional_model.probability(query), delta=1e-5)
 
     def test_univariate_continuous_marginal(self):
-        marginal = self.model.marginal(self.model.variables[:1])
-        self.assertIsInstance(marginal, NygaDistribution)
+        marginal = self.pc.marginal(self.model.variables[:1])
+        self.assertIsInstance(marginal, ProbabilisticCircuit)
 
     def test_univariate_symbolic_marginal(self):
         variables = [v for v in self.model.variables if v.name == "malignant"]
-        marginal = self.model.marginal(variables)
-        self.assertIsInstance(marginal.root.distribution, SymbolicDistribution)
+        marginal = self.pc.marginal(variables)
+        self.assertIsInstance(marginal.root, SumUnit)
 
     def test_serialization_of_circuit(self):
-        json_dict = self.model.to_json()
+        json_dict = self.pc.to_json()
         model = ProbabilisticCircuit.from_json(json_dict)
         event = SimpleEvent({variable: variable.domain for variable in self.model.variables}).as_composite_set()
         self.assertAlmostEqual(model.probability(event), 1.)
 
     def test_marginal_conditional_chain(self):
-        model = self.model
+        model = self.pc
         marginal = model.marginal(self.model.variables[:2])
         x, y = self.model.variables[:2]
         event = SimpleEvent({x: closed(0, 10)}).as_composite_set()
         conditional, probability = model.truncated(event)
 
     def test_mode(self):
-        mode, likelihood = self.model.log_mode(check_determinism=False)
+        mode, likelihood = self.pc.log_mode(check_determinism=False)
         self.assertGreater(len(mode.simple_sets), 0)
 
 
@@ -330,11 +331,11 @@ class GaussianJPTTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         np.random.seed(69)
-
-        prod = ProductUnit()
-        prod.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(Continuous("x"), 2, 4)))
-        prod.add_subcircuit(UnivariateContinuousLeaf(GaussianDistribution(Continuous("y"), 2, 4)))
-        cls.multivariate_normal = prod.probabilistic_circuit
+        pc = ProbabilisticCircuit()
+        prod = ProductUnit(probabilistic_circuit=pc)
+        prod.add_subcircuit(leaf(GaussianDistribution(Continuous("x"), 2, 4), pc))
+        prod.add_subcircuit(leaf(GaussianDistribution(Continuous("y"), 2, 4), pc))
+        cls.multivariate_normal = pc
         samples = cls.multivariate_normal.sample(1000)
         cls.data = pd.DataFrame(samples, columns=[v.name for v in cls.multivariate_normal.variables])
 
@@ -343,8 +344,8 @@ class GaussianJPTTestCase(unittest.TestCase):
 
     def test_plot_2d_jpt(self):
         model = JPT([self.x, self.y], min_samples_leaf=0.9)
-        model.fit(self.data)
-        fig = go.Figure(model.plot(500, surface=True), model.plotly_layout())
+        pc = model.fit(self.data)
+        fig = go.Figure(pc.plot(500, surface=True), pc.plotly_layout())
         # fig.show()
 
     def test_plot_2d_gaussian(self):

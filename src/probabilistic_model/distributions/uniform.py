@@ -108,9 +108,9 @@ class UniformDistribution(ContinuousDistributionWithFiniteSupport):
         id_self = id(self)
         if id_self in memo:
             return memo[id_self]
-        import copy
-        variable = copy.deepcopy(self.variable, memo)
-        interval = copy.deepcopy(self.interval, memo)
+
+        variable = Continuous(self.variable.name)
+        interval = self.interval.__deepcopy__()
         result = self.__class__(variable, interval)
         memo[id_self] = result
         return result

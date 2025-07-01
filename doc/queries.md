@@ -309,8 +309,9 @@ While common literature describes the mode under a condition, we can omit such a
 A common perception of the mode is that it is the single point of highest density, such as in the example below.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.nx.helper import leaf
-distribution = leaf(GaussianDistribution(Continuous("x"), 0, 1)).probabilistic_circuit
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
+distribution = ProbabilisticCircuit()
+leaf(GaussianDistribution(Continuous("x"), 0, 1), distribution)
 fig = go.Figure(distribution.plot(), distribution.plotly_layout())
 fig.show()
 ```
@@ -326,8 +327,8 @@ go.Figure(distribution.plot(), distribution.plotly_layout()).show()
 We can see that conditioning a Gaussian on such an event already creates a mode that has two points. Furthermore, modes can be sets of infinite many points, such as shown below.
 
 ```{code-cell} ipython3
-uniform = leaf(UniformDistribution(Continuous("x"), open(-1, 1).simple_sets[0])).probabilistic_circuit
-go.Figure(uniform.plot(), uniform.plotly_layout()).show() 
+uniform = leaf(UniformDistribution(Continuous("x"), open(-1, 1).simple_sets[0]), ProbabilisticCircuit()).probabilistic_circuit
+go.Figure(uniform.plot(), uniform.plotly_layout()).show()
 ```
 
 The mode of the uniform distribution is the entire interval of the uniform distribution $(-1, 1) $. 
@@ -406,17 +407,16 @@ For instance, consider a two-dimensional random variable $X = (X_1, X_2)$ with a
 $p(x) = \mathcal{N}(x_1 | 0, 1) \cdot \mathcal{N}(x_2 | 0, 1) $.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
 
 x1 = Continuous("x1")
 x2 = Continuous("x2")
 
-model = ProductUnit()
-p_x1 = leaf(GaussianDistribution(x1, 0, 1))
-p_x2 = leaf(GaussianDistribution(x2, 0, 1))
-model.add_subcircuit(p_x1)
-model.add_subcircuit(p_x2)
-model = model.probabilistic_circuit
+model = ProbabilisticCircuit()
+prod = ProductUnit(probabilistic_circuit = model)
+p_x1 = leaf(GaussianDistribution(x1, 0, 1), model)
+p_x2 = leaf(GaussianDistribution(x2, 0, 1), model)
+prod.add_subcircuit(p_x1)
+prod.add_subcircuit(p_x2)
 
 fig = go.Figure(model.plot(), model.plotly_layout())
 fig.show()
@@ -482,13 +482,11 @@ We now construct a gaussian distribution over the free space
 to describe locations and their probabilities to access the fridge.
 
 ```{code-cell} ipython3
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
+pc = ProbabilisticCircuit()
 
-
-p_x = leaf(GaussianDistribution(x, 5.5, 0.5))
-p_y = leaf(GaussianDistribution(y, 6.65, 0.5))
-p_xy = ProductUnit()
+p_x = leaf(GaussianDistribution(x, 5.5, 0.5), pc)
+p_y = leaf(GaussianDistribution(y, 6.65, 0.5), pc)
+p_xy = ProductUnit(probabilistic_circuit = pc)
 p_xy.add_subcircuit(p_x)
 p_xy.add_subcircuit(p_y)
 p_xy = p_xy.probabilistic_circuit

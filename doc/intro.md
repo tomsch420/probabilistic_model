@@ -44,6 +44,6 @@ If you use this software for publications, please cite it as below.
 author = {Schierenbeck, Tom},
 title = {probabilistic_model: A Python package for probabilistic models},
 url = {https://github.com/tomsch420/probabilistic_model},
-version = {5.0.4},
+version = {7.1.0},
 }
 ```

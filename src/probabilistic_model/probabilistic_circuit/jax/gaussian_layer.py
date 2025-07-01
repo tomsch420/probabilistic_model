@@ -10,7 +10,7 @@ from typing_extensions import Type, Tuple, Self
 
 from .inner_layer import NXConverterLayer
 from .input_layer import ContinuousLayer
-from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateContinuousLeaf
+from ..rx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateContinuousLeaf
 from ...distributions import GaussianDistribution
 
 
@@ -97,7 +97,8 @@ class GaussianLayer(ContinuousLayer):
             progress_bar.set_postfix_str(f"Creating Gaussian distributions for variable {variable.name}")
 
         nodes = [UnivariateContinuousLeaf(
-            GaussianDistribution(variable=variable, location=location.item(), scale=scale.item()), result)
+            GaussianDistribution(variable=variable, location=location.item(), scale=scale.item()),
+            probabilistic_circuit=result)
             for location, scale in zip(self.location, self.scale)]
 
         if progress_bar:

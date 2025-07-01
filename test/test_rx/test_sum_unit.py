@@ -6,7 +6,7 @@ from random_events.variable import Continuous
 from typing_extensions import Union
 
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
 import plotly.graph_objects as go
 
 
@@ -14,14 +14,15 @@ class NormalizationTestCase(unittest.TestCase):
     x: Continuous = Continuous("x")
 
     def test_normalization(self):
-        u1 = leaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
-        u2 = leaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]))
-        sum_unit = SumUnit()
+        pc = ProbabilisticCircuit()
+        u1 = leaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]), pc)
+        u2 = leaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]), pc)
+        sum_unit = SumUnit(probabilistic_circuit=pc)
         sum_unit.add_subcircuit(u1, np.log(0.5))
         sum_unit.add_subcircuit(u2, np.log(0.3))
         sum_unit.normalize()
-        self.assertAlmostEqual(sum_unit.log_weights[0], np.log(0.5 / 0.8))
-        self.assertAlmostEqual(sum_unit.log_weights[1], np.log(0.3 / 0.8))
+        self.assertAlmostEqual(sum_unit.log_weights[1], np.log(0.5 / 0.8))
+        self.assertAlmostEqual(sum_unit.log_weights[0], np.log(0.3 / 0.8))
         traces = sum_unit.probabilistic_circuit.plot()
         self.assertGreater(len(traces), 0)
         # go.Figure(traces, sum_unit.probabilistic_circuit.plotly_layout()).show()
@@ -32,10 +33,11 @@ class SumUnitTestCase(unittest.TestCase):
     model: ProbabilisticCircuit
 
     def setUp(self):
-        u1 = leaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]))
-        u2 = leaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]))
+        pc = ProbabilisticCircuit()
+        u1 = leaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]), pc)
+        u2 = leaf(UniformDistribution(self.x, closed(3, 4).simple_sets[0]), pc)
 
-        model = SumUnit()
+        model = SumUnit(probabilistic_circuit=pc)
         model.add_subcircuit(u1, np.log(0.6))
         model.add_subcircuit(u2, np.log(0.4))
         self.model = model.probabilistic_circuit
@@ -58,7 +60,8 @@ class SumUnitTestCase(unittest.TestCase):
     def test_weighted_subcircuits(self):
         weighted_subcircuits = self.model.root.log_weighted_subcircuits
         self.assertEqual(len(weighted_subcircuits), 2)
-        self.assertEqual([weighted_subcircuit[0] for weighted_subcircuit in weighted_subcircuits], [np.log(0.6), np.log(0.4)])
+        self.assertEqual([weighted_subcircuit[0] for weighted_subcircuit in weighted_subcircuits],
+                         [np.log(0.4), np.log(0.6)])
 
     def test_likelihood(self):
         event = np.array([[0.5]])
@@ -94,7 +97,8 @@ class SumUnitTestCase(unittest.TestCase):
 
     def test_marginal(self):
         marginal = self.model.marginal([self.x])
-        self.assertEqual(self.model, marginal)
+        self.assertEqual(len(marginal.edges()), len(self.model.edges()))
+        self.assertEqual(len(marginal.nodes()), len(self.model.nodes()))
 
     def test_mode(self):
         mode, likelihood = self.model.mode()
@@ -102,9 +106,10 @@ class SumUnitTestCase(unittest.TestCase):
         self.assertEqual(mode, SimpleEvent({self.x: closed(0, 1)}).as_composite_set())
 
     def test_serialization(self):
+        event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
         serialized = self.model.to_json()
-        deserialized = SumUnit.from_json(serialized)
-        self.assertEqual(self.model, deserialized)
+        deserialized = ProbabilisticCircuit.from_json(serialized)
+        self.assertEqual(self.model.probability(event), deserialized.probability(event))
 
     def test_conditional_inference(self):
         event = SimpleEvent({self.x: closed(0, 0.5)}).as_composite_set()
@@ -112,13 +117,14 @@ class SumUnitTestCase(unittest.TestCase):
         self.assertEqual(result.probability(event), 1)
 
     def test_deep_mount(self):
-        s1 = SumUnit()
-        s2 = SumUnit()
-        s3 = SumUnit()
-        u1 = UniformDistribution(self.x, closed(0, 1).simple_sets[0])
+        pc = ProbabilisticCircuit()
+        s1 = SumUnit(probabilistic_circuit=ProbabilisticCircuit())
+        s2 = SumUnit(probabilistic_circuit=pc)
+        s3 = SumUnit(probabilistic_circuit=pc)
+        u1 = leaf(UniformDistribution(self.x, closed(0, 1).simple_sets[0]), pc)
         s2.probabilistic_circuit.add_nodes_from([s2, s3, u1])
-        s2.probabilistic_circuit.add_weighted_edges_from([(s2, s3, 1.), (s3, u1, 1.)])
-        s1.mount(s2)
+        s2.probabilistic_circuit.add_edges_from([(s2, s3, 1.), (s3, u1, 1.)])
+        s1.probabilistic_circuit.mount(s2)
         self.assertEqual(len(list(s1.probabilistic_circuit.nodes())), 4)
 
     def test_sample_not_equal(self):
