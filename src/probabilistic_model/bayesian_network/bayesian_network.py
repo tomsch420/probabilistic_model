@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Self, List, Tuple, Set, Iterable, Dict
 
 import numpy as np
 import rustworkx as rx
 from matplotlib import pyplot as plt
 from random_events.variable import Symbolic, Variable
-from sortedcontainers import SortedSet
-from typing_extensions import Optional, Any
+from typing_extensions import Optional, Any, Self, List, Tuple, Set, Iterable, Dict
 
 from ..distributions import SymbolicDistribution
 from ..distributions.helper import make_dirac
@@ -208,12 +206,12 @@ class BayesianNetwork:
     def plot(self):
         import rustworkx.visualization
         rustworkx.visualization.mpl_draw(self.graph, with_labels=True,
-                                         labels = lambda node: ", ".join(v.name for v in node.variables))
+                                         labels=lambda node: ", ".join(v.name for v in node.variables))
         plt.show()
+
 
 @dataclass
 class Root(Node):
-
     distribution: SymbolicDistribution
 
     root: Optional[SumUnit] = field(init=False, repr=False, default=None)
@@ -235,8 +233,8 @@ class Root(Node):
         self.root = SumUnit(probabilistic_circuit=result)
         for value, probability in self.distribution.probabilities.items():
             prod = ProductUnit(probabilistic_circuit=result)
-            distribution = leaf(make_dirac(self.variable, value,), result)
-            self.root.add_subcircuit(prod, np.log(probability),)
+            distribution = leaf(make_dirac(self.variable, value, ), result)
+            self.root.add_subcircuit(prod, np.log(probability), )
             prod.add_subcircuit(distribution)
             self.product_units[value] = prod
 
@@ -257,7 +255,7 @@ class ConditionalProbabilityTable(Node):
 
     @property
     def variables(self) -> Tuple[Variable, ...]:
-        return (self.variable, )
+        return (self.variable,)
 
     def __repr__(self):
         return f"P({self.variable.name}|{self.parent.variable.name})"
@@ -282,7 +280,7 @@ class ConditionalProbabilityTable(Node):
     def as_probabilistic_circuit(self, result: ProbabilisticCircuit):
         for value in self.variable.domain:
             prod = ProductUnit(probabilistic_circuit=result)
-            distribution = leaf(make_dirac(self.variable, value,), result)
+            distribution = leaf(make_dirac(self.variable, value, ), result)
             prod.add_subcircuit(distribution)
             self.product_units[value.element] = prod
 
@@ -324,4 +322,3 @@ class ConditionalProbabilisticCircuit(Node):
             node_remap = result.mount(old_root)
             root_in_result = node_remap[old_root.index]
             parent.product_units[key].add_subcircuit(root_in_result)
-

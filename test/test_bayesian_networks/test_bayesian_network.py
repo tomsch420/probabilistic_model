@@ -2,18 +2,18 @@ import math
 import unittest
 from enum import IntEnum
 
-import matplotlib.pyplot as plt
-import networkx as nx
 from random_events.interval import closed
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Continuous
+from sortedcontainers import SortedSet
 
 from probabilistic_model.bayesian_network.bayesian_network import *
 from probabilistic_model.distributions import UniformDistribution, SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import ProductUnit
 from probabilistic_model.utils import MissingDict
-
 from random_events.set import Set
+
+
 
 class YEnum(IntEnum):
     ZERO = 0
