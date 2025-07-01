@@ -13,7 +13,7 @@ from random_events.variable import Continuous, Variable
 from typing_extensions import Self
 
 from probabilistic_model.distributions import DiracDeltaDistribution, UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import SumUnit, ProbabilisticCircuit, \
     UnivariateContinuousLeaf
 
 

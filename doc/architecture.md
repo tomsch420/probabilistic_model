@@ -18,7 +18,7 @@ The class inheritance diagram for parametric distributions is shown below.
 For bayesian networks, the next class diagram is relevant.
 
 ```{eval-rst}
-    .. autoclasstree:: probabilistic_model.bayesian_network.bayesian_network probabilistic_model.bayesian_network.distributions
+    .. autoclasstree:: probabilistic_model.bayesian_network.bayesian_network
         :zoom:
         :namespace: probabilistic_model
         :strict:
@@ -28,11 +28,11 @@ For bayesian networks, the next class diagram is relevant.
 For networkx based probabilistic circuits the next class diagram is relevant.
 
 ```{eval-rst}
-    .. autoclasstree:: probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit probabilistic_model.probabilistic_circuit.nx.distributions.distributions probabilistic_model.probabilistic_circuit.nx.helper
+    .. autoclasstree:: probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit probabilistic_model.probabilistic_circuit.rx.helper
         :zoom:
         :namespace: probabilistic_model
         :strict:
-        :caption: Inheritance Diagram for probabilistic circuits implemented with networkx.
+        :caption: Inheritance Diagram for probabilistic circuits implemented with rustworkx.
 ```
 
 Finally, for jax based faster circuits with limited inference, this class diagram is relevant.

@@ -34,7 +34,7 @@ run = mlflow.start_run(run_name="Integration example with mlflow")
 
 # Log the hyperparameters
 mlflow.log_params({"min_samples_per_quantile": nx_model.min_samples_per_quantile})
-nx_model.fit(data)
+nx_model = nx_model.fit(data)
 mlflow.set_tag("Training Info", "Basic LR model for iris data")
 
 file = tempfile.NamedTemporaryFile()

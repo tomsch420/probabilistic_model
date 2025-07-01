@@ -19,7 +19,7 @@ from sortedcontainers import SortedSet
 from typing_extensions import List, Iterator, Tuple, Union, Type, Dict, Any, Self, Optional
 
 from .utils import copy_bcoo
-from ..nx.probabilistic_circuit import (SumUnit, ProductUnit, Unit, ProbabilisticCircuit as NXProbabilisticCircuit)
+from ..rx.probabilistic_circuit import (SumUnit, ProductUnit, Unit, ProbabilisticCircuit as NXProbabilisticCircuit)
 
 
 def inverse_class_of(clazz: Type[Unit]) -> Type[Layer]:
@@ -102,7 +102,7 @@ class Layer(eqx.Module, SubclassJSONSerializer, ABC):
     @classmethod
     def nx_classes(cls) -> Tuple[Type, ...]:
         """
-        :return: The tuple of matching classes of the layer in the probabilistic_model.probabilistic_circuit.nx package.
+        :return: The tuple of matching classes of the layer in the probabilistic_model.probabilistic_circuit.rx package.
         """
         return tuple()
 

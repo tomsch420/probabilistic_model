@@ -8,7 +8,7 @@ from random_events.set import Set
 from scipy.special import logsumexp
 
 from probabilistic_model.learning.region_graph.region_graph import *
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import UnivariateDiscreteLeaf
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import UnivariateDiscreteLeaf
 
 np.random.seed(420)
 random.seed(420)

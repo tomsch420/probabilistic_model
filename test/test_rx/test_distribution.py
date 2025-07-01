@@ -5,12 +5,12 @@ from matplotlib import pyplot as plt
 from random_events.interval import *
 from random_events.variable import Integer, Continuous
 
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import leaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import LeafUnit
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import leaf
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import LeafUnit
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.distributions.distributions import SymbolicDistribution, IntegerDistribution, \
     DiscreteDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 
 

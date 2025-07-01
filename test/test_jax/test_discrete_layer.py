@@ -10,7 +10,7 @@ from sortedcontainers import SortedSet
 from probabilistic_model.distributions import SymbolicDistribution
 from probabilistic_model.probabilistic_circuit.jax.discrete_layer import DiscreteLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import \
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import \
     ProbabilisticCircuit as NXProbabilisticCircuit, SumUnit, UnivariateDiscreteLeaf, leaf
 from probabilistic_model.utils import MissingDict
 

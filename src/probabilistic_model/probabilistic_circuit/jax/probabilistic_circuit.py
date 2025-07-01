@@ -15,7 +15,7 @@ from typing_extensions import Tuple, Self, List, Optional
 from . import ProductLayer, SparseSumLayer, InputLayer, InnerLayer
 from .discrete_layer import DiscreteLayer
 from .inner_layer import Layer, NXConverterLayer
-from ..nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
+from ..rx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
 import jax
 import tqdm
 import networkx as nx
@@ -79,7 +79,7 @@ class ProbabilisticCircuit(SubclassJSONSerializer):
         """
         if progress_bar:
             number_of_edges = self.root.number_of_components
-            progress_bar = tqdm.tqdm(total=number_of_edges, desc="Converting to nx")
+            progress_bar = tqdm.tqdm(total=number_of_edges, desc="Converting to rx")
         else:
             progress_bar = None
         result = NXProbabilisticCircuit()

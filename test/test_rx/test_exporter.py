@@ -3,7 +3,7 @@ import unittest
 
 from probabilistic_model.distributions.uniform import UniformDistribution
 from probabilistic_model.interfaces.drawio.exporter import DrawIoExporter
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
 
 
 @unittest.skip

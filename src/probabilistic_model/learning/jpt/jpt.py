@@ -15,7 +15,7 @@ from typing_extensions import Self
 from .variables import Continuous, Integer, Symbolic, ScaledContinuous
 from ..nyga_distribution import NygaDistribution
 from ...distributions import (DiracDeltaDistribution, SymbolicDistribution, IntegerDistribution, UnivariateDistribution)
-from ...probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
+from ...probabilistic_circuit.rx.probabilistic_circuit import (SumUnit, ProductUnit,
                                                                ProbabilisticCircuit, UnivariateDiscreteLeaf)
 from ...utils import MissingDict
 

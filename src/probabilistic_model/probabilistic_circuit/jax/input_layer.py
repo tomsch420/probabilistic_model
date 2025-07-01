@@ -12,7 +12,7 @@ from sortedcontainers import SortedSet
 from typing_extensions import Tuple, Type, Self, Optional
 
 from .inner_layer import InputLayer, NXConverterLayer
-from ..nx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateContinuousLeaf
+from ..rx.probabilistic_circuit import Unit, ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateContinuousLeaf
 from ...distributions import DiracDeltaDistribution
 
 

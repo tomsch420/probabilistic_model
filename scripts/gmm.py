@@ -15,8 +15,8 @@ from probabilistic_model.distributions import GaussianDistribution, UniformDistr
 from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer
 from probabilistic_model.probabilistic_circuit.jax.uniform_layer import UniformLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.probabilistic_circuit.nx.distributions import UnivariateContinuousLeaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import \
+from probabilistic_model.probabilistic_circuit.rx.distributions import UnivariateContinuousLeaf
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import \
     ProbabilisticCircuit as NXProbabilisticCircuit, ProductUnit, SumUnit
 import plotly.express as px
 import plotly.graph_objects as go

@@ -10,7 +10,7 @@ from random_events.variable import Continuous
 
 from probabilistic_model.bayesian_network.bayesian_network import *
 from probabilistic_model.distributions import UniformDistribution, SymbolicDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProductUnit
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import ProductUnit
 from probabilistic_model.utils import MissingDict
 
 from random_events.set import Set
@@ -157,6 +157,10 @@ class BayesianNetworkWithCircuitTestCase(unittest.TestCase):
         self.assertEqual(circuit.probability(circuit.universal_simple_event().as_composite_set()), 1.)
         event = SimpleEvent({self.x: (XEnum.ZERO, XEnum(1)), self.y: closed(1.5, 2)})
         self.assertAlmostEqual(0.3 * 0.25, circuit.probability(event.as_composite_set()))
+
+    def test_plot(self):
+        ...
+        # self.bayesian_network.plot()
 
 
 if __name__ == '__main__':

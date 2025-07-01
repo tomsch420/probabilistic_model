@@ -10,11 +10,11 @@ from . import NXConverterLayer
 from .inner_layer import InputLayer
 import jax.numpy as jnp
 
-from ..nx.probabilistic_circuit import Unit
+from ..rx.probabilistic_circuit import Unit
 from ...distributions import SymbolicDistribution
 import tqdm
 import numpy as np
-from ..nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateDiscreteLeaf
+from ..rx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit, UnivariateDiscreteLeaf
 
 from ...utils import MissingDict
 

@@ -9,7 +9,7 @@ from sklearn.gaussian_process.kernels import Product
 
 from probabilistic_model.distributions import GaussianDistribution, DiracDeltaDistribution
 from probabilistic_model.distributions.uniform import UniformDistribution
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import *
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import *
 from probabilistic_model.utils import MissingDict
 
 

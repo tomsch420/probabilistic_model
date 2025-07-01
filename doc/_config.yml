@@ -7,7 +7,7 @@
 # Book settings
 title                       : Probabilistic Modelling  # The title of the doc. Will be placed in the left navbar.
 author                      : Tom Schierenbeck  # The author of the doc
-copyright                   : "2024"  # Copyright year to be placed in the footer
+copyright                   : "2025"  # Copyright year to be placed in the footer
 logo                        : "Logo.svg"  # A path to the doc logo
 
 # Force re-execution of notebooks on each build.

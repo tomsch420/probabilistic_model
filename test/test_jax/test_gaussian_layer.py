@@ -5,7 +5,7 @@ from random_events.variable import Continuous
 
 from probabilistic_model.probabilistic_circuit.jax.gaussian_layer import GaussianLayer, GaussianDistribution
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import \
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import \
     SumUnit, UnivariateContinuousLeaf, ProbabilisticCircuit as NXProbabilisticCircuit
 
 

@@ -178,7 +178,7 @@ Next, let's define, and fit the model. Plot the decision criteria and the result
 variables = infer_variables_from_dataframe(dataset, scale_continuous_types=False, min_likelihood_improvement=2.5)
 model = TutorialJPT(variables, min_impurity_improvement=0.05, min_samples_leaf=500)
 model.fig = fig
-model.fit(dataset)
+pc = model.fit(dataset)
 model.fig.show()
 ```
 
@@ -189,6 +189,6 @@ They are ordered in the same way as they are induced in the distribution.
 Finally, we plot resulting leaf distributions.
 
 ```{code-cell} ipython3
-figure = go.Figure(model.plot(1000, surface=True))
+figure = go.Figure(pc.plot(1000, surface=True))
 figure.show()
 ```

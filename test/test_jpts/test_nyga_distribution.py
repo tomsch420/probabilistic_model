@@ -10,7 +10,7 @@ from scipy.special import logsumexp
 
 from probabilistic_model.distributions import UniformDistribution, DiracDeltaDistribution
 from probabilistic_model.learning.nyga_distribution import NygaDistribution, InductionStep
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import SumUnit, \
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import SumUnit, \
     UnivariateContinuousLeaf, leaf, ProbabilisticCircuit
 
 

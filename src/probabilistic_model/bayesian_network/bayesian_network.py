@@ -5,13 +5,14 @@ from typing import Self, List, Tuple, Set, Iterable, Dict
 
 import numpy as np
 import rustworkx as rx
+from matplotlib import pyplot as plt
 from random_events.variable import Symbolic, Variable
 from sortedcontainers import SortedSet
 from typing_extensions import Optional, Any
 
 from ..distributions import SymbolicDistribution
 from ..distributions.helper import make_dirac
-from ..probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit, ProductUnit, SumUnit, leaf
+from ..probabilistic_circuit.rx.probabilistic_circuit import ProbabilisticCircuit, ProductUnit, SumUnit, leaf
 
 
 @dataclass
@@ -51,6 +52,10 @@ class Node:
     @property
     def parent(self) -> Node:
         return self.bayesian_network.predecessors(self)[0]
+
+    @property
+    def variables(self) -> Tuple[Variable, ...]:
+        raise NotImplementedError
 
     def as_probabilistic_circuit(self, result: ProbabilisticCircuit):
         """
@@ -200,6 +205,12 @@ class BayesianNetwork:
 
         return result
 
+    def plot(self):
+        import rustworkx.visualization
+        rustworkx.visualization.mpl_draw(self.graph, with_labels=True,
+                                         labels = lambda node: ", ".join(v.name for v in node.variables))
+        plt.show()
+
 @dataclass
 class Root(Node):
 
@@ -215,6 +226,10 @@ class Root(Node):
     @property
     def variable(self) -> Symbolic:
         return self.distribution.variable
+
+    @property
+    def variables(self) -> Tuple[Variable, ...]:
+        return self.distribution.variables
 
     def as_probabilistic_circuit(self, result: ProbabilisticCircuit):
         self.root = SumUnit(probabilistic_circuit=result)
@@ -239,6 +254,10 @@ class ConditionalProbabilityTable(Node):
     @property
     def variable(self) -> Symbolic:
         return list(self.conditional_probability_distributions.values())[0].variable
+
+    @property
+    def variables(self) -> Tuple[Variable, ...]:
+        return (self.variable, )
 
     def __repr__(self):
         return f"P({self.variable.name}|{self.parent.variable.name})"
@@ -291,8 +310,8 @@ class ConditionalProbabilisticCircuit(Node):
         return super().parent
 
     @property
-    def variables(self) -> SortedSet[Variable, ...]:
-        return list(self.conditional_probability_distributions.values())[0].variables
+    def variables(self) -> Tuple[Variable, ...]:
+        return tuple(list(self.conditional_probability_distributions.values())[0].variables)
 
     def __repr__(self):
         return f"P({', '.join([v.name for v in self.variables])} | {self.parent.variable.name})"

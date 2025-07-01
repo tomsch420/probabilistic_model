@@ -21,7 +21,7 @@ import tqdm
 
 
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import ProbabilisticCircuit as NXProbabilisticCircuit
 
 
 class TrivialConditioner(Conditioner):

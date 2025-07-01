@@ -1,6 +1,6 @@
 import numpy as np
 
-from .probabilistic_circuit.nx.helper import uniform_measure_of_event
+from .probabilistic_circuit.rx.helper import uniform_measure_of_event
 from .probabilistic_model import ProbabilisticModel
 
 

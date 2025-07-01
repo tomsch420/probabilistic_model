@@ -18,8 +18,8 @@ from probabilistic_model.learning.jpt.jpt import JPT
 from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
 from probabilistic_model.probabilistic_circuit.jax import SparseSumLayer, UniformLayer
 from probabilistic_model.probabilistic_circuit.jax.probabilistic_circuit import ProbabilisticCircuit
-from probabilistic_model.probabilistic_circuit.nx.helper import uniform_measure_of_event, leaf
-from probabilistic_model.probabilistic_circuit.nx.probabilistic_circuit import (SumUnit, ProductUnit,
+from probabilistic_model.probabilistic_circuit.rx.helper import uniform_measure_of_event, leaf
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (SumUnit, ProductUnit,
                                                                                 ProbabilisticCircuit as NXProbabilisticCircuit)
 
 np.random.seed(69)
