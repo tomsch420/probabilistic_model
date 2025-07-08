@@ -16,12 +16,10 @@ import rustworkx.visualization
 from random_events.interval import SimpleInterval, Interval
 from scipy.special import logsumexp
 import tqdm
-from matplotlib import pyplot as plt
 from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import Set
 from random_events.utils import SubclassJSONSerializer
 from random_events.variable import Variable, Symbolic, Continuous, Integer
-from sklearn.gaussian_process.kernels import Product
 from sortedcontainers import SortedSet
 from typing_extensions import List, Optional, Any, Self, Dict, Tuple, Iterable, Callable, Union
 
