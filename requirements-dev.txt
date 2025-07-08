@@ -13,3 +13,6 @@ random_events>=4.1.17
 typing_extensions>=4.13.2
 probabilistic_model>=7.0.1
 mlflow-skinny>=2.22.0
+dnutils
+arff
+deprecated
