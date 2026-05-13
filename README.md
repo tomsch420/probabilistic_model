@@ -1,3 +1,11 @@
+# ⚠️ Repository Moved
+This repository has been migrated to the [Cognitive Robot Abstract Machine](https://github.com/cram2/cognitive_robot_abstract_machine).
+
+All future development, issue tracking, and contributions is taking place in the new repository. Please update your local clones and bookmarks accordingly.
+
+You can find the source code for this project located at: https://github.com/cram2/cognitive_robot_abstract_machine/tree/main/probabilistic_model.
+
+
 # Welcome to the Probabilistic Model's package. 
 [![Python Tests](https://github.com/tomsch420/probabilistic_model/actions/workflows/python-tests.yml/badge.svg)](https://github.com/tomsch420/probabilistic_model/actions/workflows/python-tests.yml)
 
