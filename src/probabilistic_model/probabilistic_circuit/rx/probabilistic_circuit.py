@@ -9,6 +9,7 @@ from abc import abstractmethod, ABC
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import IntEnum
+from collections import defaultdict
 
 import rustworkx as rx
 import numpy as np
@@ -30,6 +31,7 @@ from ...error import IntractableError
 from ...interfaces.drawio.drawio import DrawIOInterface, circled_product, circled_sum
 from ...probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
 from ...utils import MissingDict
+
 
 class PlotAlignment(IntEnum):
     HORIZONTAL = 0
@@ -1411,6 +1413,63 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
 
     def __repr__(self):
         return f"{self.__class__.__name__} with {len(self.nodes())} nodes and {len(self.edges())} edges"
+
+    def grow(self, noise_variance: float) -> Self:
+        """
+        Grow the circuit and duplicate its structure with added noise.
+
+        :param noise_variance: The variance of the noise to add.
+        """
+        old2new = {}
+        original_root = self.root
+
+        # Create new copies of all existing nodes
+        for node in self.nodes():
+            node_new = node.copy_without_graph()
+            self.add_node(node_new)
+            old2new[node] = node_new
+
+        original_nodes = set(old2new.keys())
+        new_nodes = set(old2new.values())
+
+        # Create the new root and connect it to the original root and its copy
+        new_root = SumUnit(probabilistic_circuit=self)
+        self.add_edge(new_root, original_root, np.log(0.5))
+        self.add_edge(new_root, old2new[original_root], np.log(0.5))
+
+        # Create new edges with noise for the duplicated structure
+        for parent, child, log_weight in self.edges():
+            parent_in_new_values = parent in new_nodes
+            child_in_new_values = child in new_nodes
+            parent_not_in_keys = parent not in original_nodes
+            child_not_in_keys = child not in original_nodes
+            if parent_in_new_values or child_in_new_values or parent_not_in_keys or child_not_in_keys:
+                continue
+                
+            parent_new = old2new[parent]
+            child_new = old2new[child]
+
+            if isinstance(parent, SumUnit):
+                if log_weight is None:
+                    log_weight = 0.0
+                e = 1e-9
+                epsilon_1 = np.random.normal(1.0, np.sqrt(noise_variance))
+                epsilon_2 = np.random.normal(1.0, np.sqrt(noise_variance))
+                epsilon_3 = np.random.normal(1.0, np.sqrt(noise_variance))
+                noise_1 = np.log(max(epsilon_1, e))
+                noise_2 = np.log(max(epsilon_2, e))
+                noise_3 = np.log(max(epsilon_3, e))
+                self.add_edge(parent_new, child_new, log_weight + noise_1)
+                self.add_edge(parent, child_new, log_weight + noise_2)
+                self.add_edge(parent_new, child, log_weight + noise_3)
+
+            elif isinstance(parent, ProductUnit):
+                self.add_edge(parent_new, child_new)
+                self.add_edge(parent, child_new)
+                self.add_edge(parent_new, child)
+
+        self.normalize()
+        return self
 
 class ShallowProbabilisticCircuit(ProbabilisticCircuit):
     """

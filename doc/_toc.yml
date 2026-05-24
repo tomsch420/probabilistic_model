@@ -8,6 +8,7 @@ parts:
     chapters:
     - file: pc_guide
     - file: layered_circuit
+    - file: pruning_growing
     - file: architecture
   - caption: Theoretical Concepts
     chapters:
